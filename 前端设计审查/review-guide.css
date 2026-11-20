@@ -1,0 +1,11 @@
+@media screen{
+ .review-guide{background:var(--bg);color:var(--ink)}
+ .review-guide header{background:linear-gradient(110deg,#23334ce6,#202741b3);border-bottom:1px solid var(--line)}
+ .review-guide header p,.review-guide .test{color:var(--sub)}.review-guide a,.review-guide header a,.review-guide summary{color:#c9dcff}
+ .review-guide .motionToggle{float:right}.review-guide section{background:var(--surface);box-shadow:var(--bevel);border:1px solid var(--line);border-radius:16px}
+ .review-guide nav a{border-color:var(--line)}.review-guide th,.review-guide code,.review-guide .call{background:#24324a;color:#dce9ff}.review-guide .call{border-color:#a8c9e9}
+ .review-guide td,.review-guide th{border-color:var(--line)}.review-guide h1,.review-guide h2{color:#f0f5ff}
+ .review-guide main{min-width:0}.review-guide article{min-width:0}.review-guide .back:hover,.review-guide nav a:hover{color:#fff}
+}
+@media print{.review-guide{color-scheme:light;background:white;color:black}.review-guide header,.review-guide section{background:white;color:black;box-shadow:none}.review-guide p,.review-guide .test{color:#222}}
+
