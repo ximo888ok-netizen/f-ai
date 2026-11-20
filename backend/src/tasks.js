@@ -112,7 +112,12 @@ export async function submitInTransaction(connection, providers, shops, context,
 export async function finishTask(db, task, state, result, errorCode) {
   await db.query('UPDATE tasks SET state = $2, result = $3, error_code = $4, lease_id = NULL, lease_until = NULL, updated_at = now() WHERE id = $1', [task.id, state, result, errorCode]);
   await finishCredits(db, task, state === 'succeeded');
-  await db.query('INSERT INTO notifications (workspace_id, account_id, type, event_key, data) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING', [
+  await db.query([
+    'INSERT INTO notifications (workspace_id, account_id, type, event_key, data)',
+    'SELECT $1, $2, $3, $4, $5',
+    "WHERE NOT EXISTS (SELECT 1 FROM account_settings WHERE workspace_id = $1 AND account_id = $2 AND preferences->'taskNotifications' = 'false'::jsonb)",
+    'ON CONFLICT DO NOTHING',
+  ].join(' '), [
     task.workspace_id, task.account_id, 'task.' + state, 'task:' + task.id,
     { taskId: task.id, capabilityId: task.capability_id, state, errorCode },
   ]);
@@ -121,13 +126,14 @@ export async function finishTask(db, task, state, result, errorCode) {
 export function registerTasks(app, db, providers, shops) {
   route(app, 'GET', '/v1/plugins', { tags: ['Plugins'], summary: 'List business plugins, capabilities and input contracts' }, async request => {
     const settings = new Map((await rows(db, 'SELECT plugin_id, enabled FROM plugin_settings WHERE workspace_id = $1', [request.context.workspaceId])).map(setting => [setting.plugin_id, setting.enabled]));
-    return { items: plugins.map(plugin => ({
+    const describe = plugin => ({
       ...plugin, enabled: settings.get(plugin.id) ?? true,
       capabilities: [...catalog.values()].filter(capability => capability.pluginId === plugin.id).map(capability => {
         const { execution, ...contract } = capability;
         return { ...contract, available: execution === 'endpoint' || matchingProviders(providers, capability).length > 0 };
       }),
-    })) };
+    });
+    return { items: plugins.map(describe), models: describe({ id: 'models', name: '模型工具' }) };
   });
 
   route(app, 'PUT', '/v1/plugins/:id/state', {

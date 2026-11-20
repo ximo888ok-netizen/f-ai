@@ -38,6 +38,11 @@ pluginCapability.properties.endpoint = string;
 const plugin = shape({
   id: string, name: string, enabled: bool, capabilities: items(pluginCapability),
 });
+const studioCategory = shape({ id: uuid, name: string });
+const studioProduct = shape({ id: uuid, sku: string, name: string, description: string, categoryId: nullable(uuid), updatedAt: date });
+const studioTransfer = shape({ id: uuid, direction: enumOf('import', 'export'), count, createdAt: date });
+const studioPortableProduct = shape({ sku: string, name: string, description: string, category: string });
+const studioRoi = shape({ revenueMinor: count, productCostMinor: count, contributionMinor: count, roas: { type: 'number' } });
 const notification = shape({ id: string, type: string, data: anyObject, readAt: nullable(date), createdAt: date });
 const memory = shape({ id: uuid, scope: enumOf('personal', 'enterprise'), content: string, createdAt: date });
 const preferences = shape({ preferences: anyObject });
@@ -81,7 +86,7 @@ export const contracts = new Map([
   ['/v1/assets', { GET: { 200: collection(asset) }, POST: { 201: asset } }],
   ['/v1/assets/:id', { DELETE: { 204: none } }],
   ['/v1/models', { GET: { 200: collection(shape({ id: string, model: string, protocol: string, kind: string, capabilities: items(string) })) } }],
-  ['/v1/plugins', { GET: { 200: collection(plugin) } }],
+  ['/v1/plugins', { GET: { 200: shape({ items: items(plugin), models: plugin }) } }],
   ['/v1/plugins/:id/state', { PUT: { 200: shape({ id: string, enabled: bool }) } }],
   ['/v1/customer-service/conversations', { GET: { 200: collection(conversation) }, POST: { 201: conversation } }],
   ['/v1/customer-service/conversations/:id/messages', {
@@ -102,6 +107,14 @@ export const contracts = new Map([
   ['/v1/notifications', { GET: { 200: shape({ items: items(notification), unread: count }) } }],
   ['/v1/notifications/:id/read', { POST: { 204: none } }],
   ['/v1/notifications/read-all', { POST: { 204: none } }],
+  ['/v1/studio/categories', { GET: { 200: collection(studioCategory) }, POST: { 201: studioCategory } }],
+  ['/v1/studio/categories/:id', { PATCH: { 200: studioCategory }, DELETE: { 204: none } }],
+  ['/v1/studio/products', { GET: { 200: collection(studioProduct) }, POST: { 201: studioProduct } }],
+  ['/v1/studio/products/:id', { PUT: { 200: studioProduct }, DELETE: { 204: none } }],
+  ['/v1/studio/transfers', { GET: { 200: collection(studioTransfer) } }],
+  ['/v1/studio/products/import', { POST: { 201: studioTransfer } }],
+  ['/v1/studio/products/export', { POST: { 200: collection(studioPortableProduct) } }],
+  ['/v1/studio/roi', { POST: { 200: studioRoi } }],
   ['/v1/settings', { GET: { 200: preferences }, PATCH: { 200: preferences } }],
   ['/v1/memory', { GET: { 200: collection(memory) }, POST: { 201: memory } }],
   ['/v1/memory/:id', { DELETE: { 204: none } }],

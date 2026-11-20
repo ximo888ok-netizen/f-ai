@@ -48,7 +48,12 @@
       '</fieldset></div><form class="ui-dialog-footer" method="dialog"><button class="primary">完成</button></form>';
     document.body.append(dialog);
     dialog.querySelector('.themeClose').onclick=()=>dialog.close();
-    dialog.addEventListener('change',e=>{if(e.target.name==='faiAppearance')setTheme(e.target.value,true);});
+    window.applyStudioTheme = id => setTheme(id);
+    dialog.addEventListener('change',e=>{
+      if(e.target.name!=='faiAppearance')return;
+      setTheme(e.target.value,true);
+      document.dispatchEvent(new CustomEvent('studio-theme', { detail: e.target.value }));
+    });
     document.querySelectorAll('[data-theme-open]').forEach(b=>b.onclick=()=>{
       dialog.showModal();dialog.querySelector('input:checked')?.focus({preventScroll:true});
     });

@@ -1,30 +1,46 @@
+
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8"><script src="themes.js"></script><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="utf-8">
+  <script src="/studio/themes.js"></script>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>F/AI Studio · 电商生产工作台</title>
-  <link rel="stylesheet" href="studio.css"><link rel="stylesheet" href="creation.css"><link rel="stylesheet" href="commerce.css"><link rel="stylesheet" href="glass.css"><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="themes.css"><link rel="stylesheet" href="components.css">
-  <script defer src="catalog.js"></script><script defer src="creation.js"></script><script defer src="commerce-catalog.js"></script><script defer src="commerce-workflows.js"></script><script defer src="commerce-board.js"></script><script defer src="commerce-account.js"></script><script defer src="commerce-stock.js"></script><script defer src="commerce-desk.js"></script><script defer src="glass.js"></script><script defer src="desk-float.js"></script><script defer src="workspace-hub.js"></script><script defer src="workspace-system.js"></script><script defer src="editors.js"></script><script defer src="studio.js"></script>
+  <link rel="stylesheet" href="/studio/studio.css">
+  <link rel="stylesheet" href="/studio/creation.css">
+  <link rel="stylesheet" href="/studio/commerce.css">
+  <link rel="stylesheet" href="/studio/glass.css">
+  <link rel="stylesheet" href="/studio/workspace.css">
+  <link rel="stylesheet" href="/studio/themes.css">
+  <link rel="stylesheet" href="/studio/components.css">
+  <link rel="stylesheet" href="/studio/live.css">
+  <script defer src="/studio/glass.js"></script>
+  <script type="module" src="/studio/live.js"></script>
 </head>
 <body>
-<div class="aurora-field" aria-hidden="true"></div><svg class="optical-defs" aria-hidden="true" focusable="false"><defs id="glassFilters"></defs></svg>
-<a class="skip" href="#main">跳到工作区</a>
-<div class="app-shell">
-  <div class="rail">
-    <button class="brandline" data-nav="desk" aria-label="F/AI Studio 创作首页"><svg viewBox="0 0 44 44" aria-hidden="true"><defs><linearGradient id="foil" x2="1" y2=".8"><stop stop-color="#eee5ff"/><stop offset=".43" stop-color="#c0a6ff"/><stop offset="1" stop-color="#6651df"/></linearGradient></defs><path fill="url(#foil)" d="M6 33 17 6h23L26 16H17l-3 7h14L8 37H4z"/></svg><span>F/AI <i>Studio</i></span></button>
-    <nav id="nav" aria-label="主导航"></nav>
-    <div class="railFoot"><button class="railToggle" data-rail-toggle aria-expanded="true">收起导航</button><a href="前端详细设计.html">设计说明 <span>↗</span></a><button class="profile" aria-label="工作区总览" data-nav="home"><b>青</b><span>青屿品牌组<small>企业工作区</small></span><i>›</i></button></div>
+  <div class="aurora-field" aria-hidden="true"></div>
+  <svg class="optical-defs" aria-hidden="true" focusable="false"><defs id="glassFilters"></defs></svg>
+  <a class="skip" href="#main">跳到工作区</a>
+  <div class="app-shell">
+    <aside class="rail">
+      <a class="brandline" href="#desk"><svg viewBox="0 0 44 44" aria-hidden="true"><path fill="currentColor" d="M6 33 17 6h23L26 16H17l-3 7h14L8 37H4z"/></svg><span>F/AI <i>Studio</i></span></a>
+      <nav id="nav" aria-label="主导航"></nav>
+      <div class="railFoot"><a href="#account" id="profile"></a></div>
+    </aside>
+    <div class="app-content">
+      <header class="topline">
+        <div id="crumb"></div>
+        <div class="topActions">
+          <span id="connection" class="localState" role="status">正在连接</span>
+          <button type="button" class="appearanceButton" data-theme-open aria-haspopup="dialog"><i aria-hidden="true"></i><span>冰蓝玻璃</span></button>
+          <button type="button" class="motionToggle" data-motion-toggle><span>暂停动效</span></button>
+          <a href="#tasks" id="queueLink" hidden>任务记录</a>
+        </div>
+      </header>
+      <div class="work"><main id="main" tabindex="-1"><p>正在检查服务和登录状态…</p></main></div>
+    </div>
   </div>
-  <div class="app-content"><header class="topline"><div id="crumb"></div><div class="topActions"><span class="localState">本地预览</span><button type="button" class="appearanceButton" data-theme-open aria-haspopup="dialog" aria-label="切换主题"><i aria-hidden="true"></i><span>冰蓝玻璃</span></button><button type="button" class="motionToggle" data-motion-toggle><svg viewBox="0 0 12 12" aria-hidden="true"><path class="pause" d="M2 1h3v10H2zM7 1h3v10H7z"/><path class="play" d="M3 1l8 5-8 5z"/></svg><span>暂停动效</span></button><button id="queueLink"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2-5.3L3 9m0-5v5h5M12 7v5l3 2"/></svg>任务记录</button></div></header>
-  <div class="work"><main id="main" tabindex="-1"></main></div></div>
-</div>
-<dialog id="modal" class="ui-dialog" aria-labelledby="modalTitle">
-  <header class="ui-dialog-header">
-    <h2 id="modalTitle" tabindex="-1"></h2>
-    <button class="ui-icon-button" type="submit" form="modalClose" aria-label="关闭弹窗"><span aria-hidden="true">×</span></button>
-  </header>
-  <div class="ui-dialog-body" id="modalContent"></div>
-  <form id="modalClose" class="ui-dialog-footer" method="dialog"><span id="modalFeedback" class="ui-dialog-feedback" role="status"></span><button class="plain">关闭</button></form>
-</dialog>
-<div id="live" class="toast" role="status"></div></body></html>
-
+  <div id="live" class="toast" role="status"></div>
+  <noscript>请启用 JavaScript 后重新打开工作台。</noscript>
+</body>
+</html>

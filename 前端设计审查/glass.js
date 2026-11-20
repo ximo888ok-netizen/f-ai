@@ -120,9 +120,19 @@ const StudioGlass = (() => {
   window.addEventListener('resize',schedule);
   document.addEventListener('visibilitychange',syncMotion);
   reduced.addEventListener('change',()=>{preferred=null;try{localStorage.removeItem(key);}catch{}syncMotion();});
+  window.applyStudioMotion = setting => {
+    preferred = setting === 'on' || setting === 'off' ? setting : null;
+    syncMotion();
+  };
   document.addEventListener('click',event=>{
     const toggle=event.target.closest('[data-motion-toggle]');
-    if(toggle){preferred=moving?'off':'on';try{localStorage.setItem(key,preferred);}catch{}syncMotion();return;}
+    if(toggle){
+      preferred=moving?'off':'on';
+      try{localStorage.setItem(key,preferred);}catch{}
+      syncMotion();
+      document.dispatchEvent(new CustomEvent('studio-motion', { detail: preferred }));
+      return;
+    }
     const button=event.target.closest('button:not(:disabled)');
     if(button&&!button.closest(segmentSelector) && !button.hasAttribute('data-float-grip')){
       queueMicrotask(()=>{if(button.isConnected)rebound(button);});

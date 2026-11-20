@@ -11,6 +11,8 @@ import { migrationFiles, row } from './db.js';
 import { ApiError } from './http.js';
 import { createProviders } from './providers.js';
 import { registerSchedules } from './schedules.js';
+import { registerStudio } from './studio.js';
+import { registerStudioProducts } from './studio-products.js';
 import { registerSupport } from './support.js';
 import { registerModels } from './models.js';
 import { registerTasks } from './tasks.js';
@@ -83,7 +85,9 @@ export async function buildApp({
   });
   app.get('/openapi.json', { schema: { hide: true } }, async () => app.swagger());
 
+  registerStudio(app);
   registerAuth(app, db);
+  registerStudioProducts(app, db);
   registerWallet(app, db);
   registerWorkspace(app, db);
   registerAssets(app, db);

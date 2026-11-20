@@ -1,7 +1,8 @@
 
 import { randomUUID } from 'node:crypto';
 import { row, rows } from './db.js';
-import { bool, choice, invalid, notFound, object, page, paginate, requireEnterprise, requireManager, route, text, uuid } from './http.js';
+import { capabilityId } from './catalog.js';
+import { array, bool, choice, invalid, notFound, object, page, paginate, requireEnterprise, requireManager, route, text, uuid } from './http.js';
 
 const notificationTags = ['Notifications'];
 const settingsTags = ['Settings'];
@@ -9,6 +10,9 @@ const memoryTags = ['Memory'];
 const notificationId = { type: 'string', pattern: '^[1-9][0-9]{0,17}$' };
 const preferenceSchema = object({
   theme: choice('system', 'light', 'dark'),
+  studioTheme: choice('glass', 'paper', 'jade', 'noir'),
+  studioMotion: choice('on', 'off'),
+  favoriteCapabilities: { ...array(capabilityId, capabilityId.enum.length), uniqueItems: true },
   locale: choice('zh-CN', 'en-US'),
   doNotDisturb: bool, taskNotifications: bool, rememberConversations: bool,
 }, []);

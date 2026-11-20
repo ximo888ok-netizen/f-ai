@@ -1,0 +1,47 @@
+
+[hidden]{display:none!important}
+.live-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));align-items:start;gap:1rem}
+.live-panel{padding:1.25rem;min-width:0;margin-bottom:1rem}
+.live-panel h2,.live-panel h3{margin-top:0}
+.live-panel h2{margin-bottom:.85rem}
+.live-panel p:last-child{margin-bottom:0}
+.live-form{display:grid;gap:.85rem}
+.live-form label{display:grid;gap:.35rem}
+.live-form input,.live-form textarea,.live-form select,.topActions select{width:100%;max-width:100%;color:inherit;border:1px solid var(--line,#7f839a);border-radius:9px;padding:.52rem .65rem;background:var(--panel,transparent)}
+.live-form input[type=checkbox]{width:1.2rem;height:1.2rem}
+.live-form input[type=file]{padding:.38rem}
+.live-form textarea{min-height:6rem;resize:vertical}
+.live-form select[multiple]{min-height:5rem}
+.live-form fieldset{display:grid;gap:.85rem;margin:0;padding:.75rem;border:1px solid var(--line,#7f839a);border-radius:9px}
+.live-form button{justify-self:start}
+.live-row{display:flex;align-items:center;flex-wrap:wrap;gap:.65rem;margin:.6rem 0}
+.live-item{border-top:1px solid var(--line,#8887);padding:.83rem 0;overflow-wrap:anywhere}
+.live-item:first-child{border-top:0}
+.live-table{width:100%;border-collapse:collapse}
+.live-table td,.live-table th{border-top:1px solid var(--line,#8887);padding:.6rem;text-align:left;overflow-wrap:anywhere}
+.live-result{white-space:pre-wrap;overflow-wrap:anywhere;max-height:34rem;overflow:auto;font:inherit}
+.live-error{color:var(--danger,#ad3b22);overflow-wrap:anywhere}
+.live-pending{opacity:.65}
+.live-media{max-width:min(100%,560px);max-height:380px;display:block;margin:.65rem 0}
+.live-title{margin-bottom:1.25rem}
+.live-title h1{margin:.2rem 0}
+.live-main{max-width:1260px;margin:0 auto;width:100%;min-width:0}
+.live-auth{max-width:520px}
+.live-navgroup{margin:.7rem 0}
+#profile{overflow-wrap:anywhere}
+#queueLink{color:inherit}
+#crumb label{display:flex;align-items:center;gap:.5rem;white-space:nowrap}
+#workspace-selector{max-width:min(15rem,60vw);color:inherit}
+.app-shell .rail nav{min-height:0;overflow-y:auto;overscroll-behavior-y:contain}
+a.navitem,a.brandline{text-decoration:none}
+.live-auth-delete{margin-top:1rem}
+.live-muted{opacity:.8}
+@media(max-width:720px){
+  .app-shell{display:block!important}
+  .app-shell .rail{position:static!important;width:auto!important;padding:.55rem!important;min-height:0!important}
+  .app-shell .rail nav{display:flex;gap:.35rem;flex-wrap:wrap}
+  .app-shell .rail nav .navitem{width:auto;min-height:2.1rem;padding:.35rem}
+  .app-shell .railFoot{display:none!important}
+  .app-shell .topline{height:auto;min-height:3rem;flex-wrap:wrap;gap:.5rem}
+  .app-shell .topActions{flex-wrap:wrap}
+}
