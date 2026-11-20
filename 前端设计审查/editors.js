@@ -24,20 +24,21 @@ function servicePreview(d){
 function opsPreview(d){
  const rows=d.items??=[{name:'青提气泡茶 330 mL',status:'草稿',target:'上架'}];
  return '<div class="sample"><h2>店铺操作预览</h2><div class="metric">'+safe(d.source)+' · '+safe(d.option)+'</div>'+
- '<table class="rows"><thead><tr><th>商品</th><th>当前</th><th>拟变更</th></tr></thead><tbody>'+rows.map((r,i)=>
- '<tr><td>'+safe(r.name)+'</td><td>'+safe(r.status)+'</td><td><select data-item-status="'+i+'" aria-label="'+safe(r.name)+'拟变更">'+selectOpts(['上架','下架','保持草稿'],r.target)+'</select></td></tr>').join('')+
- '</tbody></table><label>添加商品<input id="opsItem" maxlength="100" placeholder="商品名或 SKU" value="'+safe(d.newItem||'')+'"></label><button class="plain spaceTop" data-add-item>加入变更清单</button></div>';
+ ''+dataTable('商品变更清单',['商品','当前','拟变更'],rows.map((r,i)=>
+ '<tr><td>'+safe(r.name)+'</td><td>'+safe(r.status)+'</td><td><select data-item-status="'+i+'" aria-label="'+safe(r.name)+'拟变更">'+selectOpts(['上架','下架','保持草稿'],r.target)+'</select></td></tr>').join(''))+
+ '<label>添加商品<input id="opsItem" maxlength="100" placeholder="商品名或 SKU" value="'+safe(d.newItem||'')+'"></label><button class="plain spaceTop" data-add-item>加入变更清单</button></div>';
 }
 function copyVersion(d){
  const store=d.versions??={};
  if(!Object.hasOwn(store,d.option))store[d.option]={body:d.option==='英文'?'Muscat grape sparkling tea':'第一款青提气泡茶，清爽气泡搭配青提风味。',saved:[]};
  return store[d.option];
 }
+function copyTone(body){return /第一/.test(body)?'warning':'neutral';}
 function copyWarnings(body){return /第一/.test(body)?'发现待核验用词「第一」。':'当前文案未命中示例词表。';}
 function copyPreview(d){
  const v=copyVersion(d);
  return '<div class="sample"><h2>商品文案校阅</h2><label>正文 · '+safe(d.option)+'<textarea id="copyBody">'+safe(v.body)+'</textarea></label>'+
- '<p class="notice" id="copyCheck">'+copyWarnings(v.body)+'</p><div class="buttons editorActions"><button class="smallbtn" data-soften>替换「第一」</button><button class="primary" data-save-version>保存版本</button><button class="plain" data-export-copy>导出正文</button></div>'+
+ '<p class="notice" id="copyCheck" role="status" data-tone="'+copyTone(v.body)+'">'+copyWarnings(v.body)+'</p><div class="buttons editorActions"><button class="smallbtn" data-soften>替换「第一」</button><button class="primary" data-save-version>保存版本</button><button class="plain" data-export-copy>导出正文</button></div>'+
  (v.saved.length?'<div class="editorHistory"><b>版本记录</b>'+v.saved.map((body,i)=>hubRow('版本 '+(i+1),body.slice(0,55),'<button class="smallbtn" data-restore-version="'+i+'">载入</button>')).reverse().join('')+'</div>':'')+'</div>';
 }
 document.addEventListener('input',e=>{
@@ -49,7 +50,7 @@ document.addEventListener('input',e=>{
  if(el.id==='serviceReply')d.reply=el.value;
  if(el.id==='opsItem')d.newItem=el.value;
  if(el.matches('[data-item-status]')){d.items[Number(el.dataset.itemStatus)].target=el.value;d.confirmed=false;const check=document.querySelector('[data-field=confirmed]');if(check)check.checked=false;}
- if(el.id==='copyBody'){copyVersion(d).body=el.value;byId('copyCheck').textContent=copyWarnings(el.value);}
+ if(el.id==='copyBody'){copyVersion(d).body=el.value;const feedback=byId('copyCheck');feedback.dataset.tone=copyTone(el.value);feedback.textContent=copyWarnings(el.value);}
 });
 document.addEventListener('click',e=>{
  const b=e.target.closest('button');if(!b||!Object.hasOwn(plugins,state.page))return;

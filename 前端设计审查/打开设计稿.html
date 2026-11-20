@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><script src="themes.js"></script><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>F/AI Studio · 电商生产工作台</title>
-  <link rel="stylesheet" href="studio.css"><link rel="stylesheet" href="creation.css"><link rel="stylesheet" href="commerce.css"><link rel="stylesheet" href="glass.css"><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="themes.css">
+  <link rel="stylesheet" href="studio.css"><link rel="stylesheet" href="creation.css"><link rel="stylesheet" href="commerce.css"><link rel="stylesheet" href="glass.css"><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="themes.css"><link rel="stylesheet" href="components.css">
   <script defer src="catalog.js"></script><script defer src="creation.js"></script><script defer src="commerce-catalog.js"></script><script defer src="commerce-workflows.js"></script><script defer src="commerce-board.js"></script><script defer src="commerce-account.js"></script><script defer src="commerce-stock.js"></script><script defer src="commerce-desk.js"></script><script defer src="glass.js"></script><script defer src="desk-float.js"></script><script defer src="workspace-hub.js"></script><script defer src="workspace-system.js"></script><script defer src="editors.js"></script><script defer src="studio.js"></script>
 </head>
 <body>
@@ -18,6 +18,13 @@
   <div class="app-content"><header class="topline"><div id="crumb"></div><div class="topActions"><span class="localState">本地预览</span><button type="button" class="appearanceButton" data-theme-open aria-haspopup="dialog" aria-label="切换主题"><i aria-hidden="true"></i><span>冰蓝玻璃</span></button><button type="button" class="motionToggle" data-motion-toggle><svg viewBox="0 0 12 12" aria-hidden="true"><path class="pause" d="M2 1h3v10H2zM7 1h3v10H7z"/><path class="play" d="M3 1l8 5-8 5z"/></svg><span>暂停动效</span></button><button id="queueLink"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2-5.3L3 9m0-5v5h5M12 7v5l3 2"/></svg>任务记录</button></div></header>
   <div class="work"><main id="main" tabindex="-1"></main></div></div>
 </div>
-<dialog id="modal" aria-label="工作区对话框"><div id="modalContent"></div><form method="dialog"><button class="plain">关闭</button></form></dialog>
+<dialog id="modal" class="ui-dialog" aria-labelledby="modalTitle">
+  <header class="ui-dialog-header">
+    <h2 id="modalTitle" tabindex="-1"></h2>
+    <button class="ui-icon-button" type="submit" form="modalClose" aria-label="关闭弹窗"><span aria-hidden="true">×</span></button>
+  </header>
+  <div class="ui-dialog-body" id="modalContent"></div>
+  <form id="modalClose" class="ui-dialog-footer" method="dialog"><span id="modalFeedback" class="ui-dialog-feedback" role="status"></span><button class="plain">关闭</button></form>
+</dialog>
 <div id="live" class="toast" role="status"></div></body></html>
 

@@ -50,8 +50,8 @@ function composer(){
  const platform='<label class="parameter">'+glyph('store')+'<select id="platform" aria-label="目标平台">'+platforms+'</select></label>';
  const ratio='<label class="parameter">'+glyph('ratio')+'<select id="ratio" aria-label="画面比例">'+ratios+'</select></label>';
  return '<section class="hero"><div class="hero-heading"><h1>商品视觉<span>工作室</span></h1><p>上传商品素材，制作主图、详情页与上新短片。</p></div>'+
- '<div class="composerShell"><div class="composeHeader"><div class="medium">'+tabs+'</div><button class="sampleAction" data-seed>'+glyph('spark')+'试用示例</button></div>'+
- '<div class="compose" data-drop><div class="formats" aria-label="成品类型">'+chips+'</div><div class="briefRow">'+material+'<textarea id="brief" aria-label="创作需求" placeholder="'+(m==='image'?'描述商品、卖点与场景。比如：保留包身皮纹，使用暖白色背景和柔和侧光。':'描述商品、开场画面与镜头运动。比如：从耳罩特写缓慢拉远，最后定格在产品正面。')+'">'+safe(launch.note)+'</textarea></div>'+
+ '<div class="composerShell"><div class="composeHeader"><div class="medium" role="group" aria-label="创作类型">'+tabs+'</div><button class="sampleAction" data-seed>'+glyph('spark')+'试用示例</button></div>'+
+ '<div class="compose" data-drop><div class="formats" role="group" aria-label="成品类型">'+chips+'</div><div class="briefRow">'+material+'<textarea id="brief" aria-label="创作需求" placeholder="'+(m==='image'?'描述商品、卖点与场景。比如：保留包身皮纹，使用暖白色背景和柔和侧光。':'描述商品、开场画面与镜头运动。比如：从耳罩特写缓慢拉远，最后定格在产品正面。')+'">'+safe(launch.note)+'</textarea></div>'+
  '<div class="composeFoot"><div class="paramGroup">'+platform+ratio+'<button class="parameter" data-styles>'+glyph('palette')+safe(launch.style||'参考风格')+'</button></div><button class="start" data-launch '+(blocked?'disabled':'')+'>'+glyph('spark')+'进入创作<span>0 积分</span></button></div></div></div></section>';
 
 }
@@ -66,7 +66,7 @@ function creativeHome(){
 function matchingTools(){
  return Object.entries(plugins).filter(([id])=>!state.disabled.has(id)&&(launch.library==='全部'||id===launch.library)).map(([id,p])=>{
  const entries=p.actions.split(' ').filter(a=>(p.name+a).toLowerCase().includes(launch.search.toLowerCase().trim()));
- if(!entries.length)return '';return '<section class="toolGroup"><h2>'+p.name+'</h2><div class="toolList">'+entries.map(a=>'<button data-kit="'+id+'" data-cap="'+safe(a)+'">'+safe(a)+'<span>↗</span></button>').join('')+'</div></section>'}).join('')||'<p class="notice">暂无匹配的已启用工具。可更换关键词或到插件管理启用。</p>';
+ if(!entries.length)return '';return '<section class="toolGroup"><h2>'+p.name+'</h2><div class="toolList">'+entries.map(a=>'<button data-kit="'+id+'" data-cap="'+safe(a)+'">'+safe(a)+'<span>↗</span></button>').join('')+'</div></section>'}).join('')||emptyState('暂无匹配工具','可更换关键词或到插件管理启用对应插件。');
 }
 function toolbox(){
  return title('全部创作工具','选择具体任务，直接打开对应插件。')+'<div class="libbar"><div class="filters">'+[['全部','全部'],...Object.entries(plugins).filter(([id])=>!state.disabled.has(id)).map(([id,p])=>[id,p.label])].map(([id,n])=>'<button data-lib="'+id+'" aria-pressed="'+(launch.library===id)+'">'+n+'</button>').join('')+'</div><input id="searchTools" type="search" placeholder="搜索工具" aria-label="搜索工具" value="'+safe(launch.search)+'"></div><div id="toolsFound">'+matchingTools()+'</div>';
@@ -122,5 +122,5 @@ document.addEventListener('click',e=>{
 
 function assetShelf(){
  const items=materials.map((x,i)=>'<button class="example" data-material="'+i+'"><div class="casePhoto"><img src="'+safe(x.url)+'" alt=""></div><div class="caseLine"><strong>'+safe(x.name)+'</strong><span>↗</span></div></button>').join('');
- return title('素材库','查看本次会话添加的商品素材，或使用内置案例开始创作。')+'<div class="labelRow"><h2>我的商品图</h2>'+uploadPicker('添加素材')+'</div>'+(items?'<div class="gallery">'+items+'</div>':'<p class="notice">尚未添加商品图。图片仅在本次浏览器会话中使用。</p>')+'<div class="labelRow homeSection"><h2>案例素材</h2></div><div class="gallery">'+Object.entries(scenes).map(([k,s])=>'<button class="example" data-scene="'+k+'" '+(state.disabled.has('image')?'disabled':'')+'><div class="casePhoto"><img src="'+srcFor(k)+'" alt="'+s.product+'"></div><div class="caseLine"><strong>'+s.product+'</strong><span>↗</span></div></button>').join('')+'</div>';
+ return title('素材库','查看本次会话添加的商品素材，或使用内置案例开始创作。')+'<div class="labelRow"><h2>我的商品图</h2>'+uploadPicker('添加素材')+'</div>'+(items?'<div class="gallery">'+items+'</div>':emptyState('尚未添加商品图','添加本地素材后，可从素材库进入创作。'))+'<div class="labelRow homeSection"><h2>案例素材</h2></div><div class="gallery">'+Object.entries(scenes).map(([k,s])=>'<button class="example" data-scene="'+k+'" '+(state.disabled.has('image')?'disabled':'')+'><div class="casePhoto"><img src="'+srcFor(k)+'" alt="'+s.product+'"></div><div class="caseLine"><strong>'+s.product+'</strong><span>↗</span></div></button>').join('')+'</div>';
 }

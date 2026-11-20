@@ -1,0 +1,659 @@
+/* Shared dimensions and interaction states. Themes supply the material and palette. */
+:root[data-theme] {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --control-height: 40px;
+  --compact-height: 32px;
+  --field-height: 40px;
+  --control-radius: max(7px, calc(var(--radius) - 5px));
+  --text-label: 12px;
+  --text-control: 13px;
+  --text-body: 14px;
+  --text-title: clamp(27px, 2.5vw, 38px);
+  --ui-hover: color-mix(in srgb, var(--accent) 35%, var(--line));
+  --ui-focus: var(--accent);
+  --ui-success: #aee8c9;
+  --ui-progress: #bedbff;
+  --ui-error: #ffc0bf;
+  --ui-warning: #ffdfaa;
+}
+
+:root[data-theme=paper] {
+  --ui-success: #326246;
+  --ui-progress: #385c86;
+  --ui-error: #963334;
+  --ui-warning: #774918;
+}
+
+:root[data-theme] :is(.app-shell, .ui-dialog) {
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+.heading h1 {
+  font-size: var(--text-title);
+  line-height: 1.2;
+}
+
+.heading .sub {
+  margin-top: var(--space-2);
+  max-inline-size: 60ch;
+  font-size: var(--text-control);
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+.work .heading {
+  gap: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+:root[data-theme] :is(.labelRow, .sectiontitle) {
+  gap: var(--space-2) var(--space-3);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+:is(.sectiontitle, .labelRow, .toolGroup) h2 {
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+:root[data-theme] :is(.buttons, .paramGroup, .boardTools) {
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+:root[data-theme] :is(.primary, .start, .plain, .smallbtn, .uploadButton, .appearanceButton, .motionToggle, #queueLink, .ui-icon-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-height);
+  border-radius: var(--control-radius);
+  padding: 0 var(--space-3);
+  max-inline-size: 100%;
+  font-family: inherit;
+  font-size: var(--text-control);
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: none;
+  vertical-align: middle;
+}
+
+:root[data-theme] :is(.smallbtn, .appearanceButton, .motionToggle, #queueLink, .ui-icon-button, .labelRow > button, .sampleAction) {
+  min-block-size: var(--compact-height);
+  font-size: var(--text-label);
+}
+
+:root[data-theme] :is(.appearanceButton, .motionToggle, #queueLink) {
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+:root[data-theme] .ui-icon-button {
+  flex: none;
+  inline-size: var(--compact-height);
+  border: 1px solid var(--line);
+  background: var(--control);
+  box-shadow: var(--fine);
+  color: var(--ink);
+  padding: 0;
+}
+
+.ui-icon-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+:root[data-theme] :is(.appearanceButton, .motionToggle, #queueLink, .plain, .smallbtn, .uploadButton, .ui-icon-button, .primary, .start):hover:not(:disabled) {
+  border-color: var(--ui-hover);
+}
+
+:root[data-theme] :is(.plain, .smallbtn, .appearanceButton, .motionToggle, #queueLink, .uploadButton, .ui-icon-button):hover:not(:disabled) {
+  background: var(--tab);
+}
+
+:root[data-theme] :is(.primary, .start, .plain, .smallbtn, .ui-icon-button):active:not(:disabled) {
+  filter: brightness(.92);
+}
+
+:root[data-theme] button:disabled {
+  opacity: .52;
+  cursor: not-allowed;
+}
+
+:root[data-theme] :is(button, a, input, select, textarea, summary, [tabindex="0"]):focus-visible,
+:root[data-theme] :is(.uploadButton, .themeChoice, .materialTile label):focus-within {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+:root[data-theme] :is(#queueLink, .profile)[aria-current="page"] {
+  background: var(--tab);
+  border-color: var(--ui-hover);
+  color: var(--mark);
+}
+
+:root[data-theme] :is(.navitem, .sideGroup, .sideChildren button, .railFoot > a, .railToggle) {
+  min-block-size: var(--compact-height);
+}
+
+:root[data-theme] .glass-segment {
+  gap: 2px;
+}
+
+:root[data-theme] .glass-segment button {
+  min-block-size: var(--compact-height);
+  padding: var(--space-1) var(--space-3);
+  color: var(--sub);
+  line-height: 1.25;
+  font-weight: 550;
+  font-size: var(--text-label);
+}
+
+:root[data-theme] .glass-segment button[aria-pressed=true] {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+:root[data-theme] .glass-segment button[aria-pressed=false]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--ink);
+}
+
+:root[data-theme] :is(.pad, .sidepad, .plugin, .chatbox) {
+  padding: var(--space-4);
+}
+
+:root[data-theme] .chatbox {
+  margin: 0;
+}
+
+:root[data-theme] .panelhead {
+  min-block-size: 48px;
+  height: auto;
+  padding: var(--space-2) var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
+:root[data-theme] :is(.deskTiles, .deskSplit, .workspace, .hubGrid, .library, .gallery, .quickGrid) {
+  gap: var(--space-3);
+}
+
+:root[data-theme] .library {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+}
+
+:root[data-theme] .plugin {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.plugin .pluginHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.plugin h3 {
+  color: var(--ink);
+  margin: 0;
+  font-size: 16px;
+}
+
+.plugin p {
+  min-height: auto;
+  line-height: 1.65;
+  margin-bottom: var(--space-2);
+}
+
+.plugin > .buttons {
+  margin-top: auto;
+  align-items: center;
+}
+
+:root[data-theme] .plugin .plugin-open {
+  color: var(--mark);
+  background: var(--tab);
+  border-color: var(--ui-hover);
+}
+
+:root[data-theme] .deskTile {
+  position: relative;
+}
+
+.tileLink::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+}
+
+.deskTile .fav {
+  position: relative;
+  z-index: 1;
+  align-self: start;
+}
+
+:root[data-theme] :is(.fav, .sceneSave) {
+  inline-size: var(--compact-height);
+  block-size: var(--compact-height);
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--control-radius);
+  padding: 0;
+  line-height: 1;
+}
+
+:root[data-theme] :is(.fav, .sceneSave)[aria-pressed=true] {
+  color: var(--mark);
+  background: var(--tab);
+}
+
+:root[data-theme] :is(.deskTile, .example, .hubLink, .toolList button):focus-within {
+  border-color: var(--ui-hover);
+}
+
+:root[data-theme] :is(.shotCard, .styleChoice)[aria-pressed=true] {
+  border-color: var(--ui-focus);
+  box-shadow: var(--fine), inset 0 -2px var(--ui-focus);
+}
+
+:root[data-theme] :is(.work, .ui-dialog) label:not(.parameter, .uploadButton, .themeChoice) {
+  font-size: var(--text-label);
+  font-weight: 650;
+  color: var(--ink);
+}
+
+:root[data-theme] :is(.work, .ui-dialog) :is(input:not([type=file], [type=checkbox], [type=range], [type=radio]), select, textarea) {
+  min-block-size: var(--field-height);
+  border-radius: var(--control-radius);
+  padding: var(--space-2) var(--space-3);
+  font-family: inherit;
+  font-size: var(--text-control);
+  line-height: 1.4;
+}
+
+:root[data-theme] :is(.work, .ui-dialog) textarea {
+  min-block-size: 84px;
+}
+
+:root[data-theme] label > :is(select, textarea, input:not([type=checkbox], [type=range], [type=file], [type=radio])) {
+  margin-top: var(--space-1);
+}
+
+:root[data-theme] .parameter {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--compact-height);
+  border-radius: var(--control-radius);
+  padding: 0 var(--space-2);
+  font-size: var(--text-label);
+}
+
+:root[data-theme] .work .parameter select {
+  min-block-size: calc(var(--compact-height) - 2px);
+  margin: 0;
+  padding: 0 var(--space-2) 0 0;
+  font-size: var(--text-label);
+  border-radius: 0;
+}
+
+:root[data-theme] .compose textarea {
+  padding: var(--space-2) 0;
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+:root[data-theme] :is(input[type=checkbox], input[type=radio], input[type=range]) {
+  accent-color: var(--accent);
+}
+
+:root[data-theme] input[type=checkbox] {
+  inline-size: 16px;
+  block-size: 16px;
+  margin: 0;
+  flex: none;
+}
+
+:root[data-theme] .checkline {
+  display: flex;
+  min-block-size: var(--compact-height);
+  gap: var(--space-2);
+  align-items: center;
+}
+
+:root[data-theme] :is(input, select, textarea):is([aria-invalid=true], :user-invalid) {
+  border-color: var(--ui-error);
+}
+
+:root[data-theme] .nodeWorld .node :is(input,select),
+:root[data-theme] .shotRow input {
+  min-block-size: var(--compact-height);
+  padding: var(--space-1) var(--space-2);
+}
+
+:root[data-theme] .shotRow {
+  grid-template-columns: 17px minmax(0, 1fr) minmax(49px, 11%) repeat(2, var(--compact-height));
+  gap: var(--space-1);
+}
+
+.shotRow :is([data-shot-up],[data-shot-remove]) {
+  padding-inline: 0;
+}
+
+:root[data-theme] .numericGrid {
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+:root[data-theme] .resultItem {
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  overflow-wrap: anywhere;
+}
+
+:root[data-theme] :is(.bubble, .metric, .notice, .ui-empty) {
+  padding: var(--space-3);
+  border-radius: var(--control-radius);
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+
+:root[data-theme] .ui-empty {
+  margin: 0;
+  border: 1px dashed var(--line);
+  color: var(--sub);
+  background: var(--well);
+}
+
+:root[data-theme] .card > .ui-empty {
+  margin: var(--space-4);
+}
+
+:root[data-theme] .ui-empty strong {
+  display: block;
+  color: var(--ink);
+  margin-bottom: var(--space-1);
+}
+
+:root[data-theme] .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 23px;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  font-size: var(--text-label);
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+[data-tone="success"] { --status-color: var(--ui-success); }
+[data-tone="progress"] { --status-color: var(--ui-progress); }
+[data-tone="error"] { --status-color: var(--ui-error); }
+[data-tone="warning"] { --status-color: var(--ui-warning); }
+[data-tone="neutral"] { --status-color: var(--sub); }
+
+:root[data-theme] :is(.tag, .notice)[data-tone] {
+  color: var(--status-color);
+  border: 1px solid color-mix(in srgb, var(--status-color) 35%, var(--line));
+  background: color-mix(in srgb, var(--status-color) 10%, var(--paper));
+}
+
+.tag[data-tone]::before {
+  content: "";
+  background: currentColor;
+  inline-size: 5px;
+  block-size: 5px;
+  border-radius: 50%;
+  flex: none;
+}
+
+:root[data-theme] .steps {
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
+.steps li {
+  color: var(--sub);
+  background: var(--control);
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  padding: var(--space-2) var(--space-1);
+  font-size: var(--text-label);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.steps [aria-current="step"] {
+  color: var(--mark);
+  background: var(--tab);
+  border-color: var(--ui-hover);
+  font-weight: 700;
+}
+
+.ui-table-scroll {
+  max-inline-size: 100%;
+  overflow: auto;
+}
+
+:root[data-theme] .ui-table-scroll:focus-visible {
+  outline-offset: -3px;
+}
+
+.ui-table-scroll .rows {
+  min-inline-size: 310px;
+}
+
+:root[data-theme] .rows :is(th, td) {
+  padding: var(--space-2) var(--space-3);
+  text-align: start;
+  vertical-align: middle;
+}
+
+:root[data-theme] .rows th {
+  font-size: var(--text-label);
+  font-weight: 700;
+}
+
+:root[data-theme] .rows :is(th, td):last-child {
+  text-align: end;
+}
+
+.rows td select {
+  min-inline-size: 92px;
+}
+
+:root[data-theme] .rows tr:hover td {
+  background: var(--control);
+}
+
+:root[data-theme] .ui-dialog {
+  box-sizing: border-box;
+  inline-size: min(520px, calc(100% - 24px));
+  max-inline-size: none;
+  max-block-size: min(720px, calc(100dvh - 24px));
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--dialog);
+  color: var(--ink);
+}
+
+:root[data-theme] .ui-dialog[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.ui-dialog-header, .ui-dialog-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--control);
+}
+
+.ui-dialog-header {
+  border-bottom: 1px solid var(--line);
+  justify-content: space-between;
+  height: auto;
+  min-block-size: 54px;
+}
+
+.ui-dialog-header h2 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.ui-dialog-header .ui-icon-button {
+  font-size: 21px;
+}
+
+.ui-dialog-header h2:focus {
+  outline: none;
+}
+
+.ui-dialog-footer {
+  border-top: 1px solid var(--line);
+  justify-content: flex-end;
+}
+
+.ui-dialog-feedback {
+  margin-inline-end: auto;
+  min-inline-size: 0;
+  color: var(--sub);
+  font-size: var(--text-label);
+  overflow-wrap: anywhere;
+}
+
+.ui-dialog-feedback:empty {
+  display: none;
+}
+
+.ui-dialog-body {
+  box-sizing: border-box;
+  min-inline-size: 0;
+  padding: var(--space-4);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+#themeDialog.ui-dialog {
+  padding: 0;
+}
+
+#themeDialog .themeGrid {
+  margin: 0;
+  min-inline-size: 0;
+}
+
+:root[data-theme] .toast {
+  z-index: 8;
+  min-block-size: var(--compact-height);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--control-radius);
+  box-shadow: var(--bevel);
+}
+
+@media (min-width:1100px) {
+  :root[data-theme] [data-page=manager] .library,
+  :root[data-theme] [data-page=home] .library {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width:600px) {
+  :root[data-theme] {
+    --control-height: 42px;
+    --compact-height: 36px;
+    --field-height: 42px;
+  }
+
+  :root[data-theme] .work .heading {
+    margin-bottom: var(--space-4);
+  }
+
+  :root[data-theme] :is(.appearanceButton, .motionToggle) {
+    inline-size: var(--compact-height);
+    padding: 0;
+  }
+
+  :root[data-theme] .glass-segment button {
+    padding-inline: var(--space-2);
+  }
+
+  :root[data-theme] :is(.navitem, .profile) {
+    min-block-size: var(--compact-height);
+  }
+
+  :root[data-theme] .profile {
+    inline-size: var(--compact-height);
+  }
+
+  :root[data-theme] .ui-dialog {
+    max-block-size: calc(100dvh - 16px);
+  }
+}
+
+
+:root[data-theme] .materialTile button {
+  inline-size: 28px;
+  block-size: 28px;
+  z-index: 2;
+  color: var(--ink);
+  background: var(--control);
+  border-color: var(--line-strong);
+  font-size: 16px;
+}
+
+:root[data-theme] .sample {
+  margin: var(--space-3) var(--space-4) var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--control-radius);
+}
+
+:root[data-theme] .story,
+:root[data-theme] .styleChoices {
+  gap: var(--space-2);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+:root[data-theme] .tileIcon {
+  inline-size: 32px;
+  block-size: 32px;
+  border-radius: var(--control-radius);
+}
+
+:root[data-theme] :is(.notice, .metric) + :is(.buttons, .checkline) {
+  margin-top: var(--space-2);
+}
+
+@media (forced-colors: active) {
+  .glass-thumb { border-color: Highlight; }
+  .steps [aria-current="step"], .tag[data-tone] { border-color: CanvasText; }
+}
+
+@media print {
+  .ui-dialog { display: none !important; }
+}

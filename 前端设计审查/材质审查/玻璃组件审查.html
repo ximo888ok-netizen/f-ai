@@ -19,6 +19,17 @@ svg.lineicon{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1
 .stage[data-motion="off"] .thumb{transition:none;scale:none}
 @media(max-width:640px){.controls{display:grid;grid-template-columns:1fr auto;column-gap:8px}.density{grid-column:1/-1;grid-row:2}.ctrl>strong,.ctrl>label{white-space:nowrap}.motion-button{grid-column:2;grid-row:1;align-self:center}}
 @media(max-width:355px){.motion-button{grid-column:1;grid-row:3;justify-self:start}}
+:root{--compact-height:32px;--control-radius:11px;--focus-ring:#c1dbff}
+button:focus-visible,input:focus-visible{outline-color:var(--focus-ring);outline-offset:2px}
+.reset,.motion-button,.sceneSwitch button,.colors button{min-height:var(--compact-height);font-weight:600}
+.reset,.motion-button,.colors button{border-radius:var(--control-radius)}
+.reset,.motion-button{background:linear-gradient(135deg,#d8efff16,#9fbbef0c),#172339;border-color:#bdd8f05c}
+.reset:hover,.motion-button:hover{background:#344961}
+.controls{background:linear-gradient(135deg,#c2ddff12,#93b9ee08),#172136;border-color:#b9d4ef4d;box-shadow:inset 0 1px #d9efff3a}
+.colors button[aria-pressed=true]{color:#f4f7ff;background:#aacfff29;border-color:#c1dbff70}
+.sceneSwitch button[aria-pressed=true]{background:#adcaff36;box-shadow:inset 0 1px #e7f5ff56}
+.density input{accent-color:var(--focus-ring)}
+@media(max-width:640px){:root{--compact-height:36px}}
 </style>
 </head>
 <body>
