@@ -1,0 +1,7 @@
+node_modules/
+.env
+.env.*
+!.env.example
+model-providers.local.json
+coverage/
+data/

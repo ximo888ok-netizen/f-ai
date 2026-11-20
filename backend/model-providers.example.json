@@ -1,0 +1,316 @@
+[
+  {
+    "enabled": false,
+    "id": "openai-chat",
+    "protocol": "chat-completions",
+    "baseUrl": "https://api.openai.com/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_OPENAI_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "openai-responses",
+    "protocol": "responses",
+    "baseUrl": "https://api.openai.com/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_OPENAI_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "openai-image",
+    "protocol": "openai-images",
+    "baseUrl": "https://api.openai.com/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_OPENAI_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "openai-embed",
+    "protocol": "openai-embeddings",
+    "baseUrl": "https://api.openai.com/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_OPENAI_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "openai-asr",
+    "protocol": "openai-transcription",
+    "baseUrl": "https://api.openai.com/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_OPENAI_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "openai-tts",
+    "protocol": "openai-speech",
+    "baseUrl": "https://api.openai.com/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_OPENAI_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "claude",
+    "protocol": "anthropic-messages",
+    "baseUrl": "https://api.anthropic.com/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_ANTHROPIC_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "gemini",
+    "protocol": "gemini-content",
+    "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_GEMINI_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "gemini-image",
+    "protocol": "gemini-image",
+    "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_GEMINI_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "deepseek",
+    "protocol": "chat-completions",
+    "baseUrl": "https://api.deepseek.com/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_DEEPSEEK_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "qwen",
+    "protocol": "chat-completions",
+    "baseUrl": "https://YOUR-WORKSPACE.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_DASHSCOPE_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "wan",
+    "protocol": "wan-video",
+    "baseUrl": "https://YOUR-WORKSPACE.cn-beijing.maas.aliyuncs.com/api/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_DASHSCOPE_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "ark-chat",
+    "protocol": "chat-completions",
+    "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_ARK_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "seedance",
+    "protocol": "ark-video",
+    "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_ARK_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "kimi",
+    "protocol": "chat-completions",
+    "baseUrl": "https://api.moonshot.ai/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_KIMI_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "glm",
+    "protocol": "chat-completions",
+    "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_ZHIPU_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "minimax-chat",
+    "protocol": "chat-completions",
+    "baseUrl": "https://api.minimax.io/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_MINIMAX_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "hailuo",
+    "protocol": "minimax-video",
+    "baseUrl": "https://api.minimax.io/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_MINIMAX_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "siliconflow",
+    "protocol": "chat-completions",
+    "baseUrl": "https://api.siliconflow.cn/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_SILICONFLOW_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "mistral",
+    "protocol": "chat-completions",
+    "baseUrl": "https://api.mistral.ai/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_MISTRAL_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "groq",
+    "protocol": "chat-completions",
+    "baseUrl": "https://api.groq.com/openai/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_GROQ_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "grok",
+    "protocol": "chat-completions",
+    "baseUrl": "https://api.x.ai/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_XAI_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "cohere-chat",
+    "protocol": "cohere-chat",
+    "baseUrl": "https://api.cohere.com/v2",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_COHERE_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "cohere-rerank",
+    "protocol": "cohere-rerank",
+    "baseUrl": "https://api.cohere.com/v2",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_COHERE_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "azure-openai",
+    "protocol": "chat-completions",
+    "baseUrl": "https://YOUR-RESOURCE.openai.azure.com/openai/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_AZURE_OPENAI_KEY",
+    "apiKeyHeader": "api-key"
+  },
+  {
+    "enabled": false,
+    "id": "openrouter",
+    "protocol": "chat-completions",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_OPENROUTER_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "ollama",
+    "protocol": "ollama-chat",
+    "baseUrl": "http://127.0.0.1:11434/api",
+    "model": "REPLACE_WITH_MODEL_ID"
+  },
+  {
+    "enabled": false,
+    "id": "vllm",
+    "protocol": "chat-completions",
+    "baseUrl": "http://127.0.0.1:8000/v1",
+    "model": "REPLACE_WITH_MODEL_ID"
+  },
+  {
+    "enabled": false,
+    "id": "litellm",
+    "protocol": "chat-completions",
+    "baseUrl": "http://127.0.0.1:4000/v1",
+    "model": "REPLACE_WITH_MODEL_ID",
+    "keyEnv": "FAI_LITELLM_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "runway",
+    "protocol": "runway-video",
+    "baseUrl": "https://api.dev.runwayml.com/v1",
+    "model": "gen4.5",
+    "keyEnv": "FAI_RUNWAY_KEY"
+  },
+  {
+    "enabled": false,
+    "id": "replicate-flux",
+    "protocol": "json-http",
+    "baseUrl": "https://api.replicate.com/v1",
+    "model": "black-forest-labs/flux-schnell",
+    "keyEnv": "FAI_REPLICATE_KEY",
+    "capabilities": [
+      "image.main-image"
+    ],
+    "mapping": {
+      "kind": "image",
+      "createPath": "models/black-forest-labs/flux-schnell/predictions",
+      "body": {
+        "input": {
+          "prompt": {
+            "$from": "prompt"
+          },
+          "aspect_ratio": {
+            "$from": "parameters.ratio"
+          }
+        }
+      },
+      "poll": {
+        "jobIdPath": "id",
+        "path": "predictions/{id}",
+        "statusPath": "status",
+        "pending": [
+          "starting",
+          "processing"
+        ],
+        "success": [
+          "succeeded"
+        ]
+      },
+      "outputPath": "output.0",
+      "outputFormat": "url"
+    }
+  },
+  {
+    "enabled": false,
+    "id": "fal-flux",
+    "protocol": "json-http",
+    "baseUrl": "https://queue.fal.run/",
+    "model": "fal-ai/flux/dev",
+    "keyEnv": "FAI_FAL_KEY",
+    "capabilities": [
+      "image.main-image"
+    ],
+    "mapping": {
+      "kind": "image",
+      "authScheme": "Key",
+      "createPath": "fal-ai/flux/dev",
+      "body": {
+        "prompt": {
+          "$from": "prompt"
+        }
+      },
+      "poll": {
+        "jobIdPath": "request_id",
+        "path": "fal-ai/flux/requests/{id}/status",
+        "statusPath": "status",
+        "pending": [
+          "IN_QUEUE",
+          "IN_PROGRESS"
+        ],
+        "success": [
+          "COMPLETED"
+        ],
+        "resultPath": "fal-ai/flux/requests/{id}"
+      },
+      "outputPath": "images.0.url",
+      "outputFormat": "url"
+    }
+  }
+]
