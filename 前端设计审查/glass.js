@@ -79,14 +79,14 @@ const StudioGlass = (() => {
   }
   function refresh() {
     const groups=[...document.querySelectorAll(segmentSelector)].filter(g=>g.querySelector(selectedSelector));
+    groups.forEach(group=>group.classList.add('glass-segment'));
     const liveLenses=new Set();
-    const surfaces='.quickFloat,.node,.medium,.composerShell,.glass-segment,.rail,.topline,.card,.deskTile,.example,.hubLink,.guideBar,.miniStats button,.quickGrid button,.toolList button,dialog[open],.editorTools,.review-guide section';
+    const surfaces='.quickFloat,.node,.medium,.composerShell,.glass-segment:is(.hubTabs,.modes,.medium,.tabs,.slideTabs),.rail,.topline,.card,.deskTile,.example,.hubLink,.guideBar,.miniStats button,.quickGrid button,.toolList button,dialog[open],.editorTools,.review-guide section';
     for(const element of (root.dataset.theme==='glass' ? document.querySelectorAll(surfaces) : [])) {
       liveLenses.add(applyLens(element));
     }
     for(const [id,filter] of lenses) if(!liveLenses.has(id)){filter.remove();lenses.delete(id);}
     for (const group of groups) {
-      group.classList.add('glass-segment');
       const button=group.querySelector(selectedSelector);
       let thumb=group.querySelector('.glass-thumb');
       if(!thumb) {

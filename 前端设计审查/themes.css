@@ -43,8 +43,8 @@
 :root[data-theme] :is(.sideGroup,.sideChildren button,.railFoot>a,.railToggle,.localState,#crumb,.crumbHome,.chev,.profile i,.quickGrid .chev,.sampleAction,.caseLine>span,.labelRow>button){color:var(--sub)}
 :root[data-theme] #nav .navitem{color:var(--sub)}
 :root[data-theme] :is(#nav .navitem.active,.sideGroup[aria-expanded=true],.sideChildren button[aria-current]){background:var(--tab);color:var(--mark);border-color:var(--line);box-shadow:var(--fine)}
-:root[data-theme] :is(.profile,.parameter,.uploadButton,.smallbtn,.plain,.motionToggle,#queueLink,.appearanceButton,.dragNode,.tileIcon,.hubIcon,.tag,.steps span,.styleChoice,.sceneSave){background:var(--control);color:var(--ink);border:1px solid var(--line);box-shadow:var(--fine)}
-:root[data-theme] :is(.smallbtn,.plain,.parameter,.uploadButton,.appearanceButton,.motionToggle,#queueLink){backdrop-filter:var(--frost)}
+:root[data-theme] #queueLink,:root[data-theme] :is(.profile,.parameter,.uploadButton,.smallbtn,.plain,.motionToggle,.appearanceButton,.dragNode,.tileIcon,.hubIcon,.tag,.styleChoice,.sceneSave){background:var(--control);color:var(--ink);border:1px solid var(--line);box-shadow:var(--fine)}
+:root[data-theme] #queueLink,:root[data-theme] :is(.smallbtn,.plain,.parameter,.uploadButton,.appearanceButton,.motionToggle){backdrop-filter:var(--frost)}
 :root[data-theme] :is(.deskTile>div,.deskTile .fav,.sideGroup svg,#nav .navitem.active svg,.sampleAction svg,.parameter svg,.uploadButton svg,.hubIcon,.tileIcon,.timeLine small,.resultItem strong,.quote,.brandline i,.sideChildren button:hover){color:var(--accent)}
 :root[data-theme] :is(.brandline,.navitem.active,#crumb b){color:var(--ink)}
 :root[data-theme] :is(.resultItem,.card .sample,.metric,.bubble,.notice,.tag.off,.materialTile label,.tabs .pill:not(.sel),.rows td){color:var(--ink);background:var(--well);border-color:var(--line)}
@@ -94,7 +94,7 @@
 :root:not([data-theme=glass]) :is(.sideGroups,.stockrow,.hubRow,.timeLine,.editorTools){border-color:var(--line)}
 :root:not([data-theme=glass]) :is(.steps .current,.shotCard.selected){border-color:var(--line-strong);box-shadow:inset 0 -2px var(--accent);color:var(--mark);background:var(--tab)}
 :root[data-theme=paper] .aurora-field{background:repeating-linear-gradient(0deg,#6a452806 0 1px,transparent 1px 4px),radial-gradient(ellipse at 80% 4%,#faf7ee,#ece5d8)}
-:root[data-theme=paper] :is(h1,.labelRow h2,.sectiontitle h2,.themeHead h2,.review-guide h2){font-family:Georgia,"Songti SC",SimSun,serif;font-weight:700;letter-spacing:.015em}
+:root[data-theme=paper] :is(h1,.labelRow h2,.sectiontitle h2,.ui-dialog-header h2,.review-guide h2){font-family:Georgia,"Songti SC",SimSun,serif;font-weight:700;letter-spacing:.015em}
 :root[data-theme=paper] .deskArt::after{background:linear-gradient(0deg,#54422a25,transparent 50%)}
 :root[data-theme=paper] :is(.deskHero,.hero){border-bottom:2px solid #9b5542}
 :root[data-theme=jade] .aurora-field{background:radial-gradient(ellipse at 30% 0%,#345246,transparent 64%),linear-gradient(135deg,#1a3028,#11251e)}
@@ -109,7 +109,6 @@
 :root:not([data-theme=glass]) .review-guide :is(a,summary){color:var(--accent)}
 .appearanceButton{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:20px;padding:5px 11px;font:inherit;font-size:12px;white-space:nowrap}
 .appearanceButton i{width:11px;height:11px;border-radius:50%;background:var(--tab);border:1px solid var(--accent);box-shadow:inset 0 1px 2px #fff6}
-#themeDialog{padding:22px;width:min(475px,94vw)}.themeHead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.themeHead h2{margin:0;color:var(--ink);font-size:22px}.themeClose{font-size:20px;width:32px;height:32px;border:1px solid var(--line);border-radius:50%;background:var(--control);color:var(--ink)}
 .themeGrid{border:0;margin:0 0 17px;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:11px}
 .themeChoice{position:relative;overflow:hidden;display:block;margin:0!important;border:1px solid var(--line);border-radius:12px;color:var(--ink);background:var(--well);cursor:pointer}
 .themeChoice:has(:checked){outline:2px solid var(--accent);outline-offset:-2px}
@@ -130,7 +129,7 @@
 @media print{.appearanceButton,#themeDialog{display:none}:root[data-theme] .review-guide{background:white;color:black}:root[data-theme] .review-guide :is(header,section,th,td,p,code,.call,h1,h2,h3){background:white;color:black;box-shadow:none}}
 
 
-:root[data-theme=glass] :is(.quickFloat,.node,.composerShell,.glass-segment,.rail,.topline,.card,.deskTile,.example,.guideBar,.hubLink,.miniStats button,.quickGrid button,.toolList button,dialog[open],.editorTools,.review-guide section){
+:root[data-theme=glass] :is(.quickFloat,.node,.composerShell,.glass-segment:is(.hubTabs,.modes,.medium,.tabs,.slideTabs),.rail,.topline,.card,.deskTile,.example,.guideBar,.hubLink,.miniStats button,.quickGrid button,.toolList button,dialog[open],.editorTools,.review-guide section){
  --edge-filter:blur(2px);backdrop-filter:var(--edge-filter) saturate(1.08);
 }
 :root[data-theme=glass] :is(input,textarea,select):not([type=range],[type=file],[type=radio],[type=checkbox]){background:linear-gradient(132deg,#bbdbff14,#a9c8ed07),rgba(14,27,47,.74);border:1px solid #bbd7fa55;box-shadow:inset 0 1px 2px #d3eaff28,inset 0 -1px #a4d9ff15}

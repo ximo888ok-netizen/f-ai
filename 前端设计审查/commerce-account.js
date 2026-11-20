@@ -9,7 +9,7 @@ function servicePage(){
  }else{
  body=draftPanel('Windows 离线审查包','<p>下载 ZIP 后解压全部文件，双击「打开设计稿.html」。可在 Windows 的 Edge 或 Chrome 中审查本轮工作台。</p>'+(document.documentElement.hasAttribute('data-offline-bundle')?'<p class="notice">当前打开的是离线审查包。</p>':'<p class="spaceTop"><a class="plain" download href="F-AI-Studio-Review.zip">下载离线审查包</a></p>')+'')+draftPanel('版本范围','<p>包含前端页面、交互脚本和原创商品示例。原生 Windows 安装、自动更新与在线服务属于正式客户端交付。</p>')
  }
- return title('账户与客户端','审查积分、角色权益和 Windows 离线分发入口。')+'<div class="tabs">'+tabs+'</div><div class="deskSplit">'+body+'</div>';
+ return title('账户与客户端','审查积分、角色权益和 Windows 离线分发入口。')+'<div class="tabs" role="group" aria-label="账户页面">'+tabs+'</div><div class="deskSplit">'+body+'</div>';
 }
 document.addEventListener('click',e=>{
  const b=e.target.closest('button');if(!b)return;

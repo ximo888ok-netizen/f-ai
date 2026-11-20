@@ -52,7 +52,7 @@ function projectPage(){
  const active=hubState.filter==='进行中';
  const rows=ownRows(hubState.projects).filter(p=>p.archived!==active);
  return title('项目管理',hubCatalog.projects[2],hubButton('new-project','新建项目','primary'))+
- hubTabs('filter',['进行中','已归档'],hubState.filter)+draftPanel('项目列表',rows.map(p=>hubRow(p.name,p.owner+' · '+(p.desc||'项目资料'),(active?hubButton('edit-project','编辑','smallbtn',p.id):'')+hubButton('archive',active?'归档':'恢复','smallbtn',p.id))).join('')||hubNotice(active?'创建第一个项目，填写目标并指定负责人。':'归档后的项目会显示在这里。'));
+ hubTabs('filter',['进行中','已归档'],hubState.filter)+draftPanel('项目列表',rows.map(p=>hubRow(p.name,p.owner+' · '+(p.desc||'项目资料'),(active?hubButton('edit-project','编辑','smallbtn',p.id):'')+hubButton('archive',active?'归档':'恢复','smallbtn',p.id))).join('')||emptyState(active?'暂无进行中的项目':'暂无归档项目',active?'创建项目后，可填写目标并指定负责人。':'归档后的项目会显示在这里。'));
 }
 function teamPage(){
  const team=hubState.members.map(m=>hubRow(m.name,m.access,hubButton('role','调整角色','smallbtn',m.id))).join('');
@@ -63,7 +63,7 @@ function teamPage(){
 function resourceRows(){
  const list=ownRows(hubState.resources).filter(r=>r.kind===hubState.resourceType && r.scope===hubState.scope &&
    (r.name+' '+r.body).toLowerCase().includes(hubState.query.trim().toLowerCase()));
- return list.map(r=>hubRow(r.name,r.scope+' · '+r.body.slice(0,75),hubButton('open-resource','查看','smallbtn',r.id)+hubButton('edit-resource','编辑','smallbtn',r.id))).join('')||hubNotice(hubState.query?'未找到匹配资料，可更换关键词。':'这个范围还没有资料。添加一条后即可检索和编辑。');
+ return list.map(r=>hubRow(r.name,r.scope+' · '+r.body.slice(0,75),hubButton('open-resource','查看','smallbtn',r.id)+hubButton('edit-resource','编辑','smallbtn',r.id))).join('')||emptyState(hubState.query?'未找到匹配资料':'暂无资料',hubState.query?'试试更换关键词。':'添加一条资料后即可检索和编辑。');
 }
 function resourcePage(){
  const scopes=state.role.startsWith('企业')?['企业','个人']:['个人'];

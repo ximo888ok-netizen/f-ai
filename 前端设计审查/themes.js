@@ -41,11 +41,11 @@
   }
   document.addEventListener('DOMContentLoaded',()=>{
     const dialog=document.createElement('dialog');
-    dialog.id='themeDialog';dialog.setAttribute('aria-labelledby','themeTitle');
-    dialog.innerHTML='<div class="themeHead"><h2 id="themeTitle">外观主题</h2><button class="themeClose" aria-label="关闭主题选择">×</button></div>'+
+    dialog.id='themeDialog';dialog.className='ui-dialog';dialog.setAttribute('aria-labelledby','themeTitle');
+    dialog.innerHTML='<header class="ui-dialog-header"><h2 id="themeTitle">外观主题</h2><button class="ui-icon-button themeClose" type="button" aria-label="关闭主题选择"><span aria-hidden="true">×</span></button></header><div class="ui-dialog-body">'+
       '<fieldset class="themeGrid"><legend class="themeSr">选择工作区主题</legend>'+themes.map(t=>
       '<label class="themeChoice"><input type="radio" name="faiAppearance" value="'+t.id+'"><span class="themeDemo demo-'+t.id+'" aria-hidden="true"><i></i><b></b><em></em></span><span class="themeMeta"><strong>'+t.name+'</strong><small>'+t.detail+'</small></span><span class="themeCheck" aria-hidden="true">✓</span></label>').join('')+
-      '</fieldset><form method="dialog"><button class="primary">完成</button></form>';
+      '</fieldset></div><form class="ui-dialog-footer" method="dialog"><button class="primary">完成</button></form>';
     document.body.append(dialog);
     dialog.querySelector('.themeClose').onclick=()=>dialog.close();
     dialog.addEventListener('change',e=>{if(e.target.name==='faiAppearance')setTheme(e.target.value,true);});
