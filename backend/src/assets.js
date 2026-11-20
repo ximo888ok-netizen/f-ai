@@ -9,7 +9,7 @@ const assetFields = 'id, name, media_type AS "mediaType", source, purpose, conse
 const maxBytes = 10 * 1024 * 1024;
 const idParams = object({ id: uuid });
 
-function validMedia(bytes, mime) {
+export function validMedia(bytes, mime) {
   if (mime === 'image/png') return bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'));
   if (mime === 'image/jpeg') return bytes.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'));
   if (mime === 'video/mp4') return bytes.subarray(4, 8).toString('ascii') === 'ftyp';

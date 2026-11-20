@@ -1,4 +1,5 @@
 
+import { readFileSync } from 'node:fs';
 import { catalog } from './catalog.js';
 
 export const isUuid = value => typeof value === 'string' && /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(value);
@@ -15,12 +16,15 @@ export function config(env = process.env) {
       throw new Error('WEB_ORIGINS entries must be exact HTTP(S) origins');
     }
   }
+  if (env.MODEL_PROVIDERS_FILE && env.MODEL_PROVIDERS_JSON) throw new Error('Choose one model configuration source');
+  const models = JSON.parse(env.MODEL_PROVIDERS_JSON || (env.MODEL_PROVIDERS_FILE ? readFileSync(env.MODEL_PROVIDERS_FILE, 'utf8').replace(/^\uFEFF/, '') : '[]'));
   const capabilities = list(env.GATEWAY_CAPABILITIES);
   if (capabilities.some(id => catalog.get(id)?.execution !== 'gateway')) {
     throw new Error('GATEWAY_CAPABILITIES contains an unsupported capability ID');
   }
   return {
     port, host: env.HOST || '127.0.0.1', databaseUrl: env.DATABASE_URL, origins,
+    models,
     gateway: { url: env.GATEWAY_URL, token: env.GATEWAY_TOKEN, capabilities },
     shops: loadShops(env.SHOP_BINDINGS_JSON),
   };

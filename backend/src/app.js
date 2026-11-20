@@ -12,6 +12,7 @@ import { ApiError } from './http.js';
 import { createProviders } from './providers.js';
 import { registerSchedules } from './schedules.js';
 import { registerSupport } from './support.js';
+import { registerModels } from './models.js';
 import { registerTasks } from './tasks.js';
 import { registerWallet } from './wallet.js';
 import { registerWorkspace } from './workspace.js';
@@ -88,6 +89,7 @@ export async function buildApp({
   registerAssets(app, db);
   registerSupport(app, db);
   registerCustomerService(app, db);
+  registerModels(app, providers);
   registerTasks(app, db, providers, shops);
   registerSchedules(app, db, providers);
   return app;

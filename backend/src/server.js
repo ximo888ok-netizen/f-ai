@@ -4,6 +4,7 @@ import { buildApp } from './app.js';
 import { config } from './config.js';
 import { postgres } from './db.js';
 import { createProviders } from './providers.js';
+import { installModels } from './models.js';
 import { startWorker } from './worker.js';
 
 try {
@@ -14,7 +15,7 @@ try {
 
 const settings = config();
 const db = postgres(settings.databaseUrl);
-const providers = createProviders(settings.gateway);
+const providers = installModels(createProviders(settings.gateway), settings.models);
 const dependencies = { db, providers, shops: settings.shops };
 const app = await buildApp({ ...dependencies, origins: settings.origins, logger: true });
 await app.listen({ port: settings.port, host: settings.host });

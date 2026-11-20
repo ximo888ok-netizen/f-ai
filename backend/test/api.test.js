@@ -1,6 +1,8 @@
 
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
+import { installModels } from '../src/models.js';
 import test, { after, before } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { buildApp } from '../src/app.js';
@@ -317,4 +319,79 @@ test('concurrent submissions respect the wallet and do not duplicate execution',
   assert.equal(worked.filter(Boolean).length, 2);
   assert.deepEqual(response(await api('GET', '/v1/credits/wallet', personal), 200), { balance: 0, reserved: 0, available: 0 });
   assert.equal(response(await api('GET', '/v1/notifications', personal), 200).unread, 2);
+});
+
+test('model discovery, selection, media persistence and remote polling use the production task API', async t => {
+  const posts = [];
+  let polls = 0;
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==';
+  const upstream = createServer(async (request, reply) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined;
+    if (body) posts.push({ path: request.url, body });
+    reply.setHeader('content-type', 'application/json');
+    if (request.url === '/v1/chat/completions') return reply.end(JSON.stringify({ choices: [{ message: { content: '杯子' } }] }));
+    if (request.url === '/v1/images/generations') return reply.end(JSON.stringify({ data: [{ b64_json: png }] }));
+    if (request.url === '/v1/contents/generations/tasks') return reply.end(JSON.stringify({ id: 'remote-42' }));
+    if (request.url === '/v1/contents/generations/tasks/remote-42') {
+      polls += 1;
+      if (polls === 1) reply.statusCode = 503;
+      return reply.end(JSON.stringify(polls <= 2 ? { status: 'running' } : { status: 'succeeded', content: { video_url: 'https://media.test/42.mp4' } }));
+    }
+    reply.statusCode = 404;
+    reply.end('{}');
+  });
+  await new Promise((resolve, reject) => { upstream.once('error', reject); upstream.listen(0, '127.0.0.1', resolve); });
+  t.after(() => new Promise(resolve => upstream.close(resolve)));
+  const baseUrl = 'http://127.0.0.1:' + upstream.address().port + '/v1';
+  const routes = [['a-chat', 'chat-completions'], ['b-chat', 'ollama-chat'], ['a-image', 'openai-images'], ['a-video', 'ark-video']]
+    .map(([id, protocol]) => ({ id, protocol, model: 'fixture', baseUrl }));
+  installModels(providers, routes);
+  t.after(() => routes.forEach(route => providers.delete('model:' + route.id)));
+  const workspaceId = other.workspaces[0].id;
+  const deps = { db, providers, shops };
+  await provisionCredits(db, workspaceId, other.account.id, 20, 'model-route-funds');
+  const list = response(await api('GET', '/v1/models?capabilityId=model.chat', other), 200);
+  assert.deepEqual(list.items.map(item => item.id), ['a-chat', 'b-chat']);
+  assert.ok(list.items.every(item => !('baseUrl' in item) && !('keyEnv' in item)));
+  const send = (key, modelId, capabilityId, parameters) => api('POST', '/v1/tasks', other, { idempotencyKey: key, ...(modelId && { modelId }), mode: 'chat', capabilityId, parameters });
+  const messages = [{ role: 'user', content: '杯子' }];
+  const chat = response(await send('model-chat-key', null, 'model.chat', { messages }), 202);
+  assert.equal(chat.modelId, 'a-chat');
+  response(await send('model-chat-key', 'b-chat', 'model.chat', { messages }), 409);
+  response(await send('bad-model-route', 'a-video', 'model.chat', { messages }), 422);
+  response(await send('bad-model-format', 'a-image', 'image.main-image', { prompt: '杯', format: 'psd' }), 400);
+  await workOnce(deps);
+  const finished = id => api('GET', '/v1/tasks/' + id, other).then(result => response(result, 200));
+  assert.equal((await finished(chat.id)).result.text, '杯子');
+
+  const image = response(await send('model-image-key', 'a-image', 'image.main-image', { prompt: '杯' }), 202);
+  await workOnce(deps);
+  const { assetId } = (await finished(image.id)).result;
+  const path = '/v1/assets/' + assetId + '/content';
+  assert.equal((await api('GET', path, other)).rawPayload.toString('base64'), png);
+  response(await api('GET', path, personal), 404);
+
+  const video = response(await send('model-video-key', 'a-video', 'video.compose', { prompt: '杯' }), 202);
+  await workOnce(deps);
+  assert.equal((await finished(video.id)).state, 'running');
+  // Recreate adapters between submission and polling, as after a worker restart.
+  const restarted = { ...deps, providers: installModels(createProviders(), routes) };
+  for (let i = 0; i < 3; i += 1) {
+    await db.query("UPDATE tasks SET lease_until = now() WHERE id = $1", [video.id]);
+    await workOnce(restarted);
+  }
+  const remote = await finished(video.id);
+  assert.equal(remote.attempts, 1);
+  assert.equal(remote.result.url, 'https://media.test/42.mp4');
+  assert.equal(posts.filter(request => request.path.endsWith('/generations/tasks')).length, 1);
+
+  // A process loss between the paid POST and persistence of its receipt is ambiguous.
+  const lost = response(await send('model-lost-receipt', 'a-video', 'video.compose', { prompt: '杯' }), 202);
+  await db.query("UPDATE tasks SET state='running', attempts=1, lease_until=now(), provider_sent_at=now() WHERE id=$1", [lost.id]);
+  await workOnce(deps);
+  assert.equal((await finished(lost.id)).errorCode, 'PROVIDER_OUTCOME_UNKNOWN');
+  assert.equal(posts.length, 3);
+  assert.deepEqual(response(await api('GET', '/v1/credits/wallet', other), 200), { balance: 10, reserved: 0, available: 10 });
 });

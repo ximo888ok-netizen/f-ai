@@ -1,0 +1,63 @@
+export class ProviderError extends Error {
+  constructor(code, retryable = false) {
+    super(code);
+    this.code = code;
+    this.retryable = retryable;
+  }
+}
+
+// Polling and idempotent gateways can repeat a transport failure. A native
+// creation request with an ambiguous outcome must not be submitted twice.
+export async function requestUpstream(url, { headers, body, repeatable = false, maxBytes = 512 * 1024, timeout = 45000, binary = false }) {
+  let response;
+  try {
+    const multipart = body instanceof FormData;
+    response = await fetch(url, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: body === undefined || multipart ? headers : { ...headers, 'content-type': 'application/json' },
+      body: multipart ? body : JSON.stringify(body),
+      redirect: 'error', signal: AbortSignal.timeout(timeout),
+    });
+  } catch {
+    throw new ProviderError(repeatable ? 'PROVIDER_UNREACHABLE' : 'PROVIDER_OUTCOME_UNKNOWN', repeatable);
+  }
+  if (!response.ok) {
+    await response.body?.cancel();
+    if (!repeatable && response.status >= 500) throw new ProviderError('PROVIDER_OUTCOME_UNKNOWN');
+    throw new ProviderError('PROVIDER_REJECTED', response.status === 429 || (repeatable && response.status >= 500));
+  }
+  try {
+    const chunks = [];
+    let size = 0;
+    for await (const value of response.body) {
+      size += value.byteLength;
+      if (size > maxBytes) throw new ProviderError('PROVIDER_RESPONSE_TOO_LARGE');
+      chunks.push(value);
+    }
+    if (binary) return Buffer.concat(chunks);
+    // Some video services serialize long decimal IDs as numbers.
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'), (key, value, context) => {
+      if ((key === 'task_id' || key === 'file_id') && typeof value === 'number' && !Number.isSafeInteger(value)) return context.source;
+      return value;
+    });
+  } catch (error) {
+    if (error instanceof ProviderError) throw error;
+    throw new ProviderError('INVALID_PROVIDER_RESULT', repeatable);
+  }
+}
+
+export function mediaUrl(value) {
+  if (typeof value !== 'string') throw new ProviderError('INVALID_PROVIDER_RESULT');
+  let url;
+  try { url = new URL(value); } catch { throw new ProviderError('INVALID_PROVIDER_RESULT'); }
+  if (url.protocol !== 'https:' || url.username || url.password) throw new ProviderError('INVALID_PROVIDER_RESULT');
+  return url.href;
+}
+
+export class PendingModelJob {
+  constructor(id) {
+    const value = typeof id === 'number' && Number.isSafeInteger(id) ? String(id) : id;
+    if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,256}$/.test(value)) throw new ProviderError('INVALID_PROVIDER_RESULT');
+    this.id = value;
+  }
+}

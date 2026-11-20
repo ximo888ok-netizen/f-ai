@@ -43,6 +43,7 @@ npm start
 | 素材 | GET/POST /v1/assets、GET /v1/assets/{id}/content、DELETE /v1/assets/{id} |
 | 积分 | GET /v1/credits/wallet、GET /v1/credits/ledger、POST /v1/credits/allocate |
 | 插件 | GET /v1/plugins、PUT /v1/plugins/{id}/state |
+| 模型目录 | GET /v1/models，可按 capabilityId 查询已配置模型 |
 | 执行任务 | GET/POST /v1/tasks、GET /v1/tasks/{id}、POST /v1/tasks/{id}/cancel、POST /v1/tasks/{id}/regenerate |
 | 定时任务 | GET/POST /v1/schedules、POST /v1/schedules/{id}/cancel |
 | 客服工作台 | /v1/customer-service/conversations、/v1/customer-service/conversations/{id}/messages、POST /v1/customer-service/conversations/{id}/handoff、/v1/customer-service/quick-replies |
@@ -79,6 +80,10 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 - 用户主动再生成时调用 regenerate 并提供新的幂等键。会更改店铺数据的能力需要重新预览与确认。
 - 一次性定时任务提交同样的能力参数、幂等键和 RFC 3339 格式的 runAt。到期才排队和预占积分，schedule.taskId 关联实际执行记录。店铺上架和批量变更无法定时提交。
 
+## 模型服务
+
+后端可以直连文本、图片、视频、语音、向量和重排接口，也可以使用自有网关。部署时按模型配置别名、协议、API 地址及密钥环境变量。前端通过 GET /v1/models 发现模型，提交任务时可传 modelId。输入、结果和配置示例见[模型接入说明](./MODEL_API.md)。
+
 ## 外部网关与店铺联调
 
 GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维显式启用的能力会向配置中的 HTTPS 网关发请求。网关接收 capabilityId、mode、parameters 和必要的素材，响应为 {"result": {...}}。请求头带以任务 ID 为值的 Idempotency-Key。网关需对该键做去重，在写入结果不明时先查询平台状态，避免因超时重试重复上架。API 不把账号资料、知识库、供应商密钥或平台日志放进任务网关请求。联调只使用获准外发的素材和文本。
@@ -87,6 +92,6 @@ GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维
 
 ## 交付范围与验证
 
-当前分支交付可运行的后端首版。图片和视频模型、PSD 产物、三家店铺的真实授权与回执由各自的真实适配服务联调验收。购物平台 OAuth、支付与订阅、代理计佣、企业独立物理数据库、自有网盘、外部消息渠道、专家与技能库仍待实现或接入。客服当前提供本地知识检索回复。42 项是能力目录，第三方能力是否可调用以配置及实际联调为准。
+当前分支交付可运行的后端首版。图片和视频模型已有原生协议适配，真实生成质量、分层 PSD 产物以及三家店铺的真实授权与回执仍需分别验收。购物平台 OAuth、支付与订阅、代理计佣、企业独立物理数据库、自有网盘、外部消息渠道、专家与技能库仍待实现或接入。客服当前提供本地知识检索回复。42 项是能力目录，第三方能力是否可调用以配置及实际联调为准。
 
 运行 npm test 会使用内存 PostgreSQL（PGlite）执行 API 集成测试。也可把 FAI_TEST_DATABASE_URL 指向空的专用 PostgreSQL 测试库再运行。测试会应用迁移并写入固定测试账号和样例，使用完后可丢弃该测试库。

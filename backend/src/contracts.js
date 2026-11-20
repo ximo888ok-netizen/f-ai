@@ -26,7 +26,7 @@ const asset = shape({
   consentReference: nullable(string), consentExpiresAt: nullable(date), sizeBytes: count, createdAt: date,
 });
 const task = shape({
-  id: uuid, capabilityId: string, pluginId: string, projectId: nullable(uuid), parentId: nullable(uuid),
+  id: uuid, capabilityId: string, pluginId: string, modelId: nullable(string), projectId: nullable(uuid), parentId: nullable(uuid),
   state: enumOf('queued', 'running', 'succeeded', 'failed', 'cancelled'), cost: count, attempts: count,
   result: nullable(anyObject), errorCode: nullable(string), createdAt: date, updatedAt: date,
 });
@@ -80,6 +80,7 @@ export const contracts = new Map([
   ['/v1/knowledge/search', { POST: { 200: collection(shape({ baseId: uuid, baseName: string, documentId: uuid, name: string, category: string, ordinal: count, snippet: string })) } }],
   ['/v1/assets', { GET: { 200: collection(asset) }, POST: { 201: asset } }],
   ['/v1/assets/:id', { DELETE: { 204: none } }],
+  ['/v1/models', { GET: { 200: collection(shape({ id: string, model: string, protocol: string, kind: string, capabilities: items(string) })) } }],
   ['/v1/plugins', { GET: { 200: collection(plugin) } }],
   ['/v1/plugins/:id/state', { PUT: { 200: shape({ id: string, enabled: bool }) } }],
   ['/v1/customer-service/conversations', { GET: { 200: collection(conversation) }, POST: { 201: conversation } }],

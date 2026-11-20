@@ -5,7 +5,8 @@ import { taskAssets } from './assets.js';
 import { capabilityId, capabilityRules, catalog, plugins } from './catalog.js';
 import { row, rows } from './db.js';
 import { ApiError, bool, choice, freeObject, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
-import { providerFor } from './providers.js';
+import { modelIdSchema } from './models.js';
+import { matchingProviders, providerFor } from './providers.js';
 import { finishCredits, reserveCredits } from './wallet.js';
 import { accessibleProject } from './workspace.js';
 
@@ -14,7 +15,7 @@ const idParams = object({ id: uuid });
 export const keySchema = { ...text(100, 8), pattern: '^(?!schedule:)[A-Za-z0-9_.:-]+$' };
 const taskFields = [
   'id', 'capability_id AS "capabilityId"', 'plugin_id AS "pluginId"', 'project_id AS "projectId"',
-  'parent_id AS "parentId"', 'state', 'cost', 'attempts', 'result', 'error_code AS "errorCode"',
+  'parent_id AS "parentId"', "CASE WHEN provider_id LIKE 'model:%' THEN substr(provider_id, 7) END AS \"modelId\"", 'state', 'cost', 'attempts', 'result', 'error_code AS "errorCode"',
   'created_at AS "createdAt"', 'updated_at AS "updatedAt"',
 ].join(', ');
 const stateSchema = choice('queued', 'running', 'succeeded', 'failed', 'cancelled');
@@ -61,6 +62,7 @@ export async function submitInTransaction(connection, providers, shops, context,
   const { capabilityId: id, projectId, mode, parameters, idempotencyKey, confirmationId } = input;
   const capability = catalog.get(id);
   const storedInput = { mode, parameters };
+  if (input.modelId !== undefined) storedInput.modelId = input.modelId;
   const hash = digest(stableJson({ id, projectId: projectId ?? null, storedInput, parentId, confirmationId: confirmationId ?? null }));
   // The workspace plugin lock prevents submit/disable races. A per-wallet lock also
   // serializes requests that reuse an idempotency key across different plugins.
@@ -72,7 +74,13 @@ export async function submitInTransaction(connection, providers, shops, context,
     return { task, created: false };
   }
 
-  const providerId = providerFor(providers, capability);
+  const providerId = providerFor(providers, capability, input.modelId);
+  const provider = providers.get(providerId);
+  provider.validate?.(capability, parameters);
+  if (provider.signature) {
+    storedInput.modelSignature = provider.signature;
+    storedInput.modelId = provider.info.id;
+  }
   await lockPlugin(connection, workspaceId, capability.pluginId);
   await accessibleProject(connection, context, projectId, true);
   if (capability.pluginId === 'operations' && context.role === 'member') {
@@ -117,14 +125,14 @@ export function registerTasks(app, db, providers, shops) {
       ...plugin, enabled: settings.get(plugin.id) ?? true,
       capabilities: [...catalog.values()].filter(capability => capability.pluginId === plugin.id).map(capability => {
         const { execution, ...contract } = capability;
-        return { ...contract, available: execution === 'endpoint' || (providers.get(execution)?.supports(capability) ?? false) };
+        return { ...contract, available: execution === 'endpoint' || matchingProviders(providers, capability).length > 0 };
       }),
     })) };
   });
 
   route(app, 'PUT', '/v1/plugins/:id/state', {
     manager: true, tags: ['Plugins'], summary: 'Enable or disable new submissions in a workspace',
-    params: object({ id: choice(...plugins.map(plugin => plugin.id)) }),
+    params: object({ id: choice('models', ...plugins.map(plugin => plugin.id)) }),
     body: object({ enabled: bool }),
   }, async request => {
     const { workspaceId } = request.context;
@@ -158,7 +166,7 @@ export function registerTasks(app, db, providers, shops) {
     tags, summary: 'Submit a priced and idempotent plugin task',
     body: {
       ...object({
-        capabilityId, mode: choice('chat', 'workflow'), parameters: freeObject, idempotencyKey: keySchema, projectId: uuid, confirmationId: uuid,
+        capabilityId, modelId: modelIdSchema, mode: choice('chat', 'workflow'), parameters: freeObject, idempotencyKey: keySchema, projectId: uuid, confirmationId: uuid,
       }, ['capabilityId', 'mode', 'parameters', 'idempotencyKey']),
       allOf: capabilityRules,
     },

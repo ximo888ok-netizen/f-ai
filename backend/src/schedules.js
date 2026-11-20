@@ -4,6 +4,7 @@ import { digest } from './auth.js';
 import { capabilityRules, catalog } from './catalog.js';
 import { row, rows } from './db.js';
 import { ApiError, choice, freeObject, invalid, notFound, object, page, paginate, route, uuid } from './http.js';
+import { modelIdSchema } from './models.js';
 import { providerFor } from './providers.js';
 import { keySchema, stableJson, submitInTransaction } from './tasks.js';
 import { accessibleProject } from './workspace.js';
@@ -19,7 +20,7 @@ export function registerSchedules(app, db, providers) {
     body: {
       ...object({
         runAt: { type: 'string', format: 'date-time' }, capabilityId: choice(...byId.keys()),
-        mode: choice('chat', 'workflow'), projectId: uuid, parameters: freeObject, idempotencyKey: keySchema,
+        modelId: modelIdSchema, mode: choice('chat', 'workflow'), projectId: uuid, parameters: freeObject, idempotencyKey: keySchema,
       }, ['runAt', 'capabilityId', 'mode', 'parameters', 'idempotencyKey']),
       allOf: capabilityRules.filter(rule => byId.has(rule.if.properties.capabilityId.const)),
     },
@@ -40,7 +41,9 @@ export function registerSchedules(app, db, providers) {
     if (parsed.getTime() <= now || parsed.getTime() > now + 366 * 24 * 60 * 60 * 1000) {
       throw invalid('runAt must be in the next 366 days');
     }
-    providerFor(providers, byId.get(input.capabilityId));
+    const capability = byId.get(input.capabilityId);
+    const providerId = providerFor(providers, capability, input.modelId);
+    providers.get(providerId).validate?.(capability, input.parameters);
     await accessibleProject(db, request.context, input.projectId, true);
     const schedule = await row(db, [
       'INSERT INTO schedules (id, workspace_id, account_id, idempotency_key, run_at, request, request_hash, state)',

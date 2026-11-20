@@ -98,6 +98,20 @@ for (const [pluginId, execution, parameters, entries] of definitions) {
   }
 }
 
+// Platform model utilities share task ownership, quotas, and billing with plugin tasks.
+const utilitySchemas = {
+  chat: object({ messages: array(object({ role: choice('system', 'user', 'assistant'), content: text(8000) }), 32, 1) }),
+  embed: object({ input: array(text(8000), 16, 1) }),
+  rerank: object({ query: text(2000), documents: array(text(4000), 50, 1), topN: integer(1, 50) }, ['query', 'documents']),
+  speech: object({ input: text(4000), voice: text(100) }),
+  transcribe: object({ assetIds: array(uuid, 1, 1), language: { type: 'string', pattern: '^[a-z]{2}$' } }, ['assetIds']),
+};
+for (const [name, parameters] of Object.entries(utilitySchemas)) {
+  const id = 'model.' + name;
+  catalog.set(id, { id, name, pluginId: 'models', execution: 'gateway', parameters, minAssets: name === 'transcribe' ? 1 : 0,
+    requiresConsent: false, requiresConfirmation: false, modes: ['chat', 'workflow'], cost: 2 });
+}
+
 export const capabilityId = choice(...catalog.keys());
 export const capabilityRules = [...catalog.values()].map(capability => ({
   if: { properties: { capabilityId: { const: capability.id } }, required: ['capabilityId'] },
