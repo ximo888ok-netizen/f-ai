@@ -238,6 +238,69 @@ test('shop ledgers isolate business records and compute local backlog and sales 
   assert.deepEqual(data(await send('GET','/v1/tasks',owner),200).items,[]);
 });
 
+test('confirmed draft import rejects duplicate SKUs and stale previews and writes the exact batch once', async () => {
+  const bookRoot = '/v1/studio/pinduoduo/books';
+  const book = data(await send('POST',bookRoot,owner,{name:'Draft transfer QA'}),200);
+  const foreign = data(await send('POST',bookRoot,other,{name:'Foreign draft transfer QA'}),200);
+  const inventory = bookRoot + '/' + book.id + '/records/inventory';
+  const transfer = inventory + '/draft-import';
+  const draftId = randomUUID();
+  const draftPath = '/v1/studio/pinduoduo-drafts/' + draftId;
+  const assetId = data(await send('POST','/v1/assets',owner,{
+    name:'cover.png',mediaType:'image/png',source:'fixture',purpose:'draft',dataBase64:'iVBORw0KGgo=',
+  }),201).id;
+  const details = {title:'Local item',specification:'Single',category:'Sample',sku:'QA-ONE',stock:0,priceMinor:1234,
+    images:[{role:'main',assetId}], variants:[{specification:'Bundle',sku:'QA-TWO',priceMinor:2534}]};
+  const save = async revision => data(await send('PUT',draftPath,owner,{...details,revision}),200);
+  const initial = await save(0);
+  const body = {draftId, day:'2026-02-04',threshold:2};
+  const preview = async (dataBody=body) => data(await send('POST',transfer+'/preview',owner,dataBody),200);
+  const confirm = (pending, status, overrides={}) =>
+    send('POST',transfer+'/confirm',owner,{...body,previewId:pending.previewId,...overrides}).then(r=>data(r,status));
+  data(await send('POST',transfer+'/preview',other,body),404);
+  data(await send('POST',bookRoot+'/'+foreign.id+'/records/inventory/draft-import/preview',other,body),404);
+  data(await send('POST',transfer+'/confirm',owner,body),400);
+  const incomplete = await preview();
+  assert.equal(incomplete.ready,false);
+  assert.deepEqual(incomplete.items[1].missing,['库存']);
+  await confirm(incomplete,409);
+  assert.deepEqual(data(await send('GET',inventory,owner),200).items,[]);
+  details.variants[0].stock = 7;
+  const fixed = await save(initial.revision);
+  const stale = await preview();
+  details.variants[0].priceMinor = 2834;
+  await save(fixed.revision);
+  await confirm(stale,409);
+  assert.deepEqual(data(await send('GET',inventory,owner),200).items,[]);
+  const beforeCollision = await preview();
+  await confirm(beforeCollision,409,{threshold:3});
+  data(await send('PUT',inventory,owner,{reference:'qa-two',revision:0,details:{
+    title:'Existing inventory',stock:10,threshold:1,day:body.day,
+  }}),200);
+  await confirm(beforeCollision,409);
+  const collision = await preview();
+  assert.equal(collision.ready,false);
+  assert.deepEqual(collision.items[1].conflicts,[{sku:'qa-two',title:'Existing inventory'}]);
+  await confirm(collision,409);
+  const [existing] = data(await send('GET',inventory,owner),200).items;
+  assert.equal(existing.reference,'qa-two');
+  assert.equal(existing.details.stock,10);
+  const newBook = data(await send('POST',bookRoot,owner,{name:'Clean draft transfer QA'}),200);
+  const cleanInventory = bookRoot+'/'+newBook.id+'/records/inventory';
+  const cleanTransfer = cleanInventory+'/draft-import';
+  const final = data(await send('POST',cleanTransfer+'/preview',owner,body),200);
+  assert.equal(final.ready,true);
+  assert.deepEqual(data(await send('GET',cleanInventory,owner),200).items,[]);
+  const committed = await Promise.all([1,2].map(() =>
+    send('POST',cleanTransfer+'/confirm',owner,{...body,previewId:final.previewId}).then(r=>data(r,200))));
+  assert.deepEqual(committed,[{inserted:2},{inserted:2}]);
+  const rows = data(await send('GET',cleanInventory,owner),200).items;
+  assert.deepEqual(rows.map(r=>[r.reference,r.details.specification,r.details.priceMinor,r.details.stock,r.details.threshold,r.details.day]),[
+    ['QA-ONE','Single',1234,0,2,body.day], ['QA-TWO','Bundle',2834,7,2,body.day],
+  ]);
+  assert.ok(rows.every(r=>r.details.productRef===draftId));
+});
+
 test('server settings save favorites and theme and suppress task notifications when disabled', async () => {
   const directory = data(await send('GET', '/v1/plugins', owner), 200);
   assert.equal(directory.items.length, 5);

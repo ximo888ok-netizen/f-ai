@@ -31,7 +31,7 @@ export const operationForms = {
     status: status('待拟回复','已拟回复','无需回复'), reply: note('回复草稿'),
   } },
   inventory: { label: '商品与库存', keyLabel: 'SKU 编码', fields: {
-    title: str('商品名称'), productRef: str('所属商品编号',100,true), specification: str('规格组合',200,true),
+    title: str('商品名称',200), productRef: str('所属商品编号',100,true), specification: str('规格组合',200,true),
     category: str('类目', 200, true), priceMinor: money('销售单价（元）', true),
     stock: num('库存数量'), threshold: num('库存预警线'), day: date('库存盘点日期'),
   } },

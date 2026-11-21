@@ -91,7 +91,8 @@ async function recordsPage(ctx, book, kind, model, view, key) {
     action('下载 CSV 表头','template') + (entries.length ? action('导出本页 JSON','export') : '') +
     form('operation-import',field('业务文件',input('file','type="file" accept=".csv,.json" required')),'导入台账'));
   ctx.html(heading(model.label,book.name + ' · 手工录入或文件导入') + link('返回运营总览',bookRoute) +
-    (analytics ? '' : link('新增记录',base + '/new')) + panel('查询',filterBar(model,kind,filters)) +
+    (analytics ? '' : link('新增记录',base + '/new')) +
+    (kind === 'inventory' ? link('从商品草稿入账','drafts') : '') + panel('查询',filterBar(model,kind,filters)) +
     panel(model.label,listHeading(entries,offset) + table + pager(base,filters,offset,items.length>pageSize)) + imports);
   ctx.submit('filter-records', data => {
     const next = new URLSearchParams();

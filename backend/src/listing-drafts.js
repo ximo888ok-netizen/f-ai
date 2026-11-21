@@ -23,7 +23,7 @@ const body = object({
   images: array(object({ role: choice('main','sku','detail'), assetId: uuid }), 22, 1),
 }, ['revision','title','images']);
 
-async function readDraft(db, key) {
+export async function readDraft(db, key) {
   const draft = await row(db, `SELECT ${fields}, (
     SELECT jsonb_agg(jsonb_build_object('role',role,'assetId',asset_id) ORDER BY position)
     FROM listing_draft_images WHERE draft_id=listing_drafts.id

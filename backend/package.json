@@ -8,6 +8,7 @@
   "engines": { "node": ">=24" },
   "scripts": {
     "start": "node src/server.js",
+    "studio:demo": "node src/local-studio.js",
     "migrate": "node src/admin.js migrate",
     "credits": "node src/admin.js credits",
     "test": "node --test",

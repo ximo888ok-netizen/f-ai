@@ -253,10 +253,20 @@ async function tasks(ctx) {
   const extension = { 'image/png': '.png', 'image/jpeg': '.jpg', 'audio/mpeg': '.mp3' }[output?.mediaType] ?? '';
   let outputPanel = '';
   if (output) {
-    if (output.assetId) outputPanel += action('下载结果', 'asset-download', output.assetId) + '<div id="media-result"></div>';
+    if (output.assetId) {
+      outputPanel += action('下载结果', 'asset-download', output.assetId) + link('在素材库查看', 'assets') + '<div id="media-result"></div>';
+      if (['image/png','image/jpeg'].includes(output.mediaType)) {
+        outputPanel += link('用作新草稿主图', 'drafts/new/image/' + path(output.assetId));
+      }
+    }
     else if (externalUrl) outputPanel += mediaTag(externalUrl, output.type) + '<a class="smallbtn" href="' + h(externalUrl) +
       '" target="_blank" rel="noopener noreferrer">打开生成结果</a>';
-    else if (output.text !== undefined) outputPanel += result(output.text);
+    else if (output.text !== undefined) {
+      outputPanel += result(output.text);
+      if (typeof output.text === 'string' && output.text.length && output.text.length <= 8000) {
+        outputPanel += link('用作新草稿描述', 'drafts/new/text/' + path(task.id));
+      }
+    }
     else outputPanel += result(output);
   }
   const controls = (task.state === 'queued' && task.attempts === 0 ? action('取消任务', 'cancel-task') : '') +

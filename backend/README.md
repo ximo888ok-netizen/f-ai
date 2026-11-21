@@ -45,6 +45,12 @@ npm start
 
 模型能力和店铺操作的可用性以运行环境中的配置为准。通用任务接口可以展示实际返回的文件、文本和服务结果。分层 PSD、视频编辑与数字人等能力需要对应的可运行处理服务。订阅支付、代理佣金、第三方网盘及桌面宿主目前没有正式操作入口。
 
+## 本机试用
+
+在 Windows 或其他系统的 Node.js 24 环境中，从 backend 目录运行 `npm ci` 和 `npm run studio:demo`。打开 `http://127.0.0.1:8080` 后注册测试账号，即可创建草稿和台账。试用进程使用内存数据库并自动应用迁移，关闭后本次试用数据会清空。需要保留数据时，按上面的 PostgreSQL 启动步骤配置数据库。
+
+已保存的图片任务结果可从任务详情用作新草稿主图。文本结果可带入新草稿描述。选用后的内容需在编辑器里显式保存。视频结果按供应商返回的预览地址显示，下载后的 MP4 可通过素材库上传。
+
 ## 身份与工作区
 
 先调用 POST /v1/auth/register 或 POST /v1/auth/login。注册支持 personal 和 enterprise，企业需提供 workspaceName。响应返回 token、expiresAt、account 和 workspaces。调用业务接口时携带 Authorization: Bearer <token> 和 X-Workspace-Id: <workspaces[n].id>。会话有效期为 24 小时。GET /v1/auth/me、POST /v1/auth/logout 和 POST /v1/invitations/accept 只需要 Bearer Token。
@@ -117,6 +123,8 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 工作台从「店铺运营 → 拼多多运营台账」进入。工作区所有者和管理员可以为每家店创建独立台账，录入业务记录或导入该模块的 CSV 模板和 JSON 业务文件。台账以手工录入、业务文件和工作区数据库为数据源。草稿完整度检查沿用草稿本人的访问权限。
 
 接口位于 `/v1/studio/pinduoduo`。通过 `GET /modules` 读取各模块的字段、单位、枚举和可选项，通过 `GET /books`、`POST /books` 选择或创建台账。每个模块的 `/books/{book}/records/{module}` 支持查询和版本化保存，`/lookup` 按业务编号读取，`/import` 一次接收最多 500 条记录。同编号且内容相同的导入会跳过，冲突会回滚本批。首次保存传 revision 0，后续编辑传回读版本。JSON 金额单位为分，CSV 和表单金额单位为元。具体请求和响应见运行中服务的 `/openapi.json`。
+
+从已保存的商品草稿点「预览入账」，选择目标台账、盘点日期和库存预警线。工作区管理员可预览自己的草稿。主规格和每条附加规格均需填写规格、SKU、售价及库存。接口在 `/books/{book}/records/inventory/draft-import` 下，`POST /preview` 接受 `draftId`、`day` 和 `threshold`，返回逐行缺项、现有台账冲突和 `previewId`。确认时用 `POST /confirm` 提交同样的字段及 `previewId`。有冲突或预览后数据已变化时返回 409，整批保留在草稿。确认成功会新增库存记录，通过相同请求重试可回读同一入账结果。
 
 运营总览、待办和订单日报分别读取 `/summary`、`/insights`、`/analytics`（均位于指定台账下）。订单日报以订单日期汇总，排除已取消订单，金额缺失的订单单独计数。库存预警比较同一 SKU 的盘点数量和预警线。回复草稿、发货登记和营销计划都只写入台账。
 

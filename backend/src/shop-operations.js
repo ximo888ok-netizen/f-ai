@@ -1,7 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { row, rows } from './db.js';
 import { ApiError, array, choice, integer, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 import { operationForms } from './operation-forms.js';
+import { readDraft } from './listing-drafts.js';
 
 const root = '/v1/studio/pinduoduo';
 const options = { tags: ['Studio Operations'], manager: true };
@@ -21,8 +22,8 @@ function fieldSchema(field) {
   return integer(field.min, field.max);
 }
 
-async function requireBook(db, request) {
-  const book = await row(db, 'SELECT id,name FROM operation_books WHERE workspace_id=$1 AND id=$2',
+async function requireBook(db, request, lock = false) {
+  const book = await row(db, 'SELECT id,name FROM operation_books WHERE workspace_id=$1 AND id=$2' + (lock ? ' FOR UPDATE' : ''),
     [request.context.workspaceId, request.params.book]);
   if (!book) throw notFound('Operations book');
   return book.id;
@@ -119,7 +120,10 @@ function registerRecords(app, db, kind, form) {
     body: object({ ...values, revision }), response: { 200: record } }, async request => {
     const book = await requireBook(db, request);
     const input = clean(request.body, kind);
-    return db.transaction(async tx => (await saveRecord(tx, book, kind, input, request.body.revision)).record);
+    return db.transaction(async tx => {
+      if (kind === 'inventory') await requireBook(tx, request, true);
+      return (await saveRecord(tx, book, kind, input, request.body.revision)).record;
+    });
   });
   route(app, 'POST', url + '/import', { ...options, params, summary: 'Atomically import local ' + kind,
     body: object({ items: array(object(values), 500, 1) }), response: { 200: object({ inserted: integer(0,500), unchanged: integer(0,500) }) } }, async request => {
@@ -128,11 +132,85 @@ function registerRecords(app, db, kind, form) {
     if (new Set(inputs.map(i => i.reference)).size !== inputs.length) throw invalid('文件内存在重复编号');
     inputs.sort((a,b) => a.reference < b.reference ? -1 : 1);
     return db.transaction(async tx => {
+      if (kind === 'inventory') await requireBook(tx, request, true);
       let inserted = 0;
       for (const input of inputs) if ((await saveRecord(tx, book, kind, input)).inserted) inserted++;
       return { inserted, unchanged: inputs.length - inserted };
     });
   });
+}
+
+const draftImportFields = { draftId: uuid, day, threshold: integer(0,1000000000) };
+const previewId = { type: 'string', pattern: '^[a-f0-9]{64}$' };
+const draftImportRow = object({
+  sku: text(100,0), specification: text(200,0),
+  priceMinor: {type:['integer','null']}, stock: {type:['integer','null']},
+  missing: array(text(40),4), conflicts: array(object({ sku: text(100), title: text(200) }),100),
+});
+
+async function draftImportPreview(db, context, book, payload, lock = false) {
+  const key = [context.workspaceId, context.accountId, payload.draftId];
+  if (lock) {
+    const found = await row(db, 'SELECT id FROM listing_drafts WHERE workspace_id=$1 AND account_id=$2 AND id=$3 FOR SHARE', key);
+    if (!found) throw notFound('Draft');
+  }
+  const draft = await readDraft(db, key);
+  const specs = [draft, ...draft.variants];
+  const existing = await rows(db, `
+    SELECT lookup.position::int AS position, r.reference AS sku, r.details->>'title' AS title
+    FROM unnest($2::text[]) WITH ORDINALITY AS lookup(sku,position)
+    JOIN operation_records r ON r.book_id=$1 AND r.kind='inventory'
+      AND lower(btrim(r.reference))=lower(btrim(lookup.sku))
+    ORDER BY lookup.position,r.reference`, [book, specs.map(v => v.sku)]);
+  const items = specs.map((v,i) => {
+    const missing = [];
+    if (!v.specification) missing.push('规格');
+    if (!v.sku) missing.push('商家 SKU');
+    if (v.priceMinor === null) missing.push('售价');
+    if (v.stock === null) missing.push('库存');
+    return { sku: v.sku, specification: v.specification, priceMinor: v.priceMinor, stock: v.stock, missing,
+      conflicts: existing.filter(x => x.position === i+1).slice(0,100).map(({sku,title}) => ({sku,title})) };
+  });
+  const { day, threshold } = payload;
+  const digest = createHash('sha256').update(JSON.stringify([
+    context.accountId, book, draft.id, draft.revision, day, threshold, items,
+  ])).digest('hex');
+  return { previewId: digest, title: draft.title, category: draft.category, day, threshold, items,
+    ready: items.every(x => !x.missing.length && !x.conflicts.length) };
+}
+
+function registerInventoryDraftImport(app, db) {
+  const url = root + '/books/:book/records/inventory/draft-import';
+  route(app, 'POST', url + '/preview', { ...options, params, summary: 'Preview saved draft variants without writing inventory',
+    body: object(draftImportFields), response: { 200: object({ previewId, title: text(200), category: text(200,0),
+      day, threshold: draftImportFields.threshold, items: array(draftImportRow,50,1), ready: {type:'boolean'} }) } },
+  async request => draftImportPreview(db, request.context, await requireBook(db, request), request.body));
+  route(app, 'POST', url + '/confirm', { ...options, params, summary: 'Confirm unchanged draft preview and insert the whole batch',
+    body: object({ ...draftImportFields, previewId }), response: { 200: object({ inserted: integer(1,50) }) } },
+  request => db.transaction(async tx => {
+    const book = await requireBook(tx, request, true);
+    const { accountId } = request.context;
+    const { draftId, previewId: digest, day, threshold } = request.body;
+    const receiptKey = [book, accountId, digest, draftId, day, threshold];
+    const receipt = await row(tx, `SELECT inserted FROM inventory_draft_imports WHERE book_id=$1 AND account_id=$2
+      AND preview_id=$3 AND draft_id=$4 AND counted_on=$5 AND threshold=$6`, receiptKey);
+    if (receipt) return receipt;
+
+    const preview = await draftImportPreview(tx, request.context, book, request.body, true);
+    if (!preview.ready || digest !== preview.previewId) {
+      throw new ApiError(409, 'INVENTORY_PREVIEW_CHANGED', '草稿或台账状态已变化，或当前仍有缺项和重复 SKU，请重新预览后确认');
+    }
+    for (const item of preview.items) {
+      const details = { title: preview.title, productRef: draftId.toLowerCase(), specification: item.specification,
+        priceMinor: item.priceMinor, stock: item.stock, day, threshold };
+      if (preview.category) details.category = preview.category;
+      await saveRecord(tx, book, 'inventory', { reference: item.sku, details });
+    }
+    const inserted = preview.items.length;
+    await tx.query(`INSERT INTO inventory_draft_imports (book_id,account_id,preview_id,draft_id,counted_on,threshold,inserted)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)`, [...receiptKey, inserted]);
+    return { inserted };
+  }));
 }
 
 export function registerShopOperations(app, db) {
@@ -148,6 +226,7 @@ export function registerShopOperations(app, db) {
       ON CONFLICT (workspace_id,name) DO UPDATE SET name=excluded.name RETURNING id,name`, [randomUUID(),request.context.workspaceId,name]);
   });
   for (const [kind, form] of Object.entries(operationForms)) registerRecords(app, db, kind, form);
+  registerInventoryDraftImport(app, db);
   route(app, 'GET', root + '/books/:book/summary', { ...options, params, summary: 'Aggregate this book’s recorded shop activity' }, async request => {
     const book = await requireBook(db, request);
     const counts = await rows(db, `SELECT kind, count(*)::int AS total,
