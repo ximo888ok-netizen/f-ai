@@ -117,7 +117,7 @@ for (const [name, parameters] of Object.entries(utilitySchemas)) {
 
 export const modelAlias = { ...text(64),pattern:'^[a-z][a-z0-9_-]{0,63}$' };
 catalog.set('model.voice-turn',{
-  id:'model.voice-turn',name:'语音问答任务',pluginId:'models',execution:'voice-turn',apiOnly:true,
+  id:'model.voice-turn',name:'单轮语音问答',pluginId:'models',execution:'voice-turn',
   parameters:object({assetIds:array(uuid,1,1),transcriptionModelId:modelAlias,chatModelId:modelAlias,speechModelId:modelAlias,
     voice:text(100),language:{type:'string',pattern:'^[a-z]{2}$'},instructions:text(1000)},
     ['assetIds','transcriptionModelId','chatModelId','speechModelId','voice']),

@@ -307,7 +307,9 @@ test('confirmed draft import rejects duplicate SKUs and stale previews and write
 test('server settings save favorites and theme and suppress task notifications when disabled', async () => {
   const directory = data(await send('GET', '/v1/plugins', owner), 200);
   assert.equal(directory.items.length, 5);
-  assert.equal(directory.models.capabilities.length, 5);
+  assert.deepEqual(directory.models.capabilities.map(entry => entry.id), [
+    'model.chat', 'model.embed', 'model.rerank', 'model.speech', 'model.transcribe', 'model.voice-turn',
+  ]);
   const preferences = { studioTheme: 'jade', studioMotion: 'off', favoriteCapabilities: ['copywriting.detect-terms'], taskNotifications: false };
   assert.deepEqual(data(await send('PATCH', '/v1/settings', owner, preferences), 200).preferences, preferences);
   assert.deepEqual(data(await send('GET', '/v1/settings', other), 200).preferences, {});

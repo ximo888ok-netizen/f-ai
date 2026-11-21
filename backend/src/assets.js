@@ -4,7 +4,7 @@ import { row, rows } from './db.js';
 import { ApiError, choice, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 
 const tags = ['Assets'];
-const mediaTypes = ['image/png', 'image/jpeg', 'video/mp4', 'audio/mpeg', 'application/vnd.adobe.photoshop'];
+const mediaTypes = ['image/png', 'image/jpeg', 'video/mp4', 'audio/mpeg', 'audio/mp4', 'audio/webm', 'application/vnd.adobe.photoshop'];
 const assetFields = 'id, name, media_type AS "mediaType", source, purpose, consent_reference AS "consentReference", consent_expires_at AS "consentExpiresAt", octet_length(data) AS "sizeBytes", created_at AS "createdAt"';
 const maxBytes = 10 * 1024 * 1024;
 const idParams = object({ id: uuid });
@@ -12,7 +12,9 @@ const idParams = object({ id: uuid });
 export function validMedia(bytes, mime) {
   if (mime === 'image/png') return bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'));
   if (mime === 'image/jpeg') return bytes.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'));
-  if (mime === 'video/mp4') return bytes.subarray(4, 8).toString('ascii') === 'ftyp';
+  if (mime === 'video/mp4' || mime === 'audio/mp4') return bytes.subarray(4, 8).toString('ascii') === 'ftyp';
+  if (mime === 'audio/webm') return bytes.subarray(0, 4).equals(Buffer.from('1a45dfa3', 'hex')) &&
+    bytes.subarray(4, 64).includes(Buffer.from('4282847765626d', 'hex'));
   if (mime === 'application/vnd.adobe.photoshop') return bytes.subarray(0, 4).toString('ascii') === '8BPS';
   return bytes.subarray(0, 3).toString('ascii') === 'ID3' || (bytes.length >= 2 && bytes[0] === 255 && (bytes[1] & 224) === 224);
 }

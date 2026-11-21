@@ -154,12 +154,13 @@ async function memory(ctx, scope) {
   deleteButton(ctx, 'delete-memory', id => '/v1/memory/' + path(id), '删除该记忆？');
 }
 
-const mimeByExtension = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', mp4:'video/mp4', mp3:'audio/mpeg', psd:'application/vnd.adobe.photoshop' };
+const mimeByExtension = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', mp4:'video/mp4', mp3:'audio/mpeg',
+  m4a:'audio/mp4', webm:'audio/webm', psd:'application/vnd.adobe.photoshop' };
 export async function uploadMedia(ctx, data) {
   const file = data.get('file');
   if (!file.size || file.size > 10 * 1024 * 1024) throw new Error('请选择 10 MiB 以内的文件。');
   const mediaType = mimeByExtension[file.name.split('.').at(-1).toLowerCase()];
-  if (!mediaType) throw new Error('支持 PNG、JPEG、MP4、MP3 和 PSD。');
+  if (!mediaType) throw new Error('支持 PNG、JPEG、MP4、MP3、M4A、WebM 和 PSD。');
   const content = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result.split(',')[1]);
@@ -178,7 +179,7 @@ async function assets(ctx) {
   ]);
   ctx.html(heading('素材库') + '<div class="live-row">'+link('图片与视频处理','media')+
     link('网盘备份','cloud-assets')+'</div>' + grid(panel('上传素材', form('upload',
-    field('文件', input('file', 'type="file" required accept=".png,.jpg,.jpeg,.mp3,.mp4,.psd"')) +
+    field('文件', input('file', 'type="file" required accept=".png,.jpg,.jpeg,.mp3,.mp4,.m4a,.webm,.psd"')) +
     field('素材来源', input('source', 'required maxlength="200"')) + field('使用用途', input('purpose', 'required maxlength="200"')) +
     field('授权凭证编号（选填）', input('consentReference', 'maxlength="200"')) +
     field('授权截止时间（与凭证同时填写）', input('consentExpiresAt', 'type="datetime-local"')), '上传至工作区')),

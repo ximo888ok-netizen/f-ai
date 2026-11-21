@@ -9,6 +9,7 @@
 .live-form label{display:grid;gap:.35rem}
 .live-form input,.live-form textarea,.live-form select,.topActions select{width:100%;max-width:100%;color:inherit;border:1px solid var(--line,#7f839a);border-radius:9px;padding:.52rem .65rem;background:var(--panel,transparent)}
 .live-form input[type=checkbox]{width:1.2rem;height:1.2rem}
+.live-form .live-check{display:flex;align-items:center;gap:.5rem}
 .live-form input[type=file]{padding:.38rem}
 .live-form textarea{min-height:6rem;resize:vertical}
 .live-form select[multiple]{min-height:5rem}
@@ -26,6 +27,7 @@
 .live-table{width:100%;border-collapse:collapse}
 .live-table td,.live-table th{border-top:1px solid var(--line,#8887);padding:.6rem;text-align:left;overflow-wrap:anywhere}
 .live-result{white-space:pre-wrap;overflow-wrap:anywhere;max-height:34rem;overflow:auto;font:inherit}
+#reply-text:empty{display:none}
 .live-error{color:var(--danger,#ad3b22);overflow-wrap:anywhere}
 .live-pending{opacity:.65}
 .live-media{max-width:min(100%,560px);max-height:380px;display:block;margin:.65rem 0}

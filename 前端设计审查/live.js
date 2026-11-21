@@ -22,6 +22,7 @@ const pages = {
   library: ['工具库', taskPages.library],
   skills: ['技能运行', skillsPage],
   'copy-review': ['平台文案校验', copyReviewPage],
+  models: ['模型对话', taskPages.conversation],
   media: ['图片与视频处理', mediaPage],
   rights: ['权利通知', rightsPage],
   assets: ['素材库', workspacePages.assets],
@@ -44,7 +45,7 @@ const pages = {
   account: ['账户与积分', workspacePages.account],
   settings: ['设置与诊断', workspacePages.settings],
 };
-const groups = [['desk', 'create', 'library', 'skills', 'assets', 'media', 'psd', 'tasks', 'schedules'],
+const groups = [['desk', 'create', 'models', 'library', 'skills', 'assets', 'media', 'psd', 'tasks', 'schedules'],
   ['products', 'projects', 'team', 'resources', 'customer', 'shops', 'roi'], ['manager', 'inbox', 'rights', 'account', 'settings']];
 const workspaceAliases = { home: 'desk', welcome: 'desk', assistant: 'schedules', image: 'create/image', video: 'create/video',
   copy: 'create/copywriting', service: 'customer', ops: 'shops',
@@ -109,6 +110,10 @@ const errorLabels = {
   NOT_FOUND: '记录不存在或当前工作区无法访问', PROVIDER_NOT_CONFIGURED: '服务端尚未配置该能力',
   CAPABILITY_UNAVAILABLE: '当前没有可执行此能力的服务', PLUGIN_DISABLED: '当前工作区已停用该插件',
   MODEL_NOT_SUPPORTED: '所选模型不支持此能力', CONSENT_REQUIRED: '素材需要有效的授权记录',
+  MODEL_STREAM_UNAVAILABLE: '所选模型未启用流式回复', TASK_STREAM_BUSY: '实时回复连接繁忙，请稍候',
+  MODEL_RESPONSE_INCOMPLETE: '模型回复中断，未能完成任务', MODEL_CONTENT_BLOCKED: '模型未能返回这条回复',
+  VOICE_MODEL_UNAVAILABLE: '请选择已配置的转写、对话和语音合成模型',
+  VOICE_TURN_TIMEOUT: '语音任务超时，请用更短的录音重试',
   INSUFFICIENT_CREDITS: '可用积分不足', RATE_LIMITED: '请求过于频繁，请稍后再试',
   DRAFT_CHANGED: '草稿已被更新，请先复制需要保留的修改，然后重新打开草稿',
   ASSET_IN_DRAFT: '这张图片正被商品草稿使用，请先在草稿中替换或移除',
@@ -135,7 +140,7 @@ Object.assign(errorLabels, {
   RIGHTS_NOTICE_CONFLICT:'案件已更新或当前阶段不能执行该操作，请重新打开案件。',
 });
 
-function describeError(error) {
+export function describeError(error) {
   return (errorLabels[error.code] || error.message || '操作失败') + (error.requestId ? '（请求 ' + error.requestId + '）' : '');
 }
 
@@ -158,7 +163,7 @@ async function request(url, options = {}) {
       setIdentity(null);
       void render();
     }
-    throw Object.assign(new Error(failure.message ?? 'HTTP ' + response.status), failure);
+    throw Object.assign(new Error(failure.message ?? 'HTTP ' + response.status), failure, { status: response.status });
   }
   if (raw) return response;
   return response.status === 204 ? null : response.json();

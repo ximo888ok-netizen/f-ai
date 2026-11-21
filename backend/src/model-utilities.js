@@ -6,6 +6,7 @@ export const utilityCapabilities = {
   embedding: ['model.embed'], rerank: ['model.rerank'],
   transcription: ['model.transcribe'], speech: ['model.speech'],
 };
+const transcriptionExtensions = { 'audio/mpeg':'mp3', 'video/mp4':'mp4', 'audio/mp4':'m4a', 'audio/webm':'webm' };
 
 export async function runUtility(route, payload, call) {
   const { parameters, assets } = payload;
@@ -42,9 +43,10 @@ export async function runUtility(route, payload, call) {
     return new GeneratedFile(bytes, 'audio/mpeg');
   }
   const file = assets[0];
-  if (!file || !['audio/mpeg', 'video/mp4'].includes(file.mediaType)) throw invalid('Transcription requires one MP3 or MP4 asset');
+  const extension = transcriptionExtensions[file?.mediaType];
+  if (!extension) throw invalid('Transcription requires one MP3, MP4, M4A, or WebM asset');
   const form = new FormData();
-  form.set('file', new Blob([Buffer.from(file.dataBase64, 'base64')], { type: file.mediaType }), file.mediaType === 'audio/mpeg' ? 'input.mp3' : 'input.mp4');
+  form.set('file', new Blob([Buffer.from(file.dataBase64, 'base64')], { type: file.mediaType }), 'input.' + extension);
   form.set('model', model);
   if (parameters.language) form.set('language', parameters.language);
   const data = await call('audio/transcriptions', form);

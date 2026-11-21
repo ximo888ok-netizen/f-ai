@@ -21,6 +21,7 @@ const taskFields = [
   'id', 'capability_id AS "capabilityId"', 'plugin_id AS "pluginId"', 'project_id AS "projectId"',
   'parent_id AS "parentId"', "CASE WHEN provider_id LIKE 'model:%' THEN substr(provider_id, 7) END AS \"modelId\"", 'state', 'cost', 'attempts', 'result', 'error_code AS "errorCode"',
   'created_at AS "createdAt"', 'updated_at AS "updatedAt"',
+  "COALESCE(capability_id = 'model.chat' AND input->'parameters'->'stream' = 'true'::jsonb, false) AS streamed",
 ].join(', ');
 const stateSchema = choice('queued', 'running', 'succeeded', 'failed', 'cancelled');
 
@@ -136,7 +137,7 @@ export function registerTasks(app, db, providers, shops) {
     const settings = new Map((await rows(db, 'SELECT plugin_id, enabled FROM plugin_settings WHERE workspace_id = $1', [request.context.workspaceId])).map(setting => [setting.plugin_id, setting.enabled]));
     const describe = plugin => ({
       ...plugin, enabled: settings.get(plugin.id) ?? true,
-      capabilities: [...catalog.values()].filter(capability => capability.pluginId === plugin.id && !capability.apiOnly).map(capability => {
+      capabilities: [...catalog.values()].filter(capability => capability.pluginId === plugin.id).map(capability => {
         const { execution, ...contract } = capability;
         return { ...contract, available: execution === 'endpoint' || matchingProviders(providers, capability).length > 0 };
       }),

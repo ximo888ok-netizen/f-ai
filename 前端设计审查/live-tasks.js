@@ -1,5 +1,7 @@
 
 import { downloadFile } from './live-files.js';
+import { replyStreamPanel, watchReplyStream } from './live-task-stream.js';
+import { voiceQuestion } from './live-voice.js';
 import { action, button, date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, result, select, textarea, toast, uid } from './live.js';
 
 const platforms = { taobao: '淘宝', pinduoduo: '拼多多', douyin: '抖店' };
@@ -136,9 +138,15 @@ function submissionKey(scope, payload) {
   return drafts.get(scope).key;
 }
 
-async function create(ctx) {
+const conversationLinks = () => '<div class="live-row">' + link('文字对话', 'models') + link('语音问答', 'models/voice') + '</div>';
+
+function conversation(ctx) {
+  return create(ctx, ['models', ctx.args[0] === 'voice' ? 'model.voice-turn' : 'model.chat']);
+}
+
+async function create(ctx, args = ctx.args) {
   const plugins = await getCatalog(ctx);
-  const [pluginId, capabilityId] = ctx.args;
+  const [pluginId, capabilityId] = args;
   const plugin = plugins.find(candidate => candidate.id === pluginId);
   const capability = plugin?.capabilities.find(candidate => candidate.id === capabilityId);
   if (!plugin) {
@@ -150,6 +158,7 @@ async function create(ctx) {
     image:link('打开本地图片处理','media/images'),
     video:link('打开视频分镜','media/storyboards')+link('视频导出','media/video'),
     copywriting:link('平台文案校验','copy-review'),
+    models:conversationLinks(),
   }[plugin.id] ?? '';
   if (!capability) {
     ctx.html(heading(plugin.name) + '<div class="live-row">'+localTools+'</div>' + grid(...plugin.capabilities.map(entry => panel(cardTitle(entry),
@@ -157,6 +166,10 @@ async function create(ctx) {
     return;
   }
   const title = heading(cardTitle(capability), plugin.name + ' · ' + displayStatus(plugin, capability, ctx));
+  const chat = capability.id === 'model.chat';
+  if (capability.id === 'model.voice-turn') {
+    return voiceQuestion(ctx, {title, links:localTools, enabled:plugin.enabled, capability});
+  }
   if (capability.endpoint || !capability.available || !plugin.enabled || (plugin.id === 'operations' && !ctx.manager)) {
     ctx.html(title + (capability.endpoint ? link('打开客服工作台', 'customer') : notice('当前工作区无法提交此能力。')) +
       '<div class="live-row">'+localTools+link('返回创作台','create/'+plugin.id)+'</div>');
@@ -173,24 +186,36 @@ async function create(ctx) {
     ctx.html(title + notice('当前工作区没有已绑定且获准执行此操作的店铺。') + link('查看店铺', 'shops'));
     return;
   }
-  let fields = field('执行方式', select('mode', capability.modes.map(mode => [mode, mode === 'chat' ? '对话' : '分步工作流']), 'workflow', 'required'));
-  if (models.items.length) fields += field('模型', select('modelId', [['', '服务端自动选择'], ...models.items.map(model => [model.id, model.id + ' · ' + model.model])]));
+  let fields = field('执行方式', select('mode', capability.modes.map(mode => [mode, mode === 'chat' ? '对话' : '分步工作流']), chat ? 'chat' : 'workflow', 'required'));
+  const defaultStream = chat && models.items.find(model => model.streamText);
+  if (models.items.length) fields += field('模型', select('modelId',
+    [['', '服务端自动选择'], ...models.items.map(model => [model.id, model.id + ' · ' + model.model])], defaultStream?.id));
+  if (defaultStream) fields += '<label class="live-check">' + input('stream', 'type="checkbox" checked') + '流式显示回复</label>';
   if (projects.length) fields += field('关联项目', select('projectId', [['', '未关联'], ...projects.map(project => [project.id, project.name])]));
   if (products.length) fields += field('从商品档案带入信息', select('productRecord',
     [['', '手动填写'], ...products.map(product => [product.id, product.sku + ' · ' + product.name])]));
   fields += schemaFields(capability.parameters, 'params.', { assets, shops, capability });
   if (!capability.requiresConfirmation) fields += field('定时运行时间（留空则立即执行）', input('runAt', 'type="datetime-local"'));
   const description = '本次任务 ' + capability.cost + ' 积分 · 当前可用 ' + wallet.available + ' 积分';
-  ctx.html(title + panel(description, form('task', fields, capability.requiresConfirmation ? '生成变更预览' : '提交任务')) +
+  ctx.html(title + (chat ? localTools : '') + panel(description, form('task', fields,
+    capability.requiresConfirmation ? '生成变更预览' : chat ? '发送消息' : '提交任务')) +
     '<div id="shop-confirmation"></div>' + link('返回能力列表', 'create/' + plugin.id));
 
   ctx.on('[name=productRecord]', 'change', node => {
     const product = products.find(entry => entry.id === node.value);
     if (product) document.querySelector('[name="params.product"]').value = [product.name, product.sku, product.description].join('\n').slice(0, 4000);
   });
+  if (defaultStream) ctx.on('[name=modelId]', 'change', node => {
+    const toggle = node.form.elements.stream;
+    const canStream = models.items.some(model => model.id === node.value && model.streamText);
+    if (toggle.disabled && canStream) toggle.checked = true;
+    if (!canStream) toggle.checked = false;
+    toggle.disabled = !canStream;
+  });
   const scope = ctx.workspace.id + ':' + ctx.account.id + ':' + capability.id;
   ctx.submit('task', async (data, node) => {
     const parameters = parametersFrom(capability.parameters, 'params.', data, shops);
+    if (defaultStream && data.has('stream')) parameters.stream = true;
     const payload = { capabilityId: capability.id, mode: data.get('mode'), parameters };
     if (data.get('modelId')) payload.modelId = data.get('modelId');
     if (data.get('projectId')) payload.projectId = data.get('projectId');
@@ -247,12 +272,16 @@ async function tasks(ctx) {
     return;
   }
   const [task, plugins] = await Promise.all([ctx.api(taskPath(id)), getCatalog(ctx)]);
+  if (!ctx.active()) return;
   const capability = plugins.flatMap(plugin => plugin.capabilities).find(entry => entry.id === task.capabilityId);
   const output = task.result;
+  const voice = task.capabilityId === 'model.voice-turn';
+  const showStream = task.streamed && pending(task);
   const externalUrl = httpsUrl(output?.url);
   const extension = { 'image/png': '.png', 'image/jpeg': '.jpg', 'audio/mpeg': '.mp3', 'video/mp4': '.mp4' }[output?.mediaType] ?? '';
   let outputPanel = '';
   if (output) {
+    if (voice) outputPanel += '<h3>录音转写</h3>' + result(output.transcript) + '<h3>模型回答</h3>' + result(output.answer);
     if (['image','video'].includes(output.type)) outputPanel += notice('AI 生成');
     if (output.assetId) {
       outputPanel += action('下载结果', 'asset-download', output.assetId) + link('在素材库查看', 'assets') + '<div id="media-result"></div>';
@@ -278,8 +307,11 @@ async function tasks(ctx) {
   const controls = (task.state === 'queued' && task.attempts === 0 ? action('取消任务', 'cancel-task') : '') +
     (!pending(task) && capability && !capability.requiresConfirmation && capability.available ? action('重新生成', 'regenerate-task') : '');
   ctx.html(heading(capability ? cardTitle(capability) : task.capabilityId, task.id) +
-    panel('执行状态', item(states[task.state], date(task.updatedAt) + ' · ' + task.cost + ' 积分' + (task.errorCode ? ' · ' + task.errorCode : ''), controls)) +
-    (outputPanel ? panel('实际结果', outputPanel) : '') + link('返回任务记录', 'tasks'));
+    panel('执行状态', '<div id="execution-state">' + item(states[task.state], date(task.updatedAt) + ' · ' +
+      task.cost + ' 积分' + (task.errorCode ? ' · ' + task.errorCode : ''), controls) + '</div>') +
+    (showStream ? replyStreamPanel() : '') + (outputPanel ? panel('实际结果', outputPanel) : '') +
+    '<div class="live-row">' + (voice ? link('继续语音问答', 'models/voice') : task.capabilityId === 'model.chat' ? link('返回文字对话', 'models') : '') +
+    link('返回任务记录', 'tasks') + '</div>');
   ctx.click('cancel-task', async () => { await ctx.api(taskPath(id) + '/cancel', { method: 'POST' }); ctx.reload(); });
   ctx.click('regenerate-task', async () => {
     const stableKey = submissionKey('retry:' + id, {});
@@ -300,7 +332,12 @@ async function tasks(ctx) {
       }
     } catch (error) { if (ctx.active()) toast(error.message); }
   }
-  if (pending(task)) watch(ctx, taskPath(id), item => item.state + item.attempts, task.state + task.attempts);
+  if (showStream) watchReplyStream(ctx, taskPath(id), data => {
+    document.querySelector('#execution-state strong').textContent = states[data.state];
+    const cancel = document.querySelector('[data-cancel-task]');
+    if (cancel && (data.state !== 'queued' || data.attempts > 0)) cancel.hidden = true;
+  });
+  else if (pending(task)) watch(ctx, taskPath(id), item => item.state + item.attempts, task.state + task.attempts);
 }
 
 function watch(ctx, endpoint, snapshot, original) {
@@ -336,4 +373,4 @@ async function shops(ctx) {
     '当前工作区没有已绑定的店铺。')) + link('查看运营能力', 'create/operations'));
 }
 
-export const taskPages = { library, manager, create, tasks, schedules, shops };
+export const taskPages = { library, manager, create, tasks, schedules, shops, conversation };

@@ -66,9 +66,13 @@ modelId 可省略。服务按配置顺序选择第一个声明支持该能力的
 
 持会话授权头和工作区头请求 `GET /v1/tasks/{id}/stream`。只允许任务所有者访问。服务依次提供 `state`、带序号和 `text` 的 `delta`、以及包含最终任务结果或错误的 `done`。断开后用最后收到的 `Last-Event-ID` 或 `after` 续接。长连接到期会给出 `reconnect` 及游标，客户端可重新连接。终态以 `done` 或原有任务查询为准。供应商返回不完整或被拦截时，失败任务会释放平台预占并移除暂存片段。客户端断开连接不取消已开始的队列任务。[Chat Completions 流式协议](https://developers.openai.com/api/reference/resources/chat/subresources/completions/streaming-events)
 
+工作台的「模型对话 → 文字对话」为支持流式的模型提供「流式显示回复」。任务详情根据 `streamed` 字段连接增量接口。断线后从最后显示的片段续接，恢复网络后也可点「继续接收回复」。普通对话仍通过任务详情查看完整结果。
+
 ### 单轮语音问答
 
-通过 `POST /v1/tasks` 提交 `model.voice-turn`。参数需要本人上传的 MP3 或 MP4 的单项 `assetIds`、`transcriptionModelId`、`chatModelId`、`speechModelId` 和 `voice`。可选参数是 `language` 和 `instructions`。三种模型可分别用 `model.transcribe`、`model.chat`、`model.speech` 筛选。任务预占 6 个平台积分，按转写、文字回答、语音合成的顺序执行。结果返回 `transcript`、`answer`、模型别名和可下载的 MP3 素材 ID。
+通过 `POST /v1/tasks` 提交 `model.voice-turn`。参数需要本人上传的 MP3、MP4、M4A 或 WebM 的单项 `assetIds`、`transcriptionModelId`、`chatModelId`、`speechModelId` 和 `voice`。可选参数是 `language` 和 `instructions`。三种模型可分别用 `model.transcribe`、`model.chat`、`model.speech` 筛选。任务预占 6 个平台积分，按转写、文字回答、语音合成的顺序执行。结果返回 `transcript`、`answer`、模型别名和可下载的 MP3 素材 ID。[转写接口格式](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create/)
+
+工作台的「模型对话 → 语音问答」从服务端模型目录读取三个阶段的模型。麦克风录音需要浏览器权限及 HTTPS 或本机安全地址，可录最多 60 秒，也可选择本地音频文件。提交后原始录音存入当前账号和工作区的素材库。完成后，任务详情显示转写和回答，并通过授权素材接口加载可播放的 MP3。
 
 语音问答沿用异步任务队列和素材权限。阶段失败会释放预占，服务不会把已完成的前置阶段自动执行一遍。实时双工语音的传输和客户端交互另行联调。
 

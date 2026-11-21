@@ -108,10 +108,13 @@ test('text streams deliver tokens before completion and resume through an owned 
   const {base,call,register,worker,release,streamRequests}=await fixture(t);
   const owner=await register('stream-owner');
   const other=await register('stream-other');
+  const directory=await call('GET','/v1/models?capabilityId=model.chat',200,owner);
+  assert.deepEqual(directory.items.map(({id,streamText})=>[id,streamText]),[['live-chat',true],['plain-chat',false]]);
   const body={capabilityId:'model.chat',mode:'chat',modelId:'live-chat',
     parameters:{stream:true,messages:[{role:'user',content:'Stream test'}]},idempotencyKey:randomUUID()};
   await call('POST','/v1/tasks',422,owner,{...body,modelId:'plain-chat'});
   const task=await call('POST','/v1/tasks',202,owner,body);
+  assert.equal(task.streamed,true);
   assert.equal((await call('POST','/v1/tasks',200,owner,body)).id,task.id);
   const path='/v1/tasks/'+task.id;
   await call('GET',path+'/stream',404,other);
@@ -158,6 +161,8 @@ test('voice turns persist the returned audio and never replay an earlier success
   const {call,register,worker,requests,base,rejectSpeech}=await fixture(t);
   const owner=await register('voice-owner');
   const other=await register('voice-other');
+  const directory=await call('GET','/v1/plugins',200,owner);
+  assert.equal(directory.models.capabilities.find(item=>item.id==='model.voice-turn').available,true);
   const uploaded=await call('POST','/v1/assets',201,owner,{
     name:'sample.mp3',mediaType:'audio/mpeg',source:'Synthetic bytes',purpose:'Voice API test',dataBase64:tinyAudio.toString('base64'),
   });
@@ -170,6 +175,7 @@ test('voice turns persist the returned audio and never replay an earlier success
   await worker();
   const status=await call('GET','/v1/tasks/'+submitted.id,200,owner);
   assert.equal(status.state,'succeeded');
+  assert.equal(status.streamed,false);
   assert.equal(status.result.transcript,'Voice question');
   assert.equal(status.result.answer,'Voice answer');
   assert.deepEqual(requests.map(item=>item.path),['/v1/audio/transcriptions','/v1/chat/completions','/v1/audio/speech']);
