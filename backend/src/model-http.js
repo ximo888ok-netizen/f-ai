@@ -8,7 +8,7 @@ export class ProviderError extends Error {
 
 // Polling and idempotent gateways can repeat a transport failure. A native
 // creation request with an ambiguous outcome must not be submitted twice.
-export async function requestUpstream(url, { headers, body, repeatable = false, maxBytes = 512 * 1024, timeout = 45000, binary = false }) {
+async function openUpstream(url,{headers,body,repeatable,timeout}) {
   let response;
   try {
     const multipart = body instanceof FormData;
@@ -26,6 +26,20 @@ export async function requestUpstream(url, { headers, body, repeatable = false, 
     if (!repeatable && response.status >= 500) throw new ProviderError('PROVIDER_OUTCOME_UNKNOWN');
     throw new ProviderError('PROVIDER_REJECTED', response.status === 429 || (repeatable && response.status >= 500));
   }
+  return response;
+}
+
+export async function requestProviderStream(url,{headers,body,timeout=90000}) {
+  const response=await openUpstream(url,{headers:{...headers,accept:'text/event-stream'},body,timeout,repeatable:false});
+  if (!response.body || !/^text\/event-stream(?:\s*;|\s*$)/i.test(response.headers.get('content-type') ?? '')) {
+    await response.body?.cancel();
+    throw new ProviderError('INVALID_PROVIDER_RESULT');
+  }
+  return response.body;
+}
+
+export async function requestUpstream(url,{headers,body,repeatable=false,maxBytes=512*1024,timeout=45000,binary=false}) {
+  const response=await openUpstream(url,{headers,body,repeatable,timeout});
   try {
     const chunks = [];
     let size = 0;

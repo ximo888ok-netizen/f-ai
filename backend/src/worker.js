@@ -6,12 +6,13 @@ import { taskAssets } from './assets.js';
 import { catalog } from './catalog.js';
 import { row, rows } from './db.js';
 import { ApiError } from './http.js';
-import { ProviderError } from './providers.js';
+import { ProviderError, taskProvider } from './providers.js';
 import { dispatchSchedule } from './schedules.js';
 import { finishTask, shopFingerprint } from './tasks.js';
 import { accessibleProject } from './workspace.js';
 import { logTask } from './task-events.js';
 import { dispatchFeishuReply } from './feishu-channel.js';
+import { appendTaskText } from './task-stream.js';
 
 const maxAttempts = 3;
 
@@ -94,7 +95,7 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
   if (!task) return false;
   if (task.expired) return true;
   const capability = catalog.get(task.capability_id);
-  const provider = providers.get(task.provider_id);
+  const provider = taskProvider(providers,task.provider_id);
   let result;
   let failure;
   try {
@@ -104,16 +105,19 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
       result = await provider.poll(task.provider_job_id);
     } else {
       const payload = await providerPayload(db, identityDb, task, capability, shops);
-      if (provider.signature) {
+      if (provider.signature || provider.nonRepeatable) {
         const marked = await row(db, 'UPDATE tasks SET provider_sent_at = now() WHERE id = $1 AND lease_id = $2 RETURNING id', [task.id, task.lease_id]);
         if (!marked) return true;
       }
-      result = await provider.run(task, payload);
+      if (task.capability_id==='model.chat' && task.input.parameters.stream===true) {
+        if (!provider.streamText) throw new ProviderError('MODEL_STREAM_UNAVAILABLE');
+        result=await provider.streamText(payload,(sequence,text)=>appendTaskText(db,task,sequence,text));
+      } else result=await provider.run(task,payload);
     }
   } catch (error) {
     if (error instanceof ApiError) failure = new ProviderError(error.code);
     else if (error instanceof ProviderError) failure = error;
-    else failure = new ProviderError('TASK_EXECUTION_ERROR', !provider?.signature || Boolean(task.provider_job_id));
+    else failure = new ProviderError('TASK_EXECUTION_ERROR', (!provider?.signature && !provider?.nonRepeatable) || Boolean(task.provider_job_id));
   }
   const archive = videoArchive && capability?.pluginId === 'video' && result?.type === 'video' && typeof result.url === 'string'
     ? await videoArchive(result.url) : null;
@@ -145,7 +149,7 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
           'INSERT INTO assets (id, workspace_id, account_id, name, media_type, source, purpose, data)',
           'VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
         ].join(' '), [assetId, current.workspace_id, current.account_id, current.id + extension, file.mediaType, current.provider_id, current.capability_id, file.bytes]);
-        result = { ...(archive ? result : {}), type: file.mediaType.split('/')[0], modelId: current.input.modelId,
+        result = { ...(archive ? result : file.result), type: file.mediaType.split('/')[0], modelId: current.input.modelId,
           assetId, mediaType: file.mediaType };
       }
       await finishTask(connection, current, failure ? 'failed' : 'succeeded', result ?? null, failure?.code ?? null);

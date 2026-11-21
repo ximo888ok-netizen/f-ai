@@ -1,5 +1,6 @@
 import { ApiError } from './http.js';
 import { detectTerms } from './catalog.js';
+import { voiceTurnProvider } from './voice-turn.js';
 import { ProviderError, requestUpstream } from './model-http.js';
 
 export { ProviderError };
@@ -27,8 +28,12 @@ export function createProviders({ url, token, capabilities = [] } = {}) {
   return providers;
 }
 
+export function taskProvider(providers,id) {
+  return id==='voice-turn'?voiceTurnProvider(providers):providers.get(id);
+}
+
 export function matchingProviders(providers, capability) {
-  if (capability.execution !== 'gateway') return providers.get(capability.execution)?.supports(capability) ? [capability.execution] : [];
+  if (capability.execution !== 'gateway') return taskProvider(providers,capability.execution)?.supports(capability) ? [capability.execution] : [];
   const matches = [];
   for (const [id, provider] of providers) {
     if (provider.info && provider.supports(capability)) matches.push(id);
@@ -37,9 +42,15 @@ export function matchingProviders(providers, capability) {
   return matches;
 }
 
-export function providerFor(providers, capability, modelId) {
+export function providerFor(providers, capability, modelId, stream=false) {
   if (capability.execution === 'endpoint') throw new ApiError(400, 'USE_CAPABILITY_ENDPOINT', 'Use ' + capability.endpoint);
-  const matches = matchingProviders(providers, capability);
+  let matches = matchingProviders(providers, capability);
+  if (stream) {
+    matches=matches.filter(id=>typeof providers.get(id).streamText==='function');
+    if (!matches.length || (modelId!==undefined && !matches.includes('model:'+modelId))) {
+      throw new ApiError(modelId===undefined?503:422,'MODEL_STREAM_UNAVAILABLE','Select a model configured for text streaming');
+    }
+  }
   if (modelId !== undefined) {
     if (!matches.includes('model:' + modelId)) throw new ApiError(422, 'MODEL_NOT_SUPPORTED', 'Model alias is unavailable for this capability');
     return 'model:' + modelId;

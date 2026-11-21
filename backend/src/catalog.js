@@ -115,10 +115,21 @@ for (const [name, parameters] of Object.entries(utilitySchemas)) {
     requiresConsent: false, requiresConfirmation: false, modes: ['chat', 'workflow'], cost: 2 });
 }
 
+export const modelAlias = { ...text(64),pattern:'^[a-z][a-z0-9_-]{0,63}$' };
+catalog.set('model.voice-turn',{
+  id:'model.voice-turn',name:'语音问答任务',pluginId:'models',execution:'voice-turn',apiOnly:true,
+  parameters:object({assetIds:array(uuid,1,1),transcriptionModelId:modelAlias,chatModelId:modelAlias,speechModelId:modelAlias,
+    voice:text(100),language:{type:'string',pattern:'^[a-z]{2}$'},instructions:text(1000)},
+    ['assetIds','transcriptionModelId','chatModelId','speechModelId','voice']),
+  minAssets:1,requiresConsent:false,requiresConfirmation:false,modes:['chat','workflow'],cost:6,
+});
+
 export const capabilityId = choice(...catalog.keys());
 export const capabilityRules = [...catalog.values()].map(capability => ({
   if: { properties: { capabilityId: { const: capability.id } }, required: ['capabilityId'] },
-  then: { properties: { parameters: capability.parameters } },
+  then: { properties: { parameters: capability.id==='model.chat'
+    ? {...capability.parameters,properties:{...capability.parameters.properties,stream:{type:'boolean'}}}
+    : capability.parameters } },
 }));
 
 export function detectTerms({ content }) {

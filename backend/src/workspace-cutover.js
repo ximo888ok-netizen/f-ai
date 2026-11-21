@@ -7,7 +7,7 @@ const related = (column, parent) => column + ' IN (SELECT id FROM ' + parent + '
 const segments = [
   ['wallets'], ['ledger'], ['projects'], ['project_members'],
   ['knowledge_bases'], ['knowledge_grants'], ['knowledge_categories'], ['documents'], ['document_chunks',related('document_id','documents')],
-  ['assets'], ['plugin_settings'], ['tasks'], ['task_events',related('task_id','tasks')],
+  ['assets'], ['plugin_settings'], ['tasks'], ['task_events',related('task_id','tasks')], ['task_text_chunks',related('task_id','tasks')],
   ['notifications'], ['account_settings'], ['memory_items'], ['shop_previews'],
   ['service_conversations'], ['service_messages'], ['service_replies'], ['schedules'],
   ['studio_categories'], ['studio_products'], ['studio_transfers'],

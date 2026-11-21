@@ -12,6 +12,13 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 $backend = Join-Path $repo 'backend'
+$revision = (git -C $repo rev-parse --verify HEAD)
+if ($LASTEXITCODE -or $revision -notmatch '^[a-f0-9]{40}$') { throw 'Could not read the source revision' }
+git -C $repo diff --quiet HEAD
+if ($LASTEXITCODE -gt 1) { throw 'Could not inspect the source tree' }
+$modified = $LASTEXITCODE -eq 1
+$tracked = @(git -C $repo -c core.quotePath=false ls-files)
+if ($LASTEXITCODE) { throw 'Could not enumerate tracked sources' }
 $output = [IO.Path]::GetFullPath($OutputFile)
 $build = [IO.Path]::GetFullPath($BuildDirectory)
 $prefix = $repo.TrimEnd('\') + '\'
@@ -35,8 +42,9 @@ Copy-Item -LiteralPath (Join-Path $backend 'package.json'),(Join-Path $backend '
 foreach ($folder in @('src','migrations')) {
     $subdirectory = New-Item -ItemType Directory -Path (Join-Path $target $folder)
     $extension = if ($folder -eq 'src') { '*.js' } else { '*.sql' }
-    Get-ChildItem -LiteralPath (Join-Path $backend $folder) -Filter $extension -File |
-        Copy-Item -Destination $subdirectory.FullName
+    $tracked | Where-Object { $_ -like "backend/$folder/$extension" } | ForEach-Object {
+        Copy-Item -LiteralPath (Join-Path $repo $_) -Destination $subdirectory.FullName
+    }
 }
 
 # Include only files served by the workbench.
@@ -46,9 +54,11 @@ New-Item -ItemType Directory -Path (Join-Path $root 'assets') -Force | Out-Null
 $routes = Get-Content -LiteralPath (Join-Path $backend 'src/studio.js') -Raw
 $files = [regex]::Matches($routes, "'([^'/]+\.(js|css|html))'") | ForEach-Object { $_.Groups[1].Value }
 foreach ($file in ($files | Sort-Object -Unique)) {
+    if ($tracked -notcontains "$studio/$file") { throw "Untracked workbench file $file" }
     Copy-Item -LiteralPath (Join-Path (Join-Path $repo $studio) $file) -Destination $root
 }
 foreach ($file in @('aurora.webp','optic-wave.webp')) {
+    if ($tracked -notcontains "$studio/assets/$file") { throw "Untracked workbench image $file" }
     Copy-Item -LiteralPath (Join-Path $repo "$studio/assets/$file") -Destination (Join-Path $root 'assets')
 }
 
@@ -97,6 +107,16 @@ $references = @(
 & $csc /nologo /codepage:65001 /target:winexe /platform:x64 "/out:$launcher" @references (Join-Path $PSScriptRoot 'Studio.cs')
 if ($LASTEXITCODE) { throw 'Desktop launcher compilation failed' }
 
+$version = (Get-Content -LiteralPath (Join-Path $backend 'package.json') -Raw | ConvertFrom-Json).version
+[ordered]@{
+    version = $version
+    sourceCommit = $revision
+    trackedSourceModified = $modified
+    builtAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+    nodeVersion = (& $node --version)
+    ffmpegRelease = $MediaSource.AbsoluteUri
+} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'build-info.json') -Encoding utf8
+
 # Uninstall the exact packaged files and empty directories, preserving the local workspace.
 $uninstall = Join-Path $build 'uninstall-files.nsh'
 $commands = foreach ($entry in (Get-ChildItem -LiteralPath $payload -Force -Recurse | Sort-Object {$_.FullName.Length} -Descending)) {
@@ -105,9 +125,11 @@ $commands = foreach ($entry in (Get-ChildItem -LiteralPath $payload -Force -Recu
     $verb+' "$INSTDIR\'+$name+'"'
 }
 $commands | Set-Content -LiteralPath $uninstall -Encoding utf8
-$version = (Get-Content -LiteralPath (Join-Path $backend 'package.json') -Raw | ConvertFrom-Json).version
 $definitions = @("/DVERSION=$version", "/DOUTPUT_FILE=$output", "/DPAYLOAD_DIR=$payload", "/DUNINSTALL_FILES=$uninstall")
 & $MakeNsis /V3 /INPUTCHARSET UTF8 @definitions (Join-Path $PSScriptRoot 'Studio.nsi')
 if ($LASTEXITCODE -or !(Test-Path -LiteralPath $output)) { throw 'Installer compilation failed' }
 Get-Item -LiteralPath $output
-Get-FileHash -LiteralPath $output -Algorithm SHA256
+$hash = Get-FileHash -LiteralPath $output -Algorithm SHA256
+$hash.Hash.ToLowerInvariant() + '  ' + [IO.Path]::GetFileName($output) |
+    Set-Content -LiteralPath ($output + '.sha256') -Encoding ascii
+$hash

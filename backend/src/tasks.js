@@ -6,12 +6,13 @@ import { capabilityId, capabilityRules, catalog, plugins } from './catalog.js';
 import { row, rows } from './db.js';
 import { ApiError, bool, choice, freeObject, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 import { modelIdSchema } from './models.js';
-import { matchingProviders, providerFor } from './providers.js';
+import { matchingProviders, providerFor, taskProvider } from './providers.js';
 import { finishCredits, reserveCredits } from './wallet.js';
 import { accessibleProject } from './workspace.js';
 import { guidedMessages } from './workspace-library.js';
 import { notify } from './notifications.js';
 import { logTask, registerTaskEvents } from './task-events.js';
+import { registerTaskStream } from './task-stream.js';
 
 const tags = ['Tasks'];
 const idParams = object({ id: uuid });
@@ -77,9 +78,10 @@ export async function submitInTransaction(connection, providers, shops, context,
     return { task, created: false };
   }
 
-  const providerId = providerFor(providers, capability, input.modelId);
-  const provider = providers.get(providerId);
+  const providerId = providerFor(providers,capability,input.modelId,id==='model.chat' && parameters.stream===true);
+  const provider = taskProvider(providers,providerId);
   provider.validate?.(capability, parameters);
+  if (provider.taskConfiguration) storedInput.providerConfiguration=provider.taskConfiguration(parameters);
   if (id === 'model.chat' && parameters.guidanceIds?.length) {
     storedInput.guidedMessages = await guidedMessages(connection, workspaceId, parameters.guidanceIds, parameters.messages);
   }
@@ -117,6 +119,9 @@ export async function submitInTransaction(connection, providers, shops, context,
 }
 
 export async function finishTask(db, task, state, result, errorCode) {
+  if (state!=='succeeded' && task.input?.parameters?.stream===true) {
+    await db.query('DELETE FROM task_text_chunks WHERE task_id=$1',[task.id]);
+  }
   await db.query('UPDATE tasks SET state = $2, result = $3, error_code = $4, lease_id = NULL, lease_until = NULL, updated_at = now() WHERE id = $1', [task.id, state, result, errorCode]);
   await finishCredits(db, task, state === 'succeeded');
   await logTask(db, task.id, state, task.attempts, errorCode);
@@ -126,11 +131,12 @@ export async function finishTask(db, task, state, result, errorCode) {
 
 export function registerTasks(app, db, providers, shops) {
   registerTaskEvents(app, db, findTask);
+  registerTaskStream(app,findTask);
   route(app, 'GET', '/v1/plugins', { tags: ['Plugins'], summary: 'List business plugins, capabilities and input contracts' }, async request => {
     const settings = new Map((await rows(db, 'SELECT plugin_id, enabled FROM plugin_settings WHERE workspace_id = $1', [request.context.workspaceId])).map(setting => [setting.plugin_id, setting.enabled]));
     const describe = plugin => ({
       ...plugin, enabled: settings.get(plugin.id) ?? true,
-      capabilities: [...catalog.values()].filter(capability => capability.pluginId === plugin.id).map(capability => {
+      capabilities: [...catalog.values()].filter(capability => capability.pluginId === plugin.id && !capability.apiOnly).map(capability => {
         const { execution, ...contract } = capability;
         return { ...contract, available: execution === 'endpoint' || matchingProviders(providers, capability).length > 0 };
       }),

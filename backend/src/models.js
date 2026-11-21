@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { catalog } from './catalog.js';
+import { catalog, modelAlias } from './catalog.js';
 import { invalid, object, route as httpRoute, text } from './http.js';
-import { requestUpstream } from './model-http.js';
+import { requestProviderStream, requestUpstream } from './model-http.js';
+import { streamChat } from './model-stream.js';
 import { generateImage } from './model-image.js';
 import { pollMapped, runMapped, validateMappedMedia, validateMapping } from './model-mapping.js';
 import { generateText, textCapabilities, textPrompt } from './model-text.js';
@@ -14,8 +15,8 @@ const protocols = {
   'cohere-chat': 'text', 'ollama-chat': 'text', 'openai-images': 'image', 'gemini-image': 'image',
   'runway-video': 'video', 'ark-video': 'video', 'wan-video': 'video', 'minimax-video': 'video',
 };
-const idPattern = '^[a-z][a-z0-9_-]{0,63}$';
-export const modelIdSchema = { ...text(64), pattern: idPattern };
+const idPattern=modelAlias.pattern;
+export const modelIdSchema=modelAlias;
 
 function cleanBase(raw) {
   const base = new URL(raw);
@@ -98,27 +99,39 @@ export function installModels(providers, definitions, env = process.env) {
     if (!Array.isArray(capabilities) || !capabilities.length || capabilities.some(id => !supported.includes(id))) throw new Error('Invalid capabilities for model ' + entry.id);
     const config = { id: entry.id, model: entry.model, protocol: entry.protocol, kind, mapping: entry.mapping, apiKeyHeader: entry.apiKeyHeader };
     const headers = headersFor(config, key);
-    const info = { id: config.id, model: config.model, protocol: config.protocol, kind, capabilities: [...new Set(capabilities)] };
-    const signature = createHash('sha256').update(JSON.stringify([base.href, config, entry.keyEnv])).digest('hex');
-    const call = (path, body, extra, binary = false) => requestUpstream(new URL(path, base), {
+    if (entry.streamText!==undefined && typeof entry.streamText!=='boolean') throw new Error('streamText must be a boolean');
+    const streaming=entry.streamText===true;
+    if (streaming && (config.protocol!=='chat-completions' || !capabilities.includes('model.chat'))) {
+      throw new Error('Text streaming requires a Chat Completions model with model.chat');
+    }
+    const info = { id: config.id, model: config.model, protocol: config.protocol, kind, capabilities: [...new Set(capabilities)], streamText:streaming };
+    const signature = createHash('sha256').update(JSON.stringify([base.href,config,entry.keyEnv,...(streaming?[true]:[])])).digest('hex');
+    const call = (path,body,extra,binary=false,timeout) => requestUpstream(new URL(path,base), {
       body, headers: { ...headers, ...extra }, repeatable: body === undefined,
-      maxBytes: binary ? 10 * 1024 * 1024 : ['image', 'embedding'].includes(kind) ? 15 * 1024 * 1024 : 512 * 1024, binary, timeout: body === undefined ? 30000 : 90000,
+      maxBytes: binary ? 10 * 1024 * 1024 : ['image', 'embedding'].includes(kind) ? 15 * 1024 * 1024 : 512 * 1024,
+      binary,timeout:timeout ?? (body===undefined?30000:90000),
     });
     const adapter = {
       info, signature, loopback,
       supports: capability => capabilities.includes(capability.id),
       validate: (capability, params) => validateParameters(config, capability, params),
-      async run(task, payload) {
+      async run(task,payload,{timeout}={}) {
+        const request=(path,body,extra,binary)=>call(path,body,extra,binary,timeout);
         if (config.protocol === 'json-http') {
           const prompt = kind === 'text' ? textPrompt(payload) : payload.parameters.prompt;
-          return runMapped(config, payload, prompt, call);
+          return runMapped(config,payload,prompt,request);
         }
-        if (utilityCapabilities[kind]) return runUtility(config, payload, call);
+        if (utilityCapabilities[kind]) return runUtility(config,payload,request);
         if (payload.assets.some(asset => !['image/png', 'image/jpeg'].includes(asset.mediaType))) throw invalid('Expected a PNG or JPEG image');
-        if (kind === 'image') return generateImage(config, payload, call);
-        if (kind === 'video') return startVideo(config, payload, call);
-        return generateText(config, payload, call);
+        if (kind === 'image') return generateImage(config,payload,request);
+        if (kind === 'video') return startVideo(config,payload,request);
+        return generateText(config,payload,request);
       },
+    };
+    if (streaming) adapter.streamText=async (payload,writeChunk)=>{
+      const body={model:config.model,messages:payload.parameters.messages,stream:true};
+      const content=await requestProviderStream(new URL('chat/completions',base),{headers,body});
+      return streamChat(config.id,content,writeChunk);
     };
     if (config.protocol === 'json-http' && entry.mapping.poll) adapter.poll = id => pollMapped(config, id, call);
     else if (config.protocol !== 'json-http' && kind === 'video') adapter.poll = id => pollVideo(config, id, call);

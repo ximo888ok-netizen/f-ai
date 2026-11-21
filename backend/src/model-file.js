@@ -4,12 +4,13 @@ import { ProviderError } from './model-http.js';
 const maxBytes = 10 * 1024 * 1024;
 
 export class GeneratedFile {
-  constructor(bytes, mediaType) {
+  constructor(bytes,mediaType,result) {
     if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > maxBytes || !validMedia(bytes, mediaType)) {
       throw new ProviderError('INVALID_GENERATED_FILE');
     }
     this.bytes = bytes;
     this.mediaType = mediaType;
+    this.result = result;
   }
 
   static image(base64, declaredType) {

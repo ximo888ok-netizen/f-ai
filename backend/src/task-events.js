@@ -24,6 +24,6 @@ export function registerTaskEvents(app, db, findTask) {
     return {items:await rows(db,`SELECT id::text,event,level,attempt,error_code AS "errorCode",created_at AS "createdAt"
       FROM task_events WHERE task_id=$1 AND ($2::text IS NULL OR level=$2)
       AND ($3::timestamptz IS NULL OR created_at >= $3) AND ($4::timestamptz IS NULL OR created_at <= $4)
-      ORDER BY id DESC LIMIT $5 OFFSET $6`,[task.id,level ?? null,from ?? null,to ?? null,...paginate(request.query)])};
+      ORDER BY task_events.id DESC LIMIT $5 OFFSET $6`,[task.id,level ?? null,from ?? null,to ?? null,...paginate(request.query)])};
   });
 }

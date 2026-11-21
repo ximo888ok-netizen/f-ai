@@ -11,6 +11,8 @@
     "start": "node src/server.js",
     "studio:demo": "node src/local-studio.js",
     "migrate": "node src/admin.js migrate",
+    "db:backup": "node src/admin.js backup",
+    "db:restore": "node src/admin.js restore-backup",
     "credits": "node src/admin.js credits",
     "workspace:cutover": "node src/admin.js workspace-cutover",
     "test": "node --test",

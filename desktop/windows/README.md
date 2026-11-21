@@ -19,6 +19,6 @@ $build = @{
 .\desktop\windows\Build-Installer.ps1 @build
 ```
 
-将 `MediaSource` 替换为所使用的 FFmpeg 下载链接。使用全新的构建目录及目标文件。脚本按后端的锁文件安装依赖，并按工作台的 HTTP 路由打包前端运行文件。构建输出保存在源代码目录之外。
+将 `MediaSource` 替换为所使用的 FFmpeg 下载链接。使用全新的构建目录及目标文件。脚本按后端的锁文件安装依赖，并按工作台的 HTTP 路由打包前端运行文件。构建输出保存在源代码目录之外。安装包内含 `build-info.json`，记录源码提交、是否含有本地跟踪文件变更和构建时间。安装包旁边生成 SHA-256 校验文件。
 
 可用 `F-AI-Studio-Setup-x64.exe /S` 静默安装。安装前先关闭正在运行的工作台。常规构建生成的安装包未做 Authenticode 签名。

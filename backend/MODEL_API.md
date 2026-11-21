@@ -58,7 +58,19 @@ modelId 可省略。服务按配置顺序选择第一个声明支持该能力的
 | 检索 | openai-embeddings、cohere-rerank | 字符串数组 input 生成按输入顺序排列的 vectors。query、documents、可选 topN 生成包含原始文档 index 和 score 的 results。 |
 | 自定义 | json-http | 配置字段映射即可对接同步或异步 JSON 服务。附 Replicate 和 fal 的图片生成样例，支持另行查询最终结果。 |
 
-所有原生任务当前通过任务状态查询交付最终结果。前端实时流式输出、双向语音会话，以及没有实现的签名和流式专有协议需要相应适配。模型能生成普通图片或视频并不代表满足可编辑 PSD、音轨保真或电商验收指标。
+原生模型任务通过任务状态查询交付最终结果。支持流式文本的模型还可以返回增量。可编辑 PSD、媒体保真和电商效果需要按各自的交付流程进行验收。
+
+### 可续接的文本流
+
+为支持标准 SSE 的 `chat-completions` 模型配置 `streamText: true`。`GET /v1/models?capabilityId=model.chat` 中的 `streamText` 表示该模型是否启用此能力。通过 `POST /v1/tasks` 提交 `model.chat`，在 `parameters` 中填入 `stream: true` 和正常的 `messages`，沿用现有任务幂等键和积分规则。
+
+持会话授权头和工作区头请求 `GET /v1/tasks/{id}/stream`。只允许任务所有者访问。服务依次提供 `state`、带序号和 `text` 的 `delta`、以及包含最终任务结果或错误的 `done`。断开后用最后收到的 `Last-Event-ID` 或 `after` 续接。长连接到期会给出 `reconnect` 及游标，客户端可重新连接。终态以 `done` 或原有任务查询为准。供应商返回不完整或被拦截时，失败任务会释放平台预占并移除暂存片段。客户端断开连接不取消已开始的队列任务。[Chat Completions 流式协议](https://developers.openai.com/api/reference/resources/chat/subresources/completions/streaming-events)
+
+### 单轮语音问答
+
+通过 `POST /v1/tasks` 提交 `model.voice-turn`。参数需要本人上传的 MP3 或 MP4 的单项 `assetIds`、`transcriptionModelId`、`chatModelId`、`speechModelId` 和 `voice`。可选参数是 `language` 和 `instructions`。三种模型可分别用 `model.transcribe`、`model.chat`、`model.speech` 筛选。任务预占 6 个平台积分，按转写、文字回答、语音合成的顺序执行。结果返回 `transcript`、`answer`、模型别名和可下载的 MP3 素材 ID。
+
+语音问答沿用异步任务队列和素材权限。阶段失败会释放预占，服务不会把已完成的前置阶段自动执行一遍。实时双工语音的传输和客户端交互另行联调。
 
 ### 图片、视频和文件
 
