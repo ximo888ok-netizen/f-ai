@@ -71,8 +71,15 @@ export function registerAssets(app, db) {
   route(app, 'DELETE', '/v1/assets/:id', {
     tags, summary: 'Delete an uploaded asset', params: idParams,
   }, async (request, reply) => {
-    const asset = await row(db, 'DELETE FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = $3 RETURNING id', [request.context.workspaceId, request.context.accountId, request.params.id]);
-    if (!asset) throw notFound('Asset');
+    try {
+      const asset = await row(db, 'DELETE FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = $3 RETURNING id', [request.context.workspaceId, request.context.accountId, request.params.id]);
+      if (!asset) throw notFound('Asset');
+    } catch (error) {
+      if (['23001', '23503'].includes(error.code) && error.constraint === 'listing_draft_images_asset_id_fkey') {
+        throw new ApiError(409, 'ASSET_IN_DRAFT', 'The image is in use by a listing draft');
+      }
+      throw error;
+    }
     reply.code(204).send();
   });
 }

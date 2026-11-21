@@ -11,6 +11,7 @@ import { migrationFiles, row } from './db.js';
 import { ApiError } from './http.js';
 import { createProviders } from './providers.js';
 import { registerSchedules } from './schedules.js';
+import { registerListingDrafts } from './listing-drafts.js';
 import { registerStudio } from './studio.js';
 import { registerStudioProducts } from './studio-products.js';
 import { registerSupport } from './support.js';
@@ -88,6 +89,7 @@ export async function buildApp({
   registerStudio(app);
   registerAuth(app, db);
   registerStudioProducts(app, db);
+  registerListingDrafts(app, db);
   registerWallet(app, db);
   registerWorkspace(app, db);
   registerAssets(app, db);

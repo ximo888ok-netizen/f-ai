@@ -2,6 +2,7 @@
 import { workspacePages } from './live-workspace.js';
 import { taskPages } from './live-tasks.js';
 import { customerPage } from './live-customer.js';
+import { listingDrafts } from './live-drafts.js';
 import { productPages } from './live-products.js';
 
 const main = document.querySelector('#main');
@@ -14,6 +15,7 @@ const pages = {
   library: ['工具库', taskPages.library],
   assets: ['素材库', workspacePages.assets],
   tasks: ['任务记录', taskPages.tasks],
+  drafts: ['拼多多草稿', listingDrafts],
   products: ['商品档案', productPages.products],
   roi: ['投放收益测算', productPages.roi],
   schedules: ['定时任务', taskPages.schedules],
@@ -83,6 +85,8 @@ const errorLabels = {
   CAPABILITY_UNAVAILABLE: '当前没有可执行此能力的服务', PLUGIN_DISABLED: '当前工作区已停用该插件',
   MODEL_NOT_SUPPORTED: '所选模型不支持此能力', CONSENT_REQUIRED: '素材需要有效的授权记录',
   INSUFFICIENT_CREDITS: '可用积分不足', RATE_LIMITED: '请求过于频繁，请稍后再试',
+  DRAFT_CHANGED: '草稿已被更新，请先复制需要保留的修改，然后重新打开草稿',
+  ASSET_IN_DRAFT: '这张图片正被商品草稿使用，请先在草稿中替换或移除',
   EMAIL_IN_USE: '该邮箱已注册', DATABASE_UNAVAILABLE: '服务端数据库暂未就绪',
 };
 function describeError(error) {

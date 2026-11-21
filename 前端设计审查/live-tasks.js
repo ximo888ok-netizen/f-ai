@@ -313,7 +313,7 @@ async function schedules(ctx) {
 async function shops(ctx) {
   const [plugins, shops] = await Promise.all([getCatalog(ctx), getManagersShops(ctx)]);
   const plugin = plugins.find(entry => entry.id === 'operations');
-  ctx.html(heading('店铺运营') + panel('已授权店铺', !ctx.manager ? notice('需要工作区管理员权限。') :
+  ctx.html(heading('店铺运营') + link('拼多多草稿', 'drafts') + panel('已授权店铺', !ctx.manager ? notice('需要工作区管理员权限。') :
     list(shops, shop => item(shop.name, platforms[shop.platform],
       shop.capabilities.map(id => link(plugin.capabilities.find(cap => cap.id === id)?.name ?? id, 'create/operations/' + id)).join(' ')),
     '当前工作区没有已绑定的店铺。')) + link('查看运营能力', 'create/operations'));

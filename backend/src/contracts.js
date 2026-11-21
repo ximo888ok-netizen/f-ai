@@ -38,6 +38,9 @@ pluginCapability.properties.endpoint = string;
 const plugin = shape({
   id: string, name: string, enabled: bool, capabilities: items(pluginCapability),
 });
+const draftSummary = { id: uuid, title: string, revision: count, updatedAt: date };
+const listingDraft = shape({ ...draftSummary, category: string, description: string, specification: string, sku: string,
+  priceMinor: nullable(count), stock: nullable(count), images: items(shape({ role: enumOf('main','sku','detail'), assetId: uuid })) });
 const studioCategory = shape({ id: uuid, name: string });
 const studioProduct = shape({ id: uuid, sku: string, name: string, description: string, categoryId: nullable(uuid), updatedAt: date });
 const studioTransfer = shape({ id: uuid, direction: enumOf('import', 'export'), count, createdAt: date });
@@ -107,6 +110,8 @@ export const contracts = new Map([
   ['/v1/notifications', { GET: { 200: shape({ items: items(notification), unread: count }) } }],
   ['/v1/notifications/:id/read', { POST: { 204: none } }],
   ['/v1/notifications/read-all', { POST: { 204: none } }],
+  ['/v1/studio/pinduoduo-drafts', { GET: { 200: collection(shape(draftSummary)) } }],
+  ['/v1/studio/pinduoduo-drafts/:id', { GET: { 200: listingDraft }, PUT: { 200: listingDraft } }],
   ['/v1/studio/categories', { GET: { 200: collection(studioCategory) }, POST: { 201: studioCategory } }],
   ['/v1/studio/categories/:id', { PATCH: { 200: studioCategory }, DELETE: { 204: none } }],
   ['/v1/studio/products', { GET: { 200: collection(studioProduct) }, POST: { 201: studioProduct } }],

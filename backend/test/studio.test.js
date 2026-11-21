@@ -1,5 +1,6 @@
 
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import test, { after, before } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { buildApp } from '../src/app.js';
@@ -42,7 +43,7 @@ test('Studio entry only serves real app code and current theme components', asyn
   assert.match(entry.body, /\/studio\/components\.css/);
   assert.doesNotMatch(entry.body, /src="studio\.js"/);
   assert.match(entry.headers['content-security-policy'], /connect-src 'self'/);
-  for (const file of ['live.js', 'live-tasks.js', 'live-workspace.js', 'live-products.js', 'live-customer.js', 'components.css', 'assets/aurora.webp']) {
+  for (const file of ['live.js', 'live-tasks.js', 'live-workspace.js', 'live-products.js', 'live-drafts.js', 'live-customer.js', 'components.css', 'assets/aurora.webp']) {
     assert.equal((await send('GET', '/studio/' + file)).statusCode, 200, file);
   }
   assert.equal((await send('GET', '/studio/studio.js')).statusCode, 404);
@@ -74,6 +75,51 @@ test('product records, category assignment, import rollback, export and tenant i
   assert.deepEqual(data(await send('POST', '/v1/studio/roi', owner, {
     priceMinor: 1000, unitCostMinor: 250, units: 10, feesMinor: 500, adSpendMinor: 1000,
   }), 200), { revenueMinor: 10000, productCostMinor: 2500, contributionMinor: 6000, roas: 10 });
+});
+
+test('Studio drafts keep ordered owned images, reject publication, and handle edits and replay', async () => {
+  const root = '/v1/studio/pinduoduo-drafts';
+  const url = root + '/' + randomUUID();
+  async function image(session, name, mediaType = 'image/png', bytes = '89504e470d0a1a0a') {
+    return data(await send('POST', '/v1/assets', session, { name, mediaType, source: 'fixture', purpose: 'draft',
+      dataBase64: Buffer.from(bytes, 'hex').toString('base64') }), 201).id;
+  }
+  const main = await image(owner, 'front.png');
+  const detail = await image(owner, 'side.png');
+  const foreign = await image(other, 'private.png');
+  const video = await image(owner, 'clip.mp4', 'video/mp4', '0000000066747970');
+  const input = { revision: 0, title: 'Sample', priceMinor: null, stock: null, images: [
+    { role: 'main', assetId: main }, { role: 'sku', assetId: main }, { role: 'detail', assetId: detail },
+  ] };
+  const put = async (payload, status, session = owner) => data(await send('PUT', url, session, payload), status);
+  await put({ ...input, publish: true }, 400);
+  await put({ ...input, images: [{ role: 'main', assetId: video }] }, 400);
+  await put({ ...input, images: [input.images[0], input.images[0]] }, 400);
+  await put({ ...input, images: [{ role: 'main', assetId: foreign }] }, 404);
+  assert.deepEqual(data(await send('GET', root, owner), 200).items, []);
+  const saved = await put(input, 200);
+  assert.equal(saved.revision, 1);
+  assert.equal(saved.priceMinor, null);
+  assert.equal(saved.stock, null);
+  assert.deepEqual(saved.images, input.images);
+  assert.deepEqual(await put(input, 200), saved);
+  assert.deepEqual(data(await send('GET', url, owner), 200), saved);
+  assert.deepEqual(data(await send('GET', root, other), 200).items, []);
+  data(await send('GET', url, other), 404);
+  await put({ ...input, revision: 1 }, 404, other);
+  data(await send('DELETE', '/v1/assets/' + detail, owner), 409);
+  await put({ ...input, revision: 1, images: [input.images[0], { role: 'detail', assetId: foreign }] }, 404);
+  assert.deepEqual(data(await send('GET', url, owner), 200), saved);
+  const edited = { ...input, revision: 1, stock: 0, priceMinor: 321, images: [input.images[0]] };
+  const updated = await put(edited, 200);
+  assert.equal(updated.revision, 2);
+  assert.equal(updated.stock, 0);
+  assert.equal(updated.priceMinor, 321);
+  assert.deepEqual(await put(edited, 200), updated);
+  await put({ ...edited, title: 'Stale edit' }, 409);
+  data(await send('DELETE', '/v1/assets/' + detail, owner), 204);
+  assert.equal(data(await send('GET', root, owner), 200).items.length, 1);
+  assert.deepEqual(data(await send('GET', '/v1/tasks', owner), 200).items, []);
 });
 
 test('server settings save favorites and theme and suppress task notifications when disabled', async () => {

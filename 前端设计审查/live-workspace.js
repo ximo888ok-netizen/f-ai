@@ -154,7 +154,7 @@ async function memory(ctx, scope) {
 }
 
 const mimeByExtension = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', mp4:'video/mp4', mp3:'audio/mpeg', psd:'application/vnd.adobe.photoshop' };
-async function uploadMedia(ctx, data) {
+export async function uploadMedia(ctx, data) {
   const file = data.get('file');
   if (!file.size || file.size > 10 * 1024 * 1024) throw new Error('请选择 10 MiB 以内的文件。');
   const mediaType = mimeByExtension[file.name.split('.').at(-1).toLowerCase()];

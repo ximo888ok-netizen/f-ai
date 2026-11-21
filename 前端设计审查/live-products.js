@@ -29,7 +29,7 @@ function saveCatalog(data) {
 
 async function products(ctx) {
   const [tab, id] = ctx.args;
-  const tabs = '<div class="live-row">' + link('商品清单', 'products') + link('分类管理', 'products/categories') + link('导入与导出', 'products/transfers') + '</div>';
+  const tabs = '<div class="live-row">' + link('商品清单', 'products') + link('分类管理', 'products/categories') + link('拼多多草稿', 'drafts') + link('导入与导出', 'products/transfers') + '</div>';
   const categories = await ctx.all(categoryPath);
   if (tab === 'categories') { drawCategories(ctx, categories, tabs); return; }
   const entries = await ctx.all(productPath);
