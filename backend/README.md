@@ -51,6 +51,9 @@ npm start
 
 已保存的图片任务结果可从任务详情用作新草稿主图。文本结果可带入新草稿描述。选用后的内容需在编辑器里显式保存。视频结果默认使用供应商的预览地址。设置 `VIDEO_ARCHIVE_ORIGINS` 可允许工作进程归档视频结果，多个来源用逗号分隔，填写精确的 HTTPS 来源。工作进程只读取已配置来源，下载上限 10 MiB，成功后新增本人素材并返回 `assetId`。来源不允许、超限或下载失败时保留原预览链接，生成任务按供应商返回的成功状态结算。
 
+部署时将 `VIDEO_FFMPEG_PATH` 和 `VIDEO_FFPROBE_PATH` 设为对应工具的绝对路径，可启用 MP4 标识导出。默认编码器是 `libx264`。使用带 OpenH264 的 LGPL 构建时设 `VIDEO_EXPORT_ENCODER=libopenh264`。可通过 `GET /v1/video-export/status` 查看启用状态。任务详情通过 `GET /v1/assets/:id/delivery` 导出已归档的 AI 生成视频。素材库可在用户明确确认 AI 来源后，通过 `POST /v1/assets/:id/video-export` 和 `{"aiGenerated":true}` 导出自己上传的 MP4。导出副本右下角带 `AI GENERATED`，元数据中包含 `description`、`fai_ai_generated` 和 `fai_software`，原素材保持原样。每段视频最高 10 MiB、60 秒、60 帧/秒，单边最多 1920 像素，总像素不超过 1920×1080。
+
+
 ## 企业独立数据库
 
 服务使用 `DATABASE_URL` 管理账号、登录、成员和路由目录。未配置独立路由的工作区使用共享数据库。独立路由生效后，该企业的商品、素材、文档、任务、积分、台账和设计只访问指定 PostgreSQL；独立库连接异常、版本落后或绑定不符时，业务接口返回 `WORKSPACE_DATABASE_UNAVAILABLE`。管理员可通过 `GET /v1/workspace/database` 查询模式和状态。

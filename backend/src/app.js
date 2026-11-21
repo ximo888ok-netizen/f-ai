@@ -27,10 +27,11 @@ import { workspaceDatabaseRouter } from './workspace-database.js';
 import { registerStudioPsd } from './studio-psd.js';
 import { registerCloudAssets } from './cloud-assets.js';
 import { registerFeishuChannel } from './feishu-channel.js';
+import { registerVideoDelivery } from './video-delivery.js';
 
 export async function buildApp({
   db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(),
-  cloudAssets = new Map(), feishu = new Map(),
+  cloudAssets = new Map(), feishu = new Map(), videoDelivery = null, loopbackOnly = false,
 }) {
   const app = Fastify({
     logger,
@@ -59,8 +60,11 @@ export async function buildApp({
     if (response && options.schema) options.schema.response = { ...response, ...errorContracts };
   });
 
-  app.addHook('onRequest', async (_request, reply) => {
+  app.addHook('onRequest', async (request, reply) => {
     reply.header('cache-control', 'no-store').header('x-content-type-options', 'nosniff');
+    if (loopbackOnly && request.headers.host !== '127.0.0.1:'+request.raw.socket.localPort) {
+      throw new ApiError(403,'LOCAL_HOST_REQUIRED','Access the desktop workspace through its local address');
+    }
   });
 
   app.setErrorHandler((error, request, reply) => {
@@ -105,7 +109,8 @@ export async function buildApp({
     response:{200:object({mode:choice('shared','dedicated'),state:choice('ready','preparing','unavailable')})},
   }, request => databaseRouter.status(request.context.workspaceId));
   registerStudioProducts(app, workspaceDb);
-  registerStudioPsd(app, workspaceDb);
+  registerStudioPsd(app, workspaceDb, videoDelivery);
+  registerVideoDelivery(app, workspaceDb, videoDelivery);
   registerListingDrafts(app, workspaceDb);
   registerShopOperations(app, workspaceDb);
   registerWallet(app, workspaceDb);

@@ -223,8 +223,8 @@ function httpsUrl(value) {
   catch { return null; }
 }
 
-export async function downloadAsset(ctx, id, name, variant = 'content') {
-  const data = await ctx.api('/v1/assets/' + path(id) + '/' + variant, { raw: true });
+export async function downloadAsset(ctx, id, name, variant = 'content', options = {}) {
+  const data = await ctx.api('/v1/assets/' + path(id) + '/' + variant, { ...options, raw: true });
   const blob = await data.blob();
   const url = URL.createObjectURL(blob);
   if (!ctx.active()) { URL.revokeObjectURL(url); return; }
@@ -258,6 +258,10 @@ async function tasks(ctx) {
       outputPanel += action('下载结果', 'asset-download', output.assetId) + link('在素材库查看', 'assets') + '<div id="media-result"></div>';
       if (['image/png','image/jpeg'].includes(output.mediaType)) {
         outputPanel += action('下载带标识图片','delivery-download',output.assetId) + link('用作新草稿主图', 'drafts/new/image/' + path(output.assetId));
+      } else if (output.mediaType==='video/mp4') {
+        const {available}=await ctx.api('/v1/video-export/status');
+        if (available) outputPanel += action('下载带标识视频','delivery-download',output.assetId);
+        else outputPanel += notice('当前部署未启用视频标识导出。');
       }
     }
     else if (externalUrl) outputPanel += mediaTag(externalUrl, output.type) + '<a class="smallbtn" href="' + h(externalUrl) +

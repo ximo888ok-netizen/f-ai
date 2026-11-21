@@ -172,7 +172,9 @@ export async function uploadMedia(ctx, data) {
 }
 
 async function assets(ctx) {
-  const [files,cloud] = await Promise.all([ctx.all('/v1/assets'),ctx.api('/v1/cloud-assets/status')]);
+  const [files,cloud,video] = await Promise.all([
+    ctx.all('/v1/assets'),ctx.api('/v1/cloud-assets/status'),ctx.api('/v1/video-export/status'),
+  ]);
   ctx.html(heading('素材库') + link('网盘备份','cloud-assets') + grid(panel('上传素材', form('upload',
     field('文件', input('file', 'type="file" required accept=".png,.jpg,.jpeg,.mp3,.mp4,.psd"')) +
     field('素材来源', input('source', 'required maxlength="200"')) + field('使用用途', input('purpose', 'required maxlength="200"')) +
@@ -181,9 +183,17 @@ async function assets(ctx) {
     panel('我的素材', list(files, file => item(file.name,
       file.mediaType + ' · ' + Math.ceil(file.sizeBytes / 1024) + ' KiB' + (file.consentExpiresAt ? ' · 授权至 ' + date(file.consentExpiresAt) : ''),
       action('下载', 'download', file.id) + (cloud.available ? action('备份到网盘','cloud-backup',file.id) : '') +
+      (video.available && file.mediaType==='video/mp4' ? action('导出带 AI 标识视频','mark-video',file.id) : '') +
       action('删除', 'delete-asset', file.id))))));
   ctx.submit('upload', async data => { await uploadMedia(ctx, data); ctx.reload(); });
   ctx.click('download', id => downloadAsset(ctx, id, files.find(file => file.id === id).name));
+  ctx.click('mark-video',async id=>{
+    const file=files.find(asset=>asset.id===id);
+    if (!confirm('确认「'+file.name+'」是 AI 生成的视频，并导出一份带标识的 MP4？')) return;
+    toast('正在导出视频，短片可能需要数秒。');
+    await downloadAsset(ctx,id,file.name.replace(/\.mp4$/i,'')+'-AI.mp4','video-export',
+      {method:'POST',body:{aiGenerated:true}});
+  });
   ctx.click('cloud-backup',async id=>{
     const file=files.find(asset=>asset.id===id);
     if (!confirm('将「'+file.name+'」复制到此工作区的自有网盘？')) return;

@@ -96,6 +96,15 @@ const errorLabels = {
   ASSET_IN_DRAFT: '这张图片正被商品草稿使用，请先在草稿中替换或移除',
   EMAIL_IN_USE: '该邮箱已注册', DATABASE_UNAVAILABLE: '服务端数据库暂未就绪',
 };
+Object.assign(errorLabels, {
+  AI_VIDEO_REQUIRED:'请选择已归档的 AI 视频任务结果。',
+  VIDEO_EXPORT_INVALID:'请使用可读取的 MP4。时长最多 60 秒，每边最多 1920 像素，总像素不超过 1080p，帧率最多 60。',
+  VIDEO_EXPORT_MP4_REQUIRED:'请选择 MP4 视频。',
+  VIDEO_EXPORT_UNAVAILABLE:'当前部署的视频导出工具不可用。',
+  VIDEO_EXPORT_BUSY:'有视频正在导出，请稍后重试。',
+  VIDEO_EXPORT_TIMEOUT:'视频处理超时，请缩短素材后重试。',
+});
+
 function describeError(error) {
   return (errorLabels[error.code] || error.message || '操作失败') + (error.requestId ? '（请求 ' + error.requestId + '）' : '');
 }
