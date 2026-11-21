@@ -250,7 +250,7 @@ async function tasks(ctx) {
   const capability = plugins.flatMap(plugin => plugin.capabilities).find(entry => entry.id === task.capabilityId);
   const output = task.result;
   const externalUrl = httpsUrl(output?.url);
-  const extension = { 'image/png': '.png', 'image/jpeg': '.jpg', 'audio/mpeg': '.mp3' }[output?.mediaType] ?? '';
+  const extension = { 'image/png': '.png', 'image/jpeg': '.jpg', 'audio/mpeg': '.mp3', 'video/mp4': '.mp4' }[output?.mediaType] ?? '';
   let outputPanel = '';
   if (output) {
     if (output.assetId) {

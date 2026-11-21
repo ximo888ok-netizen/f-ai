@@ -87,7 +87,7 @@ async function providerPayload(db, task, capability, shops) {
   };
 }
 
-export async function workOnce({ db, providers, shops }) {
+export async function workOnce({ db, providers, shops, videoArchive }) {
   const task = await claim(db);
   if (!task) return false;
   if (task.expired) return true;
@@ -113,6 +113,10 @@ export async function workOnce({ db, providers, shops }) {
     else if (error instanceof ProviderError) failure = error;
     else failure = new ProviderError('TASK_EXECUTION_ERROR', !provider?.signature || Boolean(task.provider_job_id));
   }
+  const archive = videoArchive && capability?.pluginId === 'video' && result?.type === 'video' && typeof result.url === 'string'
+    ? await videoArchive(result.url) : null;
+  if (archive) result = { ...result, archiveStatus: archive.status };
+
   await db.transaction(async connection => {
     const current = await row(connection, "SELECT * FROM tasks WHERE id = $1 AND lease_id = $2 AND state = 'running' FOR UPDATE", [task.id, task.lease_id]);
     if (!current) return;
@@ -131,14 +135,16 @@ export async function workOnce({ db, providers, shops }) {
       ].join(' '), [current.id, 2 ** current.attempts, failure.code]);
       await logTask(connection, current.id, 'retrying', current.attempts, failure.code);
     } else {
-      if (result instanceof GeneratedFile) {
+      const file = archive?.file ?? (result instanceof GeneratedFile ? result : null);
+      if (file) {
         const assetId = randomUUID();
-        const extension = { 'image/png': '.png', 'image/jpeg': '.jpg', 'audio/mpeg': '.mp3' }[result.mediaType];
+        const extension = { 'image/png': '.png', 'image/jpeg': '.jpg', 'audio/mpeg': '.mp3', 'video/mp4': '.mp4' }[file.mediaType];
         await connection.query([
           'INSERT INTO assets (id, workspace_id, account_id, name, media_type, source, purpose, data)',
           'VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-        ].join(' '), [assetId, current.workspace_id, current.account_id, current.id + extension, result.mediaType, 'model:' + current.input.modelId, current.capability_id, result.bytes]);
-        result = { type: result.mediaType.split('/')[0], modelId: current.input.modelId, assetId, mediaType: result.mediaType };
+        ].join(' '), [assetId, current.workspace_id, current.account_id, current.id + extension, file.mediaType, current.provider_id, current.capability_id, file.bytes]);
+        result = { ...(archive ? result : {}), type: file.mediaType.split('/')[0], modelId: current.input.modelId,
+          assetId, mediaType: file.mediaType };
       }
       await finishTask(connection, current, failure ? 'failed' : 'succeeded', result ?? null, failure?.code ?? null);
     }

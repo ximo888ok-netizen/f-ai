@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { catalog } from '../src/catalog.js';
 import { createProviders, providerFor } from '../src/providers.js';
+import { createVideoArchive } from '../src/video-archive.js';
 
 const capability = catalog.get('image.main-image');
 const gatewaySettings = { url: 'https://example.test/run', token: 'test-gateway-key', capabilities: [capability.id] };
@@ -37,4 +38,24 @@ test('gateway sends a stable idempotency key and validates outcomes without foll
   await assert.rejects(gateway.run(task, input), { code: 'INVALID_PROVIDER_RESULT' });
   fetcher.mock.mockImplementation(async () => new Response('x'.repeat(512 * 1024 + 1)));
   await assert.rejects(gateway.run(task, input), { code: 'PROVIDER_RESPONSE_TOO_LARGE' });
+});
+
+test('video archiving rejects other sources and treats unavailable or non-MP4 results as a fallback', async t => {
+  assert.equal(createVideoArchive([]),null);
+  const allowed='https://media.example.test';
+  const fetcher = t.mock.method(globalThis,'fetch',async (url,options) => {
+    assert.equal(options.redirect,'error');
+    assert.equal(options.method,'GET');
+    assert.equal(options.headers,undefined);
+    return new Response('not a video');
+  });
+  const archive = createVideoArchive([allowed]);
+  for (const url of ['http://media.example.test/a',allowed+'.invalid/a','https://name@media.example.test/a']) {
+    assert.deepEqual(await archive(url),{status:'not_allowed'});
+  }
+  assert.equal(fetcher.mock.callCount(),0);
+  assert.deepEqual(await archive(allowed+'/a'),{status:'failed'});
+  assert.equal(fetcher.mock.callCount(),1);
+  fetcher.mock.mockImplementation(async () => new Response(null,{status:503}));
+  assert.deepEqual(await archive(allowed+'/a'),{status:'failed'});
 });

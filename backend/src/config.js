@@ -16,6 +16,13 @@ export function config(env = process.env) {
       throw new Error('WEB_ORIGINS entries must be exact HTTP(S) origins');
     }
   }
+  const videoArchiveOrigins = list(env.VIDEO_ARCHIVE_ORIGINS);
+  for (const origin of videoArchiveOrigins) {
+    const url = new URL(origin);
+    if (url.protocol !== 'https:' || url.origin !== origin) {
+      throw new Error('VIDEO_ARCHIVE_ORIGINS entries must be exact HTTPS origins');
+    }
+  }
   if (env.MODEL_PROVIDERS_FILE && env.MODEL_PROVIDERS_JSON) throw new Error('Choose one model configuration source');
   const models = JSON.parse(env.MODEL_PROVIDERS_JSON || (env.MODEL_PROVIDERS_FILE ? readFileSync(env.MODEL_PROVIDERS_FILE, 'utf8').replace(/^\uFEFF/, '') : '[]'));
   const capabilities = list(env.GATEWAY_CAPABILITIES);
@@ -24,7 +31,7 @@ export function config(env = process.env) {
   }
   return {
     port, host: env.HOST || '127.0.0.1', databaseUrl: env.DATABASE_URL, origins,
-    models,
+    models, videoArchiveOrigins,
     gateway: { url: env.GATEWAY_URL, token: env.GATEWAY_TOKEN, capabilities },
     shops: loadShops(env.SHOP_BINDINGS_JSON),
   };

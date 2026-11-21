@@ -11,6 +11,7 @@ import { createProviders, ProviderError } from '../src/providers.js';
 import { dispatchSchedule } from '../src/schedules.js';
 import { provisionCredits } from '../src/wallet.js';
 import { workOnce } from '../src/worker.js';
+import { createVideoArchive } from '../src/video-archive.js';
 
 const db = process.env.FAI_TEST_DATABASE_URL ? postgres(process.env.FAI_TEST_DATABASE_URL) : new PGlite();
 const providers = createProviders();
@@ -382,7 +383,14 @@ test('model discovery, selection, media persistence and remote polling use the p
   await workOnce(deps);
   assert.equal((await finished(video.id)).state, 'running');
   // Recreate adapters between submission and polling, as after a worker restart.
-  const restarted = { ...deps, providers: installModels(createProviders(), routes) };
+  const videoBytes = Buffer.from('0000000c6674797069736f6d','hex');
+  const archivedUrls = [];
+  const videoArchive = createVideoArchive(['https://media.test'],async (url,options) => {
+    archivedUrls.push(url.href);
+    assert.equal(options.binary,true);
+    return videoBytes;
+  });
+  const restarted = { ...deps, providers: installModels(createProviders(), routes), videoArchive };
   for (let i = 0; i < 3; i += 1) {
     await db.query("UPDATE tasks SET lease_until = now() WHERE id = $1", [video.id]);
     await workOnce(restarted);
@@ -390,6 +398,16 @@ test('model discovery, selection, media persistence and remote polling use the p
   const remote = await finished(video.id);
   assert.equal(remote.attempts, 1);
   assert.equal(remote.result.url, 'https://media.test/42.mp4');
+  assert.equal(remote.result.archiveStatus,'saved');
+  assert.deepEqual(archivedUrls,[remote.result.url]);
+  const videoAsset = '/v1/assets/' + remote.result.assetId;
+  const videoInfo = response(await api('GET',videoAsset,other),200);
+  assert.equal(videoInfo.name,video.id+'.mp4');
+  assert.equal(videoInfo.mediaType,'video/mp4');
+  const file = await api('GET',videoAsset+'/content',other);
+  assert.equal(file.statusCode,200);
+  assert.deepEqual(file.rawPayload,videoBytes);
+  response(await api('GET',videoAsset+'/content',personal),404);
   assert.equal(posts.filter(request => request.path.endsWith('/generations/tasks')).length, 1);
 
   // A process loss between the paid POST and persistence of its receipt is ambiguous.
