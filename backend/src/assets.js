@@ -75,7 +75,7 @@ export function registerAssets(app, db) {
       const asset = await row(db, 'DELETE FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = $3 RETURNING id', [request.context.workspaceId, request.context.accountId, request.params.id]);
       if (!asset) throw notFound('Asset');
     } catch (error) {
-      if (['23001', '23503'].includes(error.code) && error.constraint === 'listing_draft_images_asset_id_fkey') {
+      if (['23001', '23503'].includes(error.code) && ['listing_draft_images_asset_id_fkey', 'listing_draft_variants_asset_id_fkey'].includes(error.constraint)) {
         throw new ApiError(409, 'ASSET_IN_DRAFT', 'The image is in use by a listing draft');
       }
       throw error;

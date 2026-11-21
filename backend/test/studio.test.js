@@ -126,6 +126,53 @@ test('Studio drafts keep ordered owned images, reject publication, and handle ed
   assert.deepEqual(data(await send('GET', '/v1/tasks', owner), 200).items, []);
 });
 
+test('Studio draft variants remain ordered, private and compatible with single-SKU edits', async () => {
+  const root = '/v1/studio/pinduoduo-drafts';
+  const url = root + '/' + randomUUID();
+  async function picture(session, name) {
+    return data(await send('POST', '/v1/assets', session, {
+      name, mediaType: 'image/png', source: 'fixture', purpose: 'draft',
+      dataBase64: Buffer.from('89504e470d0a1a0a','hex').toString('base64'),
+    }), 201).id;
+  }
+  const main = await picture(owner, 'main.png');
+  const variantImage = await picture(owner, 'variant.png');
+  const foreign = await picture(other, 'foreign.png');
+  const input = { revision: 0, title: 'Sample variants', specification: 'Single', sku: 'sample-one',
+    priceMinor: 540, stock: 0, images: [{ role: 'main', assetId: main }] };
+  const save = async (payload, status) => data(await send('PUT', url, owner, payload), status);
+  const original = await save(input, 200);
+  assert.deepEqual(original.variants, []);
+  const variants = [
+    { specification: 'Two pack', sku: 'sample-two', priceMinor: 1015, stock: 0, assetId: variantImage },
+    { specification: 'Four pack', sku: '', priceMinor: null, stock: null, assetId: null },
+  ];
+  const edit = { ...input, revision: original.revision, variants };
+  await save({ ...edit, variants: [{ ...variants[0], sku: ' SAMPLE-ONE ' }] }, 400);
+  await save({ ...edit, variants: [{ ...variants[0], specification: ' single ' }] }, 400);
+  await save({ ...edit, variants: [{ ...variants[0], assetId: foreign }] }, 404);
+  assert.deepEqual(data(await send('GET', url, owner), 200), original);
+  const saved = await save(edit, 200);
+  assert.deepEqual(saved.variants, variants);
+  assert.deepEqual(await save(edit, 200), saved);
+  await save({ ...edit, variants: [...variants].reverse() }, 409);
+  data(await send('GET', url, other), 404);
+  data(await send('DELETE', '/v1/assets/' + variantImage, owner), 409);
+  const checks = data(await send('GET', root + '/quality', owner), 200).items;
+  assert.deepEqual(checks.find(check => check.id === saved.id).variantChecks, [
+    { specification: 'Two pack', missing: [] },
+    { specification: 'Four pack', missing: ['商家 SKU', '售价', '库存'] },
+  ]);
+  assert.deepEqual(data(await send('GET', root + '/quality', other), 200).items, []);
+  const legacyEdit = { ...input, title: 'Updated by legacy client', revision: saved.revision };
+  const updated = await save(legacyEdit, 200);
+  assert.deepEqual(updated.variants, variants);
+  assert.deepEqual(await save(legacyEdit, 200), updated);
+  const cleared = await save({ ...legacyEdit, revision: updated.revision, variants: [] }, 200);
+  assert.deepEqual(cleared.variants, []);
+  data(await send('DELETE', '/v1/assets/' + variantImage, owner), 204);
+});
+
 test('shop ledgers isolate business records and compute local backlog and sales from committed data', async () => {
   const root = '/v1/studio/pinduoduo';
   const book = data(await send('POST', root+'/books', owner, {name:'QA Ledger'}),200);

@@ -40,7 +40,8 @@ const plugin = shape({
 });
 const draftSummary = { id: uuid, title: string, revision: count, updatedAt: date };
 const listingDraft = shape({ ...draftSummary, category: string, description: string, specification: string, sku: string,
-  priceMinor: nullable(count), stock: nullable(count), images: items(shape({ role: enumOf('main','sku','detail'), assetId: uuid })) });
+  priceMinor: nullable(count), stock: nullable(count), images: items(shape({ role: enumOf('main','sku','detail'), assetId: uuid })),
+  variants: items(shape({ specification: string, sku: string, priceMinor: nullable(count), stock: nullable(count), assetId: nullable(uuid) })) });
 const operationField = { type:'object', properties: { label:string, type:enumOf('text','money','date','integer','choice'),
   min:count, max:count, optional:bool, choices:items(string) }, required:['label','type'] };
 const operationModule = shape({ label:string, keyLabel:string, fields:{type:'object',additionalProperties:operationField} });
@@ -122,7 +123,8 @@ export const contracts = new Map([
   ['/v1/studio/pinduoduo/books/:book/insights', { GET: { 200: operationInsights } }],
   ['/v1/studio/pinduoduo/books/:book/analytics', { GET: { 200: collection(dailyOrders) } }],
   ['/v1/studio/pinduoduo-drafts', { GET: { 200: collection(shape(draftSummary)) } }],
-  ['/v1/studio/pinduoduo-drafts/quality', { GET: { 200: collection(shape({ id: uuid, title: string, missing: items(string) })) } }],
+  ['/v1/studio/pinduoduo-drafts/quality', { GET: { 200: collection(shape({ id: uuid, title: string, missing: items(string),
+    variantChecks: items(shape({ specification: string, missing: items(string) })) })) } }],
   ['/v1/studio/pinduoduo-drafts/:id', { GET: { 200: listingDraft }, PUT: { 200: listingDraft } }],
   ['/v1/studio/categories', { GET: { 200: collection(studioCategory) }, POST: { 201: studioCategory } }],
   ['/v1/studio/categories/:id', { PATCH: { 200: studioCategory }, DELETE: { 204: none } }],
