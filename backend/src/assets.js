@@ -21,7 +21,7 @@ export async function taskAssets(db, context, identifiers, capability) {
   const ids = [...new Set(identifiers)];
   if (ids.length < capability.minAssets) throw invalid('This capability requires ' + capability.minAssets + ' distinct assets');
   if (!ids.length) return [];
-  const assets = await rows(db, 'SELECT id, media_type, consent_reference, consent_expires_at, octet_length(data) AS size FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = ANY($3::uuid[])', [context.workspaceId, context.accountId, ids]);
+  const assets = await rows(db, 'SELECT id, media_type, consent_reference, consent_expires_at, octet_length(data) AS size FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = ANY($3::uuid[]) AND NOT rights_restricted', [context.workspaceId, context.accountId, ids]);
   if (assets.length !== ids.length) throw notFound('Asset');
   if (capability.requiresConsent && assets.some(asset => !asset.consent_reference || !asset.consent_expires_at || new Date(asset.consent_expires_at).getTime() <= Date.now())) {
     throw new ApiError(422, 'CONSENT_REQUIRED', 'A valid asset authorization and expiry are required');
@@ -57,14 +57,14 @@ export function registerAssets(app, db) {
   route(app, 'GET', '/v1/assets', {
     tags, summary: 'List the current member’s uploaded assets', querystring: page,
   }, async request => ({
-    items: await rows(db, 'SELECT ' + assetFields + ' FROM assets WHERE workspace_id = $1 AND account_id = $2 ORDER BY created_at DESC, id LIMIT $3 OFFSET $4', [request.context.workspaceId, request.context.accountId, ...paginate(request.query)]),
+    items: await rows(db, 'SELECT ' + assetFields + ' FROM assets WHERE workspace_id = $1 AND account_id = $2 AND NOT rights_restricted ORDER BY created_at DESC, id LIMIT $3 OFFSET $4', [request.context.workspaceId, request.context.accountId, ...paginate(request.query)]),
   }));
 
   route(app, 'GET', '/v1/assets/:id', {
     tags, summary: 'Read metadata and SHA-256 for an owned asset', params: idParams,
   }, async request => {
     const asset = await row(db,`SELECT ${assetFields},encode(sha256(data),'hex') AS sha256
-      FROM assets WHERE workspace_id=$1 AND account_id=$2 AND id=$3`,
+      FROM assets WHERE workspace_id=$1 AND account_id=$2 AND id=$3 AND NOT rights_restricted`,
       [request.context.workspaceId,request.context.accountId,request.params.id]);
     if (!asset) throw notFound('Asset');
     return asset;
@@ -73,7 +73,7 @@ export function registerAssets(app, db) {
   route(app, 'GET', '/v1/assets/:id/content', {
     tags, summary: 'Download an owned asset', params: idParams,
   }, async (request, reply) => {
-    const asset = await row(db, 'SELECT media_type, data FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = $3', [request.context.workspaceId, request.context.accountId, request.params.id]);
+    const asset = await row(db, 'SELECT media_type, data FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = $3 AND NOT rights_restricted', [request.context.workspaceId, request.context.accountId, request.params.id]);
     if (!asset) throw notFound('Asset');
     const bytes = Buffer.from(asset.data);
     return reply.header('content-disposition','attachment')
@@ -84,7 +84,7 @@ export function registerAssets(app, db) {
     tags, summary: 'Delete an uploaded asset', params: idParams,
   }, async (request, reply) => {
     try {
-      const asset = await row(db, 'DELETE FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = $3 RETURNING id', [request.context.workspaceId, request.context.accountId, request.params.id]);
+      const asset = await row(db, 'DELETE FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = $3 AND NOT rights_restricted RETURNING id', [request.context.workspaceId, request.context.accountId, request.params.id]);
       if (!asset) throw notFound('Asset');
     } catch (error) {
       if (['23001','23503'].includes(error.code) && ['studio_psd_documents_subject_asset_id_fkey','studio_psd_documents_background_asset_id_fkey'].includes(error.constraint)) {

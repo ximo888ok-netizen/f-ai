@@ -69,7 +69,7 @@ async function providerPayload(db, identityDb, task, capability, shops) {
     shopReference = shop.gatewayReference;
   }
   const ids = await taskAssets(db, context, assetIds ?? listing?.assetIds ?? [], capability);
-  const assets = ids.length ? await rows(db, 'SELECT id, media_type, data, consent_expires_at FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = ANY($3::uuid[])', [task.workspace_id, task.account_id, ids]) : [];
+  const assets = ids.length ? await rows(db, 'SELECT id, media_type, data, consent_expires_at FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = ANY($3::uuid[]) AND NOT rights_restricted', [task.workspace_id, task.account_id, ids]) : [];
   const assetsById = new Map(assets.map(asset => [asset.id, asset]));
   if (assets.length !== ids.length) throw new ProviderError('ASSET_REMOVED');
   if (capability.requiresConsent && assets.some(asset => new Date(asset.consent_expires_at).getTime() <= Date.now())) {

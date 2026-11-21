@@ -71,7 +71,7 @@ function matches(draft, values) {
   });
 }
 
-function variantCheck(v) {
+export function variantCheck(v) {
   const missing = [];
   if (!v.sku) missing.push('商家 SKU');
   if (v.priceMinor === null) missing.push('售价');
@@ -120,7 +120,7 @@ export function registerListingDrafts(app, db) {
       validateVariants(values, variants);
       const ids = [...new Set([...values.images, ...(submittedVariants ?? [])].map(img => img.assetId).filter(Boolean))];
       const assets = await rows(tx, `SELECT id, media_type FROM assets WHERE workspace_id=$1 AND account_id=$2
-        AND id=ANY($3::uuid[]) ORDER BY id FOR KEY SHARE`, [key[0], key[1], ids]);
+        AND id=ANY($3::uuid[]) AND NOT rights_restricted ORDER BY id FOR KEY SHARE`, [key[0], key[1], ids]);
       if (assets.length !== ids.length) throw notFound('Asset');
       if (assets.some(asset => !['image/png','image/jpeg'].includes(asset.media_type))) throw invalid('Use JPEG or PNG images');
       if (!inserted) {

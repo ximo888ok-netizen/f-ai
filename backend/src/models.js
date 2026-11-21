@@ -105,7 +105,7 @@ export function installModels(providers, definitions, env = process.env) {
       maxBytes: binary ? 10 * 1024 * 1024 : ['image', 'embedding'].includes(kind) ? 15 * 1024 * 1024 : 512 * 1024, binary, timeout: body === undefined ? 30000 : 90000,
     });
     const adapter = {
-      info, signature,
+      info, signature, loopback,
       supports: capability => capabilities.includes(capability.id),
       validate: (capability, params) => validateParameters(config, capability, params),
       async run(task, payload) {

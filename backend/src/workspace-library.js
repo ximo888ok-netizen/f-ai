@@ -9,10 +9,12 @@ const kinds = ['skill','expert','team'];
 const idParams = object({ id: uuid });
 const revision = integer(1, 2147483646);
 const relatedIds = { ...array(uuid, 6), uniqueItems: true };
+const skillActions = ['copy-review','sku-review','model-chat'];
 const definition = { name: text(100), description: text(500,0), instructions: text(2000), relatedIds };
-const record = object({ ...definition, id: uuid, kind: choice(...kinds), builtin: bool, enabled: bool,
+const skillAction = { anyOf:[choice(...skillActions),{type:'null'}] };
+const record = object({ ...definition, skillAction, id: uuid, kind: choice(...kinds), builtin: bool, enabled: bool,
   revision, updatedAt: { anyOf: [{ type: 'string', format: 'date-time' }, { type: 'null' }] } });
-const columns = 'id, kind, name, description, instructions, related_ids AS "relatedIds", enabled, revision, updated_at AS "updatedAt", false AS builtin';
+const columns = 'id, kind, name, description, instructions, related_ids AS "relatedIds", skill_action AS "skillAction", enabled, revision, updated_at AS "updatedAt", false AS builtin';
 const limit = 200;
 const conflict = message => new ApiError(409, 'LIBRARY_CONFLICT', message);
 
@@ -21,7 +23,7 @@ async function libraryEntries(db, workspace) {
   const states = await rows(db, 'SELECT entry_id, enabled FROM workspace_library_builtin_state WHERE workspace_id=$1', [workspace]);
   const enabled = new Map(states.map(state => [state.entry_id, state.enabled]));
   return [...builtinEntries.map(entry => ({
-    ...entry, builtin: true, enabled: enabled.get(entry.id) ?? true, revision: 1, updatedAt: null,
+    skillAction:null, ...entry, builtin: true, enabled: enabled.get(entry.id) ?? true, revision: 1, updatedAt: null,
   })), ...custom];
 }
 
@@ -31,7 +33,17 @@ function findEntry(entries, id) {
   return entry;
 }
 
-function validateDefinition(kind, body, entries, id) {
+export async function executableSkill(db,workspace,id,revision) {
+  const entry=findEntry(await libraryEntries(db,workspace),id);
+  if (entry.kind!=='skill') throw new ApiError(422,'SKILL_REQUIRED','Select a skill');
+  if (!entry.enabled) throw new ApiError(409,'LIBRARY_DISABLED','The selected skill is disabled');
+  if (entry.revision!==revision) throw conflict('The skill changed; reload it before executing');
+  return entry;
+}
+
+function validateDefinition(kind, body, entries, current) {
+  const action=body.skillAction===undefined?current?.skillAction ?? null:body.skillAction;
+  if (kind!=='skill' && action!==null) throw invalid('Execution actions are only supported for skills');
   const name = body.name.trim();
   const instructions = body.instructions.trim();
   if (!name || !instructions) throw invalid('Name and instructions cannot be blank');
@@ -43,10 +55,10 @@ function validateDefinition(kind, body, entries, id) {
     const related = findEntry(entries, value);
     if (related.kind !== (kind === 'team' ? 'expert' : 'skill')) throw invalid('Invalid related entry type');
   }
-  if (entries.some(entry => entry.id !== id && entry.kind === kind && entry.name.toLowerCase() === name.toLowerCase())) {
+  if (entries.some(entry => entry.id !== current?.id && entry.kind === kind && entry.name.toLowerCase() === name.toLowerCase())) {
     throw conflict('An entry of this type already has that name');
   }
-  return [name, body.description.trim(), instructions, relations];
+  return [name, body.description.trim(), instructions, relations, action];
 }
 
 async function updateLibrary(db, workspace, action) {
@@ -93,28 +105,30 @@ export function registerWorkspaceLibrary(app, db) {
     response: {200: record} }, async request => findEntry(await libraryEntries(db, request.context.workspaceId), request.params.id));
 
   route(app, 'POST', root, { tags, manager: true, summary: 'Create a workspace expert, team or skill',
-    body: object({ kind: choice(...kinds), ...definition }), response: {201: record} }, async (request, reply) => {
+    body: object({ kind:choice(...kinds),...definition,skillAction },['kind',...Object.keys(definition)]),
+    response: {201: record} }, async (request, reply) => {
     const workspace = request.context.workspaceId;
     const { kind } = request.body;
     const entry = await updateLibrary(db, workspace, async (tx, entries) => {
       if (entries.length >= limit + builtinEntries.length) throw conflict('Workspace library is full');
       const values = validateDefinition(kind, request.body, entries);
-      return row(tx, `INSERT INTO workspace_library_entries(workspace_id,id,kind,name,description,instructions,related_ids)
-        VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING ${columns}`, [workspace,randomUUID(),kind,...values]);
+      return row(tx, `INSERT INTO workspace_library_entries(workspace_id,id,kind,name,description,instructions,related_ids,skill_action)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING ${columns}`, [workspace,randomUUID(),kind,...values]);
     });
     reply.code(201);
     return entry;
   });
 
   route(app, 'PUT', root + '/:id', { tags, manager: true, summary: 'Edit a custom workspace library entry',
-    params: idParams, body: object({ ...definition, revision }), response: {200: record} }, request => {
+    params: idParams, body: object({...definition,revision,skillAction},[...Object.keys(definition),'revision']),
+    response: {200: record} }, request => {
     const workspace = request.context.workspaceId;
     return updateLibrary(db, workspace, async (tx, entries) => {
       const entry = findEntry(entries, request.params.id);
       if (entry.builtin) throw conflict('Built-in entries can be enabled or disabled');
       if (entry.revision !== request.body.revision) throw conflict('The library entry changed; reload before editing');
-      const values = validateDefinition(entry.kind, request.body, entries, entry.id);
-      return row(tx, `UPDATE workspace_library_entries SET name=$3,description=$4,instructions=$5,related_ids=$6,
+      const values = validateDefinition(entry.kind, request.body, entries, entry);
+      return row(tx, `UPDATE workspace_library_entries SET name=$3,description=$4,instructions=$5,related_ids=$6,skill_action=$7,
         revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING ${columns}`, [workspace,entry.id,...values]);
     });
   });

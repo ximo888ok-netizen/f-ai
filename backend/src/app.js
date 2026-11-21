@@ -28,10 +28,15 @@ import { registerStudioPsd } from './studio-psd.js';
 import { registerCloudAssets } from './cloud-assets.js';
 import { registerFeishuChannel } from './feishu-channel.js';
 import { registerVideoDelivery } from './video-delivery.js';
+import { registerRightsNotices } from './rights-notices.js';
+import { registerSkillRuns } from './skill-runs.js';
+import { registerImageStudio } from './image-studio.js';
+import { registerStoryboards } from './video-storyboards.js';
+import { registerCopywritingReview } from './copywriting-review.js';
 
 export async function buildApp({
   db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(),
-  cloudAssets = new Map(), feishu = new Map(), videoDelivery = null, loopbackOnly = false,
+  cloudAssets = new Map(), feishu = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false,
 }) {
   const app = Fastify({
     logger,
@@ -111,18 +116,23 @@ export async function buildApp({
   registerStudioProducts(app, workspaceDb);
   registerStudioPsd(app, workspaceDb, videoDelivery);
   registerVideoDelivery(app, workspaceDb, videoDelivery);
+  registerStoryboards(app,workspaceDb,videoDelivery);
   registerListingDrafts(app, workspaceDb);
   registerShopOperations(app, workspaceDb);
   registerWallet(app, workspaceDb);
   registerWorkspace(app, workspaceDb);
   registerWorkspaceLibrary(app, workspaceDb);
+  registerSkillRuns(app,workspaceDb,providers,shops);
+  registerRightsNotices(app,workspaceDb);
   registerWorkspaceDiagnostics(app, workspaceDb, requiredMigrations);
   registerWebSearch(app, webSearch);
   registerAssets(app, workspaceDb);
+  registerImageStudio(app,workspaceDb);
+  registerCopywritingReview(app,workspaceDb);
   registerCloudAssets(app,workspaceDb,cloudAssets);
   registerFeishuChannel(app,workspaceDb,feishu);
   registerSupport(app, workspaceDb);
-  registerCustomerService(app, workspaceDb);
+  registerCustomerService(app, workspaceDb, customerAnswer);
   registerModels(app, providers);
   registerTasks(app, workspaceDb, providers, shops);
   registerSchedules(app, workspaceDb, providers);

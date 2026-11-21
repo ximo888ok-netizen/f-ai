@@ -24,7 +24,7 @@ export function registerSupport(app, db) {
   }, async request => {
     const { workspaceId, accountId } = request.context;
     const [items, count] = await Promise.all([
-      rows(db, 'SELECT id::text, type, data, read_at AS "readAt", created_at AS "createdAt" FROM notifications WHERE workspace_id = $1 AND account_id = $2 ORDER BY id DESC LIMIT $3 OFFSET $4', [workspaceId, accountId, ...paginate(request.query)]),
+      rows(db, 'SELECT id::text, type, data, read_at AS "readAt", created_at AS "createdAt" FROM notifications WHERE workspace_id = $1 AND account_id = $2 ORDER BY notifications.id DESC LIMIT $3 OFFSET $4', [workspaceId, accountId, ...paginate(request.query)]),
       row(db, 'SELECT count(*)::integer AS unread FROM notifications WHERE workspace_id = $1 AND account_id = $2 AND read_at IS NULL', [workspaceId, accountId]),
     ]);
     return { items, unread: count.unread };

@@ -1,6 +1,7 @@
 const options = {
   task: 'taskNotifications',
   member: 'memberNotifications',
+  rights: 'rightsNotifications',
 };
 
 export async function notify(db, workspaceId, accountId, category, type, key, data) {

@@ -43,7 +43,7 @@ npm start
 | 商品档案与收益测算 | 商品、分类、复用、导入导出和操作历史持久化；服务端按输入成本计算广告回报 |
 | 账户、积分、通知和设置 | 钱包和流水、企业分配、消息已读、任务通知开关、主题持久化和数据库诊断 |
 
-模型能力和店铺操作的可用性以运行环境中的配置为准。通用任务接口可以展示实际返回的文件、文本和服务结果。「分层设计」支持工作台自行组合素材并导出 PSD。模型直接生成 PSD、视频编辑与数字人需要对应的处理服务。订阅支付、代理佣金、第三方网盘及桌面宿主目前没有正式操作入口。
+模型能力和店铺操作的可用性以运行环境中的配置为准。通用任务接口可以展示实际返回的文件、文本和服务结果。「分层设计」支持工作台自行组合素材并导出 PSD。模型直接生成 PSD、视频编辑与数字人需要对应的处理服务。订阅支付和代理佣金仍待接入。自有 WebDAV 和飞书可在部署方授权配置后使用。Windows 工作台的安装方式见[桌面安装说明](../desktop/windows/README.md)。
 
 ## 本机试用
 
@@ -96,7 +96,9 @@ npm start
 | 店铺 | GET /v1/shops、POST /v1/shops/previews |
 | 支撑服务 | /v1/settings、/v1/memory、/v1/notifications、POST /v1/notifications/{id}/read、POST /v1/notifications/read-all |
 
-知识库目前接收 UTF-8 纯文本，通过关键词检索有权读取的分段。客服工作台使用所选知识库的段落提供带来源的回复，支持跟进上一轮命中的主题。企业管理员接管后，自动回复停止，人工回复与原历史保存在同一会话。
+知识库目前接收 UTF-8 纯文本，通过关键词检索有权读取的分段。客服工作台沿用所选知识库，识别本轮关键词，并在缺乏新命中时使用上轮主题。创建会话可附 `productReference` 和 `orderReference`。发送消息可附 UUID `clientId`，重放同一消息返回已保存结果，助手消息通过 `replyTo` 指向对应提问。企业管理员接管后，进行中的自动回答也不会写入该会话。
+
+部署方可设置 `CUSTOMER_ASSISTANT_LOCAL_MODEL_ID`，选择已注册的回环地址对话模型。它收取本轮知识摘录和最多九条近期消息。后端替换已登记的商品和订单引用以及常见邮箱与号码格式。模型故障时回退到知识原文，权限变更后重新验证知识来源。订单引用只用于标识客服会话，订单事实仍需要人工或已授权的数据来源。
 
 上传素材是显式操作，每个文件最大 10 MiB。Windows 的本地保存应通过宿主完成，上传物料和本地文件选择是两个操作。服务端仅向素材所有者提供原文件；第三方能力只接收当前任务引用的素材。
 
@@ -165,6 +167,24 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 
 完整的请求、响应和状态见运行服务的 `/openapi.json`，也可运行 `npm run --silent openapi` 在本机导出。
 
+## 技能执行与文案校验
+
+`POST /v1/library/{id}/runs` 执行指定版本的技能。内容审阅传 `revision` 和 `content`，返回命中范围与建议文案。SKU 核对传 `revision` 和本人的 `draftId`，返回各规格和缺项。模型技能传 `revision`、`content` 和 `idempotencyKey`，可选 `modelId` 和 `projectId`。模型任务沿用任务查询、积分、重试和权限流程。管理员创建或编辑技能时可指定 `skillAction` 为 `copy-review`、`sku-review` 或 `model-chat`。已有技能默认使用模型对话。禁用或版本过期的技能会拒绝新请求。
+
+管理员可在 `/v1/copywriting/rules/{platform}` 配置工作区的淘宝、拼多多、抖店文案规则，包括标题字数、单条卖点字数和禁用短语。首次保存用 `revision: 0`。用 `POST /v1/copywriting/review` 提交 `platform`、最近读取的 `revision`、`title` 和 `sellingPoints`，返回逐项问题。字数按 Unicode 码点计算。规则由工作区管理者提供，检查结果供发布前审阅。
+
+## 工作区权利通知
+
+`POST /v1/rights/notices` 接受客户端生成的 `id`、工作区内的 `assetId`、`statement` 和 `evidenceReference`。证据引用保存在工作区，后端不会访问其中的链接。提交者、受影响素材所有者和工作区管理者按参与权限读取案件与事件。
+
+使用 `POST /v1/rights/notices/{id}/actions` 提交 `eventId`、案件 `revision`、`action` 和 `explanation`。管理者可转送通知（`forward`）、限制访问（`restrict`）或驳回通知（`dismiss`）。素材所有者可在限制期提交反通知（`counter`），管理者用 `forward-counter` 转给提交者，再维持限制（`uphold`）或恢复访问（`restore`）。事件按版本保存并通过站内消息转送。限制期间，工作台停用对应素材的下载、备份恢复和新处理请求，保留原始字节。若同一素材还有其他有效限制，解除单个案件不会恢复素材访问。已经导出或保存在第三方的副本由实际持有人处理。
+
+## 本地图片与视频处理
+
+- `POST /v1/media/images/batches` 接受客户端批次 `id` 和最多八个 `items`。每项填写 `key`、本人素材 `assetIds` 和尺寸选项。尺寸可选 `square`、`portrait`、`story`、`wide`、`detail` 预设，也可填写 `width`、`height` 或对单图使用 `scale`。支持等比适配、裁切、六图纵向拼接、使用透明背景或素材背景，以及基于等尺寸蒙版的抠图、着色和局部替换。结果按条返回素材 ID 或失败原因。使用同一 ID 重试不会再次写入，完成后也可用 `GET /v1/media/images/batches/{id}` 查看结果。缩放使用常规插值，抠图和替换以用户提交的蒙版为依据。
+- `PUT /v1/media/storyboards/{id}` 保存 `revision`、`title`、`ratio`、`template`、有序的 `shots` 和可选的 `audioAssetId`。每个镜头填写图片 `assetId`、`durationMs` 及可选字幕和提示词。模板可用 `product-showcase`、`feature-details` 或 `steps`。`GET .../{id}/prompts` 提取提示词，`POST .../{id}/export` 使用指定保存版本生成 MP4。分镜合成支持最多十二个镜头、最长六十秒和可选 MP3 音轨。
+- `POST /v1/media/videos/{id}/export` 从本人 MP4 输出 `mp4`、`png`、`jpg` 或 `mp3`。视频支持 16:9、9:16、1:1 等比留边及可选静音。抽帧时间用毫秒。AI 来源已归档的素材或经用户确认的 AI 视频会继续写入适用的画面与元数据标识。视频处理工具需要 FFmpeg、FFprobe，以及 MP3 导出所需的 `libmp3lame`。动态运镜生成、自动主体识别和模型超分继续使用已配置的模型服务。[FFmpeg 滤镜文档](https://ffmpeg.org/ffmpeg-filters.html)
+
 ## 外部网关与店铺联调
 
 GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维显式启用的能力会向配置中的 HTTPS 网关发请求。网关接收 capabilityId、mode、parameters 和必要的素材，响应为 {"result": {...}}。请求头带以任务 ID 为值的 Idempotency-Key。网关需对该键做去重，在写入结果不明时先查询平台状态，避免因超时重试重复上架。API 不把账号资料、知识库、供应商密钥或平台日志放进任务网关请求。联调只使用获准外发的素材和文本。
@@ -173,7 +193,7 @@ GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维
 
 ## AI 产物导出标识
 
-任务详情显示 AI 图片及视频的来源提示。带有成功生成记录的本人 PNG 或 JPEG 可用 `GET /v1/assets/{id}/delivery` 导出，渲染可见标识并写入文件元数据。用了生成素材的分层设计，预览 PNG 带可见标识，导出的 PSD 还带独立标识图层和 XMP 元数据。素材库原件和网盘备份保持原始字节。视频当前使用工作台提示，视频文件内标识需独立的视频处理流程。
+任务详情显示 AI 图片及视频的来源提示。带有成功生成记录的本人 PNG 或 JPEG 可用 `GET /v1/assets/{id}/delivery` 导出，渲染可见标识并写入文件元数据。用了生成素材的分层设计，预览 PNG 带可见标识，导出的 PSD 还带独立标识图层和 XMP 元数据。素材库原件和网盘备份保持原始字节。已归档的 AI 视频使用同一个下载接口写入画面标识和 MP4 元数据。用户上传的视频可在确认 AI 来源后导出带标识副本。
 
 ## 自有网盘与飞书消息
 
@@ -183,6 +203,6 @@ GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维
 
 ## 交付范围与验证
 
-当前分支交付可运行的后端首版。图片和视频模型已有原生协议适配，独立数据库路由与分层 PSD 已完成测试环境验证。实际模型生成质量、第三方店铺授权和平台回执仍需实测。购物平台 OAuth、支付与订阅、代理计佣仍待实现或接入。WebDAV 与飞书私聊已通过模拟服务测试，真实部署需配置对应连接。专家和技能库、任务额度、事件日志及工作区支持接口已可用于前端联调。客服当前提供本地知识检索回复。42 项是能力目录，第三方能力是否可调用以配置及实际联调为准。
+当前分支交付可运行的后端首版。图片和视频模型已有原生协议适配，独立数据库路由与分层 PSD 已完成测试环境验证。实际模型生成质量、第三方店铺授权和平台回执仍需实测。购物平台 OAuth、支付与订阅、代理计佣仍待实现或接入。WebDAV 与飞书私聊已通过模拟服务测试，真实部署需配置对应连接。专家和技能库、任务额度、事件日志及工作区支持接口已可用于前端联调。客服默认提供带来源的多轮知识检索回复，也支持部署方显式配置的本机对话模型。42 项是能力目录，第三方能力是否可调用以配置及实际联调为准。
 
 运行 npm test 会使用内存 PostgreSQL（PGlite）执行 API 集成测试。也可把 FAI_TEST_DATABASE_URL 指向空的专用 PostgreSQL 测试库再运行。测试会应用迁移并写入固定测试账号和样例，使用完后可丢弃该测试库。

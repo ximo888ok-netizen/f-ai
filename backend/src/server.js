@@ -9,6 +9,7 @@ import { startWorker } from './worker.js';
 import { createExaSearch } from './web-search.js';
 import { createVideoArchive } from './video-archive.js';
 import { createVideoDelivery } from './video-delivery.js';
+import { createCustomerAnswer } from './customer-answer.js';
 import { assertControlDatabase } from './workspace-database.js';
 import { createFeishuBindings } from './feishu.js';
 import { createWebdavBindings } from './webdav.js';
@@ -27,7 +28,8 @@ await assertControlDatabase(db);
 const dedicatedDatabases = new Map([...settings.dedicatedDatabases].map(([key,url])=>[key,postgres(url)]));
 const providers = installModels(createProviders(settings.gateway), settings.models);
 const dependencies = { db, providers, shops: settings.shops, feishu, videoArchive: createVideoArchive(settings.videoArchiveOrigins) };
-const app = await buildApp({ ...dependencies, dedicatedDatabases, cloudAssets, videoDelivery:createVideoDelivery(), origins: settings.origins, webSearch:createExaSearch(process.env.EXA_API_KEY), logger: true });
+const app = await buildApp({ ...dependencies, dedicatedDatabases, cloudAssets, videoDelivery:createVideoDelivery(),
+  customerAnswer:createCustomerAnswer(providers,process.env.CUSTOMER_ASSISTANT_LOCAL_MODEL_ID), origins: settings.origins, webSearch:createExaSearch(process.env.EXA_API_KEY), logger: true });
 await app.listen({ port: settings.port, host: settings.host });
 const workers = [startWorker(dependencies,app.log), ...[...dedicatedDatabases.keys()].map(key =>
   startWorker({...dependencies,identityDb:db,resolveDatabase:()=>app.workspaceDatabaseRouter.workerDatabase(key)},app.log))];

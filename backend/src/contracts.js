@@ -60,10 +60,11 @@ const preferences = shape({ preferences: anyObject });
 const conversationState = enumOf('assistant', 'human');
 const conversation = shape({
   id: uuid, accountId: uuid, operatorId: nullable(uuid), subject: string,
-  knowledgeBaseIds: items(uuid), state: conversationState, lastSearch: nullable(string), createdAt: date, updatedAt: date,
+  knowledgeBaseIds: items(uuid), state: conversationState, lastSearch: nullable(string),
+  productReference: nullable(string), orderReference: nullable(string), createdAt: date, updatedAt: date,
 });
 const message = shape({
-  id: string, sender: enumOf('customer', 'assistant', 'operator'), content: string, createdAt: date,
+  id: string, sender: enumOf('customer', 'assistant', 'operator'), content: string, replyTo: nullable(string), createdAt: date,
   sources: items(shape({ baseId: uuid, baseName: string, documentId: uuid, documentName: string, ordinal: count, snippet: string })),
 });
 const schedule = shape({
@@ -102,7 +103,8 @@ export const contracts = new Map([
   ['/v1/customer-service/conversations', { GET: { 200: collection(conversation) }, POST: { 201: conversation } }],
   ['/v1/customer-service/conversations/:id/messages', {
     GET: { 200: shape({ conversation, items: items(message) }) },
-    POST: { 201: shape({ message, assistant: nullable(message), state: conversationState }) },
+    POST: { 200: shape({ message, assistant: nullable(message), state: conversationState }),
+      201: shape({ message, assistant: nullable(message), state: conversationState }) },
   }],
   ['/v1/customer-service/conversations/:id/handoff', { POST: { 200: conversation } }],
   ['/v1/customer-service/quick-replies', { GET: { 200: collection(quickReply) }, POST: { 201: quickReply } }],

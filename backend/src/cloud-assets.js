@@ -20,7 +20,8 @@ function bindingFor(bindings,workspace) {
 }
 
 async function copyFor(db,key,store) {
-  const record=await row(db,`SELECT * FROM asset_cloud_copies WHERE workspace_id=$1 AND account_id=$2 AND asset_id=$3`,key);
+  const record=await row(db,`SELECT * FROM asset_cloud_copies WHERE workspace_id=$1 AND account_id=$2 AND asset_id=$3
+    AND NOT EXISTS(SELECT 1 FROM assets WHERE workspace_id=$1 AND account_id=$2 AND id=$3 AND rights_restricted)`,key);
   if (!record) throw notFound('Cloud copy');
   if (record.binding_hash!==store.fingerprint) throw new ApiError(409,'WEBDAV_BINDING_CHANGED','This copy belongs to a different file store');
   return record;
@@ -50,12 +51,13 @@ export function registerCloudAssets(app,db,bindings) {
       await store.read(remoteName(key),prepared.size_bytes,prepared.sha256);
       return markReady(db,key);
     }
+    if (asset.rights_restricted) throw notFound('Asset');
     const bytes=Buffer.from(asset.data);
     const digest=checksum(bytes);
     await db.query(`INSERT INTO asset_cloud_copies(workspace_id,account_id,asset_id,binding_hash,name,media_type,source,purpose,
-      consent_reference,consent_expires_at,sha256,size_bytes,state)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending') ON CONFLICT DO NOTHING`,
-    [...key,store.fingerprint,asset.name,asset.media_type,asset.source,asset.purpose,asset.consent_reference,asset.consent_expires_at,digest,bytes.length]);
+      consent_reference,consent_expires_at,sha256,size_bytes,state,derived_ai)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending',$13) ON CONFLICT DO NOTHING`,
+    [...key,store.fingerprint,asset.name,asset.media_type,asset.source,asset.purpose,asset.consent_reference,asset.consent_expires_at,digest,bytes.length,asset.derived_ai]);
     const prepared=await copyFor(db,key,store);
     if (prepared.sha256!==digest) throw new ApiError(409,'CLOUD_COPY_MISMATCH','The local asset differs from the original copy');
     await store.write(remoteName(key),bytes,asset.media_type,digest);
@@ -79,11 +81,11 @@ export function registerCloudAssets(app,db,bindings) {
     const bytes=await store.read(remoteName(key),copy.size_bytes,copy.sha256);
     if (!validMedia(bytes,copy.media_type)) throw new ApiError(422,'ASSET_CONTENT_INVALID','The stored bytes do not match the media type');
     return db.transaction(async tx=>{
-      await tx.query(`INSERT INTO assets(workspace_id,account_id,id,name,media_type,source,purpose,consent_reference,consent_expires_at,data)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING`,
-      [...key,copy.name,copy.media_type,copy.source,copy.purpose,copy.consent_reference,copy.consent_expires_at,bytes]);
+      await tx.query(`INSERT INTO assets(workspace_id,account_id,id,name,media_type,source,purpose,consent_reference,consent_expires_at,data,derived_ai)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING`,
+      [...key,copy.name,copy.media_type,copy.source,copy.purpose,copy.consent_reference,copy.consent_expires_at,bytes,copy.derived_ai]);
       const local=await row(tx,`SELECT encode(sha256(data),'hex') AS sha FROM assets
-        WHERE workspace_id=$1 AND account_id=$2 AND id=$3`,key);
+        WHERE workspace_id=$1 AND account_id=$2 AND id=$3 AND NOT rights_restricted`,key);
       if (local?.sha!==copy.sha256) throw new ApiError(409,'CLOUD_COPY_MISMATCH','The original asset ID already contains other content');
       return markReady(tx,key);
     });

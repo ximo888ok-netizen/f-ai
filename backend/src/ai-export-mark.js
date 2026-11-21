@@ -1,6 +1,6 @@
 export function generatedAsset(alias) {
-  return `EXISTS(SELECT 1 FROM tasks origin WHERE origin.workspace_id=${alias}.workspace_id AND origin.account_id=${alias}.account_id
-    AND origin.state='succeeded' AND origin.result->>'assetId'=${alias}.id::text AND origin.provider_id<>'local')`;
+  return `(COALESCE(${alias}.derived_ai,false) OR EXISTS(SELECT 1 FROM tasks origin WHERE origin.workspace_id=${alias}.workspace_id AND origin.account_id=${alias}.account_id
+    AND origin.state='succeeded' AND origin.result->>'assetId'=${alias}.id::text AND origin.provider_id<>'local'))`;
 }
 
 export const metadata={software:'F-AI Studio',description:'AI-generated content'};

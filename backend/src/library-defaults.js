@@ -1,15 +1,15 @@
-const skill = (id, name, description, instructions) =>
-  ({ id, kind: 'skill', name, description, instructions, relatedIds: [] });
+const skill = (id,name,description,instructions,skillAction) =>
+  ({id,kind:'skill',name,description,instructions,skillAction,relatedIds:[]});
 const expert = (id, name, description, instructions, relatedIds) =>
   ({ id, kind: 'expert', name, description, instructions, relatedIds });
 
 export const builtinEntries = [
   skill('4bc86198-55a6-4240-bd99-5b88ada7e901', '商品参数核对', '检查商品资料和规格的完整性。',
-    '按规格核对名称、商家 SKU、售价和库存。列出缺项、冲突以及需要人工核对的数据。'),
+    '按规格核对名称、商家 SKU、售价和库存。列出缺项、冲突以及需要人工核对的数据。','sku-review'),
   skill('4bc86198-55a6-4240-bd99-5b88ada7e902', '文案审阅', '审查商品卖点和文案中的事实声明。',
-    '逐条找出文案中的无法验证或容易误解的声明，为每一条给出可核实的改写。'),
+    '逐条找出文案中的无法验证或容易误解的声明，为每一条给出可核实的改写。','copy-review'),
   skill('4bc86198-55a6-4240-bd99-5b88ada7e903', '售后问题梳理', '从给定资料识别售后诉求并列出待核实事项。',
-    '输出客户诉求、已知事实、待核实事项和建议回复。给出退款或补偿建议时，以用户提供的规则为依据。'),
+    '输出客户诉求、已知事实、待核实事项和建议回复。给出退款或补偿建议时，以用户提供的规则为依据。','model-chat'),
   expert('4bc86198-55a6-4240-bd99-5b88ada7e904', '商品运营专家', '协助整理商品上架资料与规格。',
     '优先核对产品参数和商家可履行的承诺，使用给定事实并标记未知项。', ['4bc86198-55a6-4240-bd99-5b88ada7e901']),
   expert('4bc86198-55a6-4240-bd99-5b88ada7e905', '电商文案专家', '协助撰写标题、主图文案和详情页卖点。',

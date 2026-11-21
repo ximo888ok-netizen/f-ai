@@ -144,6 +144,16 @@ test('enterprise cutover handles interruption, preserves business data and fails
       title:'Migration test',layout:designLayout,subjectAssetId:assetId,revision:0,
     });
     const project=await json(app,enterprise,'POST','/v1/projects',201,{name:'Migration project'});
+    const notice=await json(app,enterprise,'POST','/v1/rights/notices',201,{
+      id:randomUUID(),assetId,statement:'Synthetic cutover review',evidenceReference:'internal test reference',
+    });
+    await json(app,enterprise,'POST','/v1/rights/notices/'+notice.id+'/actions',200,{
+      eventId:randomUUID(),action:'forward',revision:1,explanation:'Synthetic forwarding record',
+    });
+    const storyboard=await json(app,enterprise,'PUT','/v1/media/storyboards/'+randomUUID(),200,{
+      revision:0,title:'Synthetic migration timeline',ratio:'1:1',template:'product-showcase',
+      shots:[{assetId,durationMs:1000}],
+    });
     await provisionCredits(control,workspace,enterprise.account.id,15,'qa-dedicated');
     const original=await json(app,enterprise,'POST','/v1/tasks',202,{
       capabilityId:'copywriting.detect-terms',mode:'workflow',parameters:{content:'QA one'},idempotencyKey:'dedicated-test-one',
@@ -169,6 +179,12 @@ test('enterprise cutover handles interruption, preserves business data and fails
     assert.deepEqual(await json(app,enterprise,'GET','/v1/workspace/database',200),{mode:'dedicated',state:'ready'});
     assert.equal((await json(app,enterprise,'GET','/v1/projects/'+project.id,200)).name,project.name);
     assert.equal((await json(app,enterprise,'GET',psdPath+'/'+design.id,200)).subjectAssetId,assetId);
+    const migratedNotice=await json(app,enterprise,'GET','/v1/rights/notices/'+notice.id,200);
+    assert.equal(migratedNotice.notice.state,'forwarded');
+    assert.equal(migratedNotice.events[0].explanation,'Synthetic forwarding record');
+    const migratedShots=await json(app,enterprise,'GET','/v1/media/storyboards/'+storyboard.id,200);
+    assert.equal(migratedShots.configuration.shots[0].assetId,assetId);
+    assert.equal((await row(control,'SELECT count(*)::int AS count FROM rights_notices WHERE workspace_id=$1',[workspace])).count,0);
     const migrated=await send(app,enterprise,'GET','/v1/assets/'+assetId+'/content');
     assert.equal(migrated.statusCode,200);
     assert.deepEqual(migrated.rawPayload,bytes);
