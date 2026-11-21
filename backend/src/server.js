@@ -6,6 +6,7 @@ import { postgres } from './db.js';
 import { createProviders } from './providers.js';
 import { installModels } from './models.js';
 import { startWorker } from './worker.js';
+import { createExaSearch } from './web-search.js';
 
 try {
   loadEnvFile();
@@ -17,7 +18,7 @@ const settings = config();
 const db = postgres(settings.databaseUrl);
 const providers = installModels(createProviders(settings.gateway), settings.models);
 const dependencies = { db, providers, shops: settings.shops };
-const app = await buildApp({ ...dependencies, origins: settings.origins, logger: true });
+const app = await buildApp({ ...dependencies, origins: settings.origins, webSearch:createExaSearch(process.env.EXA_API_KEY), logger: true });
 await app.listen({ port: settings.port, host: settings.host });
 const stopWorker = startWorker(dependencies, app.log);
 async function shutdown() {

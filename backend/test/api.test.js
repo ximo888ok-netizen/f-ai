@@ -186,7 +186,12 @@ test('asset consent and operation confirmations are scoped and rechecked', async
   const a = await upload({});
   const b = await upload({ name: 'another.png' });
   response(await api('GET', '/v1/assets/' + a.id + '/content', other), 404);
-  assert.equal((await api('GET', '/v1/assets/' + a.id + '/content', enterprise)).statusCode, 200);
+  const download=await api('GET','/v1/assets/'+a.id+'/content',enterprise);
+  assert.equal(download.statusCode,200);
+  const info=response(await api('GET','/v1/assets/'+a.id,enterprise),200);
+  assert.match(info.sha256,/^[a-f0-9]{64}$/);
+  assert.equal(info.sha256,download.headers['x-content-sha256']);
+  response(await api('GET','/v1/assets/'+a.id,other),404);
   const denied = response(await api('POST', '/v1/tasks', enterprise, taskInput('without-consent', {
     capabilityId: 'image.try-on', parameters: { assetIds: [a.id, b.id] },
   })), 422);

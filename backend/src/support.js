@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { row, rows } from './db.js';
 import { capabilityId } from './catalog.js';
-import { array, bool, choice, invalid, notFound, object, page, paginate, requireEnterprise, requireManager, route, text, uuid } from './http.js';
+import { array, bool, choice, integer, invalid, notFound, object, page, paginate, requireEnterprise, requireManager, route, text, uuid } from './http.js';
 
 const notificationTags = ['Notifications'];
 const settingsTags = ['Settings'];
@@ -14,7 +14,8 @@ const preferenceSchema = object({
   studioMotion: choice('on', 'off'),
   favoriteCapabilities: { ...array(capabilityId, capabilityId.enum.length), uniqueItems: true },
   locale: choice('zh-CN', 'en-US'),
-  doNotDisturb: bool, taskNotifications: bool, rememberConversations: bool,
+  onboardingStep: integer(0, 6),
+  doNotDisturb: bool, taskNotifications: bool, memberNotifications: bool, rememberConversations: bool,
 }, []);
 
 export function registerSupport(app, db) {

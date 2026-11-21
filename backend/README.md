@@ -128,6 +128,23 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 
 运营总览、待办和订单日报分别读取 `/summary`、`/insights`、`/analytics`（均位于指定台账下）。订单日报以订单日期汇总，排除已取消订单，金额缺失的订单单独计数。库存预警比较同一 SKU 的盘点数量和预警线。回复草稿、发货登记和营销计划都只写入台账。
 
+## 专家、技能与工作区支持接口
+
+| 功能 | 接口及行为 |
+| --- | --- |
+| 知识库分类 | `/v1/knowledge/bases/{id}/categories` 支持查看和管理分类。上传沿用原有 `category` 字段，旧文档会在迁移中补齐分类目录。更新分类名会同步文档标签；有关联文档的分类须先移类。文档接口支持 `PATCH` 修改名称、分类或正文，替换正文会在同一事务中重建索引。文档列表和知识检索支持 `category` 过滤。 |
+| 专家与技能库 | `GET /v1/library` 按 `kind`、`q`、`enabled` 搜索。预置 3 个专家、1 个专家团和 3 个技能。管理员可用 `POST /v1/library`、`PUT /v1/library/{id}`、`DELETE /v1/library/{id}` 管理自定义条目。更新携带 `revision`。`PUT /v1/library/{id}/state` 设置 `enabled`，预置项也按工作区保存开关。 |
+| 对话选用 | 提交 `model.chat` 时在 `parameters.guidanceIds` 传所选专家、团队或技能 ID，最多 4 个。后端解析关联技能，拒绝已停用或无权读取的条目。所选说明写入本次对话的系统消息，库条目 ID 不发送给模型服务。任务排队时冻结说明，重新生成会重新验证当前条目。 |
+| 成员任务额度 | 企业所有者和管理员使用 `GET/PUT /v1/credits/members/{id}/limit`，成员通过 `GET /v1/credits/limit` 查看自身额度。额度按该工作区历史已消费积分与在途预占累计，`null` 表示不限额。设低额度不会撤销在途任务；取消或失败会释放预占。 |
+| 素材校验 | `GET /v1/assets/{id}` 返回本人素材元数据和 SHA-256，原文件下载响应的 `X-Content-SHA256` 与元数据一致。 |
+| 任务事件 | `GET /v1/tasks/{id}/events` 分页读取本人任务的状态事件，可按 `level`、`from`、`to` 筛选，事件只有状态、级别、尝试次数、时间和错误码。升级前的任务从下一次状态变化开始记录。 |
+| 工作区消息 | 加入工作区与角色实际变更会通知受影响成员。`PATCH /v1/settings` 可用 `memberNotifications` 单独关闭；任务消息沿用 `taskNotifications`。 |
+| 引导与反馈 | `PATCH /v1/settings` 保存 `onboardingStep`，取值 0–6。`POST /v1/feedback` 接受客户端 UUID、类型和描述。相同 UUID、相同内容可重试；`GET /v1/feedback` 读取本人记录。 |
+| 诊断 | `GET /v1/diagnostics` 向管理员返回数据库迁移状态、服务进程目录磁盘状态、Node.js 版本、进程运行时长、内存和累计 CPU 时间。 |
+| 网页搜索 | `GET /v1/search/web` 返回是否启用。`POST /v1/search/web` 接受 `query` 和可选的 `limit`，返回标题、原链接及摘要摘录。部署端设置 `EXA_API_KEY` 启用。搜索只向 Exa 转交本次输入的查询词与搜索参数，服务响应按数量和大小限制。 |
+
+完整的请求、响应和状态见运行服务的 `/openapi.json`，也可运行 `npm run --silent openapi` 在本机导出。
+
 ## 外部网关与店铺联调
 
 GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维显式启用的能力会向配置中的 HTTPS 网关发请求。网关接收 capabilityId、mode、parameters 和必要的素材，响应为 {"result": {...}}。请求头带以任务 ID 为值的 Idempotency-Key。网关需对该键做去重，在写入结果不明时先查询平台状态，避免因超时重试重复上架。API 不把账号资料、知识库、供应商密钥或平台日志放进任务网关请求。联调只使用获准外发的素材和文本。
@@ -136,6 +153,6 @@ GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维
 
 ## 交付范围与验证
 
-当前分支交付可运行的后端首版。图片和视频模型已有原生协议适配，真实生成质量、分层 PSD 产物以及三家店铺的真实授权与回执仍需分别验收。购物平台 OAuth、支付与订阅、代理计佣、企业独立物理数据库、自有网盘、外部消息渠道、专家与技能库仍待实现或接入。客服当前提供本地知识检索回复。42 项是能力目录，第三方能力是否可调用以配置及实际联调为准。
+当前分支交付可运行的后端首版。图片和视频模型已有原生协议适配，真实生成质量、分层 PSD 产物以及三家店铺的真实授权与回执仍需分别验收。购物平台 OAuth、支付与订阅、代理计佣、企业独立物理数据库、自有网盘、外部消息渠道仍待实现或接入。专家和技能库、任务额度、事件日志及工作区支持接口已可用于前端联调。客服当前提供本地知识检索回复。42 项是能力目录，第三方能力是否可调用以配置及实际联调为准。
 
 运行 npm test 会使用内存 PostgreSQL（PGlite）执行 API 集成测试。也可把 FAI_TEST_DATABASE_URL 指向空的专用 PostgreSQL 测试库再运行。测试会应用迁移并写入固定测试账号和样例，使用完后可丢弃该测试库。

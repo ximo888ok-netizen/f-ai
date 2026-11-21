@@ -50,6 +50,11 @@ export async function migrate(db) {
   });
 }
 
+export async function checkMigrations(db, names) {
+  const result = await row(db, 'SELECT count(*)::integer AS count FROM migrations WHERE name = ANY($1::text[])', [names]);
+  return result?.count === names.length;
+}
+
 export async function row(db, sql, args = []) {
   return (await db.query(sql, args)).rows[0];
 }

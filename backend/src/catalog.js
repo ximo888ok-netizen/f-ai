@@ -100,7 +100,10 @@ for (const [pluginId, execution, parameters, entries] of definitions) {
 
 // Platform model utilities share task ownership, quotas, and billing with plugin tasks.
 const utilitySchemas = {
-  chat: object({ messages: array(object({ role: choice('system', 'user', 'assistant'), content: text(8000) }), 32, 1) }),
+  chat: object({
+    messages: array(object({ role: choice('system', 'user', 'assistant'), content: text(8000) }), 32, 1),
+    guidanceIds: { ...array(uuid, 4, 1), uniqueItems: true },
+  }, ['messages']),
   embed: object({ input: array(text(8000), 16, 1) }),
   rerank: object({ query: text(2000), documents: array(text(4000), 50, 1), topN: integer(1, 50) }, ['query', 'documents']),
   speech: object({ input: text(4000), voice: text(100) }),

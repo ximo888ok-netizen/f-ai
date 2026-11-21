@@ -1,6 +1,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { row, rows } from './db.js';
+import { ensureKnowledgeCategory, lockKnowledgeBase, registerKnowledgeCategories } from './knowledge-categories.js';
 import { ApiError, array, choice, invalid, notFound, object, page, paginate, requireEnterprise, route, text, uuid } from './http.js';
 
 const idParams = object({ id: uuid });
@@ -9,6 +10,9 @@ const knowledgeTags = ['Knowledge'];
 const manager = context => context.role !== 'member';
 const projectFields = 'id, name, archived_at AS "archivedAt", created_at AS "createdAt"';
 const baseFields = 'id, name, created_at AS "createdAt"';
+const documentFields = 'id, name, category, created_at AS "createdAt"';
+const documentParams = object({ id: uuid, documentId: uuid });
+const documentPatch = object({ name:text(200),category:text(100,0),content:text(200000) },[]);
 
 function requiredText(value) {
   const trimmed = value.trim();
@@ -52,7 +56,14 @@ function splitDocument(value) {
   return chunks;
 }
 
+async function indexDocument(db, id, content) {
+  const chunks = splitDocument(content);
+  await db.query(`INSERT INTO document_chunks (document_id, ordinal, content)
+    SELECT $1, (ordinal - 1)::integer, content FROM unnest($2::text[]) WITH ORDINALITY AS chunks(content, ordinal)`, [id,chunks]);
+}
+
 export function registerWorkspace(app, db) {
+  registerKnowledgeCategories(app, db, accessibleBase);
   route(app, 'GET', '/v1/projects', {
     tags: projectTags, summary: 'List visible projects', querystring: object({ ...page.properties, state: choice('active', 'archived', 'all') }, []),
   }, async request => {
@@ -161,11 +172,14 @@ export function registerWorkspace(app, db) {
   });
 
   route(app, 'GET', '/v1/knowledge/bases/:id/documents', {
-    tags: knowledgeTags, summary: 'List document metadata', params: idParams, querystring: page,
+    tags: knowledgeTags, summary: 'List document metadata', params: idParams,
+    querystring:object({ ...page.properties, category:text(100,0) },[]),
   }, async request => {
     const { id } = request.params;
     await accessibleBase(db, request.context, id);
-    return { items: await rows(db, 'SELECT id, name, category, created_at AS "createdAt" FROM documents WHERE workspace_id = $1 AND base_id = $2 ORDER BY created_at DESC, id LIMIT $3 OFFSET $4', [request.context.workspaceId, id, ...paginate(request.query)]) };
+    return { items: await rows(db,`SELECT ${documentFields} FROM documents WHERE workspace_id=$1 AND base_id=$2
+      AND ($3::text IS NULL OR category=$3) ORDER BY created_at DESC,id LIMIT $4 OFFSET $5`,
+      [request.context.workspaceId,id,request.query.category?.trim() ?? null,...paginate(request.query)]) };
   });
 
   route(app, 'POST', '/v1/knowledge/bases/:id/documents', {
@@ -177,10 +191,12 @@ export function registerWorkspace(app, db) {
     const content = requiredText(request.body.content);
     const name = requiredText(request.body.name);
     const inserted = await db.transaction(async connection => {
-      await accessibleBase(connection, request.context, id);
-      const document = await row(connection, 'INSERT INTO documents (id, workspace_id, base_id, name, category, content) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, category, created_at AS "createdAt"', [randomUUID(), workspaceId, id, name, request.body.category?.trim() ?? '', content]);
-      const chunks = splitDocument(content);
-      await connection.query('INSERT INTO document_chunks (document_id, ordinal, content) SELECT $1, (ordinal - 1)::integer, content FROM unnest($2::text[]) WITH ORDINALITY AS chunks(content, ordinal)', [document.id, chunks]);
+      await lockKnowledgeBase(connection,workspaceId,id);
+      const category = request.body.category?.trim() ?? '';
+      await ensureKnowledgeCategory(connection,workspaceId,id,category);
+      const document = await row(connection, `INSERT INTO documents (id,workspace_id,base_id,name,category,content)
+        VALUES ($1,$2,$3,$4,$5,$6) RETURNING ${documentFields}`,[randomUUID(),workspaceId,id,name,category,content]);
+      await indexDocument(connection,document.id,content);
       return document;
     });
     reply.code(201);
@@ -197,6 +213,29 @@ export function registerWorkspace(app, db) {
     return document;
   });
 
+  route(app, 'PATCH', '/v1/knowledge/bases/:id/documents/:documentId', {
+    manager:true, tags:knowledgeTags, summary:'Edit document metadata or replace and rebuild its text index',
+    params:documentParams, body:documentPatch,
+  }, request => db.transaction(async tx => {
+    const {workspaceId} = request.context;
+    const {id,documentId} = request.params;
+    const patch = request.body;
+    if (!Object.keys(patch).length) throw invalid('Provide at least one field to update');
+    const name = patch.name === undefined ? null : requiredText(patch.name);
+    const category = patch.category?.trim() ?? null;
+    const content = patch.content === undefined ? null : requiredText(patch.content);
+    await lockKnowledgeBase(tx,workspaceId,id);
+    const updated = await row(tx,`UPDATE documents SET name=COALESCE($4,name),category=COALESCE($5,category),content=COALESCE($6,content)
+      WHERE workspace_id=$1 AND base_id=$2 AND id=$3 RETURNING ${documentFields}`,[workspaceId,id,documentId,name,category,content]);
+    if (!updated) throw notFound('Document');
+    await ensureKnowledgeCategory(tx,workspaceId,id,updated.category);
+    if (content !== null) {
+      await tx.query('DELETE FROM document_chunks WHERE document_id=$1',[documentId]);
+      await indexDocument(tx,documentId,content);
+    }
+    return updated;
+  }));
+
   route(app, 'DELETE', '/v1/knowledge/bases/:id/documents/:documentId', {
     manager: true, tags: knowledgeTags, summary: 'Delete a document and its search entries', params: object({ id: uuid, documentId: uuid }),
   }, async (request, reply) => {
@@ -209,7 +248,7 @@ export function registerWorkspace(app, db) {
 
   route(app, 'POST', '/v1/knowledge/search', {
     tags: knowledgeTags, summary: 'Retrieve authorized chunks by keyword',
-    body: object({ query: text(160), baseIds: array(uuid, 40, 1), ...page.properties }, ['query']),
+    body: object({ query:text(160), baseIds:array(uuid,40,1), category:text(100,0), ...page.properties }, ['query']),
   }, async request => {
     const context = request.context;
     const { baseIds } = request.body;
@@ -219,8 +258,9 @@ export function registerWorkspace(app, db) {
       'FROM document_chunks c JOIN documents d ON c.document_id = d.id JOIN knowledge_bases b ON b.id = d.base_id',
       'WHERE d.workspace_id = $1 AND ($4::uuid[] IS NULL OR b.id = ANY($4::uuid[]))',
       'AND ($3::boolean OR EXISTS (SELECT 1 FROM knowledge_grants g WHERE g.base_id = b.id AND g.account_id = $2))',
-      'AND strpos(lower(c.content), lower($5)) > 0',
-      'ORDER BY d.created_at DESC, d.id, c.ordinal LIMIT $6 OFFSET $7',
-    ].join(' '), [context.workspaceId, context.accountId, manager(context), baseIds ?? null, requiredText(request.body.query), ...paginate(request.body)]) };
+      'AND strpos(lower(c.content),lower($5)) > 0 AND ($6::text IS NULL OR d.category=$6)',
+      'ORDER BY d.created_at DESC,d.id,c.ordinal LIMIT $7 OFFSET $8',
+    ].join(' '),[context.workspaceId,context.accountId,manager(context),baseIds ?? null,requiredText(request.body.query),
+      request.body.category?.trim() ?? null,...paginate(request.body)]) };
   });
 }

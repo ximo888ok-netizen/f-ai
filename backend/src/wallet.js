@@ -4,15 +4,41 @@ import { ApiError, integer, object, page, paginate, requireEnterprise, route, te
 
 const tags = ['Credits'];
 const walletFields = 'balance, reserved, balance - reserved AS available';
+const limitFields = object({
+  limit: { ...integer(0,1000000000), type: ['integer','null'] },
+  spent: { type: 'string', pattern: '^[0-9]+$' },
+  reserved: integer(0,2147483647),
+});
+const scope = object({ id: uuid });
 const insufficient = () => new ApiError(409, 'INSUFFICIENT_CREDITS', 'Available credits are insufficient');
 
 export async function ledgerEntry(db, workspaceId, accountId, reference, operation, amount) {
   await db.query('INSERT INTO ledger (workspace_id, account_id, reference, operation, amount) VALUES ($1, $2, $3, $4, $5)', [workspaceId, accountId, reference, operation, amount]);
 }
 
+async function settledCredits(db, workspaceId, accountId) {
+  const result = await row(db, "SELECT COALESCE(sum(amount),0)::text AS spent FROM ledger WHERE workspace_id=$1 AND account_id=$2 AND operation='settle'", [workspaceId,accountId]);
+  return result.spent;
+}
+
+async function creditLimit(db, workspaceId, accountId) {
+  const result = await row(db, `SELECT task_limit AS "limit", reserved, (
+    SELECT COALESCE(sum(amount),0)::text FROM ledger l WHERE l.workspace_id=w.workspace_id AND l.account_id=w.account_id AND l.operation='settle'
+  ) AS spent FROM wallets w WHERE workspace_id=$1 AND account_id=$2`, [workspaceId,accountId]);
+  if (!result) throw new ApiError(404, 'NOT_FOUND', 'Wallet not found');
+  return result;
+}
+
 export async function reserveCredits(db, workspaceId, accountId, reference, cost) {
-  const wallet = await row(db, 'UPDATE wallets SET reserved = reserved + $3 WHERE workspace_id = $1 AND account_id = $2 AND balance - reserved >= $3 RETURNING balance', [workspaceId, accountId, cost]);
-  if (!wallet) throw insufficient();
+  const wallet = await row(db, 'SELECT balance,reserved,task_limit FROM wallets WHERE workspace_id=$1 AND account_id=$2 FOR UPDATE', [workspaceId,accountId]);
+  if (!wallet || wallet.balance - wallet.reserved < cost) throw insufficient();
+  if (wallet.task_limit !== null) {
+    const spent = BigInt(await settledCredits(db, workspaceId, accountId));
+    if (spent + BigInt(wallet.reserved + cost) > BigInt(wallet.task_limit)) {
+      throw new ApiError(409, 'CREDIT_LIMIT_EXCEEDED', 'The member task spending limit would be exceeded');
+    }
+  }
+  await db.query('UPDATE wallets SET reserved=reserved+$3 WHERE workspace_id=$1 AND account_id=$2', [workspaceId,accountId,cost]);
   await ledgerEntry(db, workspaceId, accountId, reference, 'reserve', cost);
 }
 
@@ -38,6 +64,32 @@ export async function provisionCredits(db, workspaceId, accountId, amount, refer
 export function registerWallet(app, db) {
   route(app, 'GET', '/v1/credits/wallet', { tags, summary: 'Get current wallet' }, async request =>
     row(db, 'SELECT ' + walletFields + ' FROM wallets WHERE workspace_id = $1 AND account_id = $2', [request.context.workspaceId, request.context.accountId]));
+
+  route(app, 'GET', '/v1/credits/limit', { tags, summary: 'Get own task spending limit, cost and reservations',
+    response: {200: limitFields} }, request => creditLimit(db, request.context.workspaceId, request.context.accountId));
+
+  const memberLimit = '/v1/credits/members/:id/limit';
+  route(app, 'GET', memberLimit, { tags, manager: true, params: scope, summary: 'Read an enterprise member task spending limit',
+    response: {200: limitFields} }, request => {
+    requireEnterprise(request);
+    return creditLimit(db, request.context.workspaceId, request.params.id);
+  });
+
+  route(app, 'PUT', memberLimit, { tags, manager: true, params: scope, summary: 'Set or clear a member cumulative task spending limit',
+    body: object({ limit: limitFields.properties.limit }), response: {200: limitFields} }, request => {
+    requireEnterprise(request);
+    const { workspaceId, role } = request.context;
+    const id = request.params.id;
+    return db.transaction(async tx => {
+      const member = await row(tx, 'SELECT role FROM memberships WHERE workspace_id=$1 AND account_id=$2 FOR UPDATE', [workspaceId,id]);
+      if (!member) throw new ApiError(404, 'NOT_FOUND', 'Workspace member not found');
+      if (member.role === 'owner' || (role === 'admin' && member.role === 'admin')) {
+        throw new ApiError(403, 'FORBIDDEN', 'Cannot change the spending limit for this role');
+      }
+      await tx.query('UPDATE wallets SET task_limit=$3 WHERE workspace_id=$1 AND account_id=$2', [workspaceId,id,request.body.limit]);
+      return creditLimit(tx, workspaceId, id);
+    });
+  });
 
   route(app, 'GET', '/v1/credits/ledger', { tags, summary: 'List current wallet entries', querystring: page }, async request => ({
     items: await rows(db, 'SELECT id::text, reference, operation, amount, created_at AS "createdAt" FROM ledger WHERE workspace_id = $1 AND account_id = $2 ORDER BY id DESC LIMIT $3 OFFSET $4', [request.context.workspaceId, request.context.accountId, ...paginate(request.query)]),

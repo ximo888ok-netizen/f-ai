@@ -9,6 +9,9 @@ import { modelIdSchema } from './models.js';
 import { matchingProviders, providerFor } from './providers.js';
 import { finishCredits, reserveCredits } from './wallet.js';
 import { accessibleProject } from './workspace.js';
+import { guidedMessages } from './workspace-library.js';
+import { notify } from './notifications.js';
+import { logTask, registerTaskEvents } from './task-events.js';
 
 const tags = ['Tasks'];
 const idParams = object({ id: uuid });
@@ -77,6 +80,9 @@ export async function submitInTransaction(connection, providers, shops, context,
   const providerId = providerFor(providers, capability, input.modelId);
   const provider = providers.get(providerId);
   provider.validate?.(capability, parameters);
+  if (id === 'model.chat' && parameters.guidanceIds?.length) {
+    storedInput.guidedMessages = await guidedMessages(connection, workspaceId, parameters.guidanceIds, parameters.messages);
+  }
   if (provider.signature) {
     storedInput.modelSignature = provider.signature;
     storedInput.modelId = provider.info.id;
@@ -106,24 +112,20 @@ export async function submitInTransaction(connection, providers, shops, context,
     'INSERT INTO tasks (id, workspace_id, account_id, project_id, parent_id, capability_id, provider_id, plugin_id, input, request_hash, idempotency_key, state, cost)',
     "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'queued', $12) RETURNING " + taskFields,
   ].join(' '), [taskId, workspaceId, accountId, projectId ?? null, parentId, id, providerId, capability.pluginId, storedInput, hash, idempotencyKey, capability.cost]);
+  await logTask(connection, taskId, 'queued', 0);
   return { task, created: true };
 }
 
 export async function finishTask(db, task, state, result, errorCode) {
   await db.query('UPDATE tasks SET state = $2, result = $3, error_code = $4, lease_id = NULL, lease_until = NULL, updated_at = now() WHERE id = $1', [task.id, state, result, errorCode]);
   await finishCredits(db, task, state === 'succeeded');
-  await db.query([
-    'INSERT INTO notifications (workspace_id, account_id, type, event_key, data)',
-    'SELECT $1, $2, $3, $4, $5',
-    "WHERE NOT EXISTS (SELECT 1 FROM account_settings WHERE workspace_id = $1 AND account_id = $2 AND preferences->'taskNotifications' = 'false'::jsonb)",
-    'ON CONFLICT DO NOTHING',
-  ].join(' '), [
-    task.workspace_id, task.account_id, 'task.' + state, 'task:' + task.id,
-    { taskId: task.id, capabilityId: task.capability_id, state, errorCode },
-  ]);
+  await logTask(db, task.id, state, task.attempts, errorCode);
+  await notify(db, task.workspace_id, task.account_id, 'task', 'task.' + state, 'task:' + task.id,
+    { taskId: task.id, capabilityId: task.capability_id, state, errorCode });
 }
 
 export function registerTasks(app, db, providers, shops) {
+  registerTaskEvents(app, db, findTask);
   route(app, 'GET', '/v1/plugins', { tags: ['Plugins'], summary: 'List business plugins, capabilities and input contracts' }, async request => {
     const settings = new Map((await rows(db, 'SELECT plugin_id, enabled FROM plugin_settings WHERE workspace_id = $1', [request.context.workspaceId])).map(setting => [setting.plugin_id, setting.enabled]));
     const describe = plugin => ({

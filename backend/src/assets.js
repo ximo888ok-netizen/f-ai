@@ -1,5 +1,5 @@
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { row, rows } from './db.js';
 import { ApiError, choice, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 
@@ -60,12 +60,24 @@ export function registerAssets(app, db) {
     items: await rows(db, 'SELECT ' + assetFields + ' FROM assets WHERE workspace_id = $1 AND account_id = $2 ORDER BY created_at DESC, id LIMIT $3 OFFSET $4', [request.context.workspaceId, request.context.accountId, ...paginate(request.query)]),
   }));
 
+  route(app, 'GET', '/v1/assets/:id', {
+    tags, summary: 'Read metadata and SHA-256 for an owned asset', params: idParams,
+  }, async request => {
+    const asset = await row(db,`SELECT ${assetFields},encode(sha256(data),'hex') AS sha256
+      FROM assets WHERE workspace_id=$1 AND account_id=$2 AND id=$3`,
+      [request.context.workspaceId,request.context.accountId,request.params.id]);
+    if (!asset) throw notFound('Asset');
+    return asset;
+  });
+
   route(app, 'GET', '/v1/assets/:id/content', {
     tags, summary: 'Download an owned asset', params: idParams,
   }, async (request, reply) => {
     const asset = await row(db, 'SELECT media_type, data FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = $3', [request.context.workspaceId, request.context.accountId, request.params.id]);
     if (!asset) throw notFound('Asset');
-    return reply.header('content-disposition', 'attachment').type(asset.media_type).send(Buffer.from(asset.data));
+    const bytes = Buffer.from(asset.data);
+    return reply.header('content-disposition','attachment')
+      .header('x-content-sha256',createHash('sha256').update(bytes).digest('hex')).type(asset.media_type).send(bytes);
   });
 
   route(app, 'DELETE', '/v1/assets/:id', {

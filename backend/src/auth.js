@@ -2,6 +2,7 @@
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { row, rows } from './db.js';
+import { notify } from './notifications.js';
 import { ApiError, choice, invalid, notFound, object, requireEnterprise, route, text, uuid } from './http.js';
 
 const derive = promisify(scrypt);
@@ -142,9 +143,10 @@ export function registerAuth(app, db) {
     const invitation = await row(connection, 'SELECT workspace_id, role FROM invitations WHERE token_hash = $1 AND email = $2 AND accepted_at IS NULL AND expires_at > now() FOR UPDATE', [tokenHash, request.account.email]);
     if (!invitation) throw notFound('Invitation');
     const workspaceId = invitation.workspace_id;
-    await connection.query('INSERT INTO memberships (workspace_id, account_id, role) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, account_id) DO NOTHING', [workspaceId, request.account.id, invitation.role]);
+    const membership = await row(connection, 'INSERT INTO memberships (workspace_id, account_id, role) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, account_id) DO NOTHING RETURNING role', [workspaceId, request.account.id, invitation.role]);
     await connection.query('INSERT INTO wallets (workspace_id, account_id) VALUES ($1, $2) ON CONFLICT (workspace_id, account_id) DO NOTHING', [workspaceId, request.account.id]);
     await connection.query('UPDATE invitations SET accepted_at = now() WHERE token_hash = $1', [tokenHash]);
+    if (membership) await notify(connection,workspaceId,request.account.id,'member','member.joined','member:join:' + workspaceId,{role:membership.role});
     return { workspaceId, workspaces: await getWorkspaces(connection, request.account.id) };
   }));
 
@@ -154,8 +156,16 @@ export function registerAuth(app, db) {
   }, async request => {
     requireEnterprise(request);
     if (request.context.role !== 'owner') throw new ApiError(403, 'FORBIDDEN', 'Workspace owner required');
-    const result = await row(db, "UPDATE memberships SET role = $3 WHERE workspace_id = $1 AND account_id = $2 AND role <> 'owner' RETURNING account_id AS id, role", [request.context.workspaceId, request.params.id, request.body.role]);
-    if (!result) throw notFound('Editable member');
-    return result;
+    const {workspaceId} = request.context;
+    const {role} = request.body;
+    return db.transaction(async tx => {
+      const key = [workspaceId,request.params.id];
+      const member = await row(tx, "SELECT account_id AS id,role FROM memberships WHERE workspace_id=$1 AND account_id=$2 AND role<>'owner' FOR UPDATE", key);
+      if (!member) throw notFound('Editable member');
+      if (member.role === role) return member;
+      await tx.query('UPDATE memberships SET role=$3 WHERE workspace_id=$1 AND account_id=$2', [...key,role]);
+      await notify(tx,workspaceId,member.id,'member','member.role-changed','member:role:' + randomUUID(),{previousRole:member.role,role});
+      return {id:member.id,role};
+    });
   });
 }

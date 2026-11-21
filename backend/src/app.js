@@ -7,7 +7,7 @@ import { registerAssets } from './assets.js';
 import { registerAuth } from './auth.js';
 import { contracts, errorContracts } from './contracts.js';
 import { registerCustomerService } from './customer.js';
-import { migrationFiles, row } from './db.js';
+import { checkMigrations, migrationFiles } from './db.js';
 import { ApiError } from './http.js';
 import { createProviders } from './providers.js';
 import { registerSchedules } from './schedules.js';
@@ -20,9 +20,12 @@ import { registerModels } from './models.js';
 import { registerTasks } from './tasks.js';
 import { registerWallet } from './wallet.js';
 import { registerWorkspace } from './workspace.js';
+import { registerWorkspaceLibrary } from './workspace-library.js';
+import { registerWorkspaceDiagnostics } from './workspace-diagnostics.js';
+import { registerWebSearch } from './web-search.js';
 
 export async function buildApp({
-  db, providers = createProviders(), shops = new Map(), origins = [], logger = false,
+  db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null,
 }) {
   const app = Fastify({
     logger,
@@ -30,7 +33,7 @@ export async function buildApp({
     bodyLimit: 15000000,
     ajv: { customOptions: { removeAdditional: false } },
   });
-  await app.register(cors, { origin: origins, allowedHeaders: ['authorization', 'content-type', 'x-workspace-id'], methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
+  await app.register(cors, { origin: origins, allowedHeaders: ['authorization', 'content-type', 'x-workspace-id'], exposedHeaders:['x-content-sha256'], methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
   await app.register(rateLimit, {
     global: false,
     errorResponseBuilder: () => new ApiError(429, 'RATE_LIMITED', 'Too many authentication requests'),
@@ -78,8 +81,7 @@ export async function buildApp({
   app.get('/health', { schema: { tags: ['Health'], summary: 'Check server liveness' } }, async () => ({ status: 'ok' }));
   app.get('/ready', { schema: { tags: ['Health'], summary: 'Check the database and migration readiness' } }, async () => {
     try {
-      const migration = await row(db, 'SELECT count(*)::integer AS count FROM migrations WHERE name = ANY($1::text[])', [requiredMigrations]);
-      if (migration?.count !== requiredMigrations.length) throw new Error('Migration missing');
+      if (!(await checkMigrations(db, requiredMigrations))) throw new Error('Migration missing');
     } catch {
       throw new ApiError(503, 'DATABASE_UNAVAILABLE', 'Database or required migration is unavailable');
     }
@@ -94,6 +96,9 @@ export async function buildApp({
   registerShopOperations(app, db);
   registerWallet(app, db);
   registerWorkspace(app, db);
+  registerWorkspaceLibrary(app, db);
+  registerWorkspaceDiagnostics(app, db, requiredMigrations);
+  registerWebSearch(app, webSearch);
   registerAssets(app, db);
   registerSupport(app, db);
   registerCustomerService(app, db);

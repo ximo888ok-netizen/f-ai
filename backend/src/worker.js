@@ -10,6 +10,7 @@ import { ProviderError } from './providers.js';
 import { dispatchSchedule } from './schedules.js';
 import { finishTask, shopFingerprint } from './tasks.js';
 import { accessibleProject } from './workspace.js';
+import { logTask } from './task-events.js';
 
 const maxAttempts = 3;
 
@@ -34,10 +35,12 @@ async function claim(db) {
       return { expired: true };
     }
     const lease = randomUUID();
-    return row(connection, [
+    const claimed = await row(connection, [
       "UPDATE tasks SET state = 'running', attempts = attempts + CASE WHEN provider_job_id IS NULL THEN 1 ELSE 0 END, updated_at = now(),",
       "lease_id = $2, lease_until = now() + interval '120 seconds' WHERE id = $1 RETURNING *",
     ].join(' '), [task.id, lease]);
+    if (!claimed.provider_job_id) await logTask(connection, claimed.id, 'running', claimed.attempts);
+    return claimed;
   });
 }
 
@@ -51,7 +54,8 @@ async function providerPayload(db, task, capability, shops) {
   if (task.provider_id === 'local') return null;
 
   const { mode, parameters } = task.input;
-  const { assetIds, shopId, listing, ...providerParameters } = parameters;
+  const { assetIds, shopId, listing, guidanceIds, ...providerParameters } = parameters;
+  if (task.input.guidedMessages) providerParameters.messages = task.input.guidedMessages;
 
   let shopReference;
   if (shopId) {
@@ -118,11 +122,14 @@ export async function workOnce({ db, providers, shops }) {
         "UPDATE tasks SET provider_job_id = $2, lease_until = now() + interval '15 seconds', lease_id = NULL,",
         'poll_failures = $3, error_code = $4, updated_at = now() WHERE id = $1',
       ].join(' '), [current.id, jobId, failure ? current.poll_failures + 1 : 0, failure?.code ?? null]);
+      if (!current.provider_job_id) await logTask(connection, current.id, 'provider_pending', current.attempts);
+      else if (failure) await logTask(connection, current.id, 'retrying', current.attempts, failure.code);
     } else if (!current.provider_job_id && failure?.retryable && current.attempts < maxAttempts) {
       await connection.query([
         "UPDATE tasks SET state = 'queued', lease_id = NULL, lease_until = NULL, provider_sent_at = NULL,",
         "available_at = now() + $2::integer * interval '1 second', error_code = $3, updated_at = now() WHERE id = $1",
       ].join(' '), [current.id, 2 ** current.attempts, failure.code]);
+      await logTask(connection, current.id, 'retrying', current.attempts, failure.code);
     } else {
       if (result instanceof GeneratedFile) {
         const assetId = randomUUID();
