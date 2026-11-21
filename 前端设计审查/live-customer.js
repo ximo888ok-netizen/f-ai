@@ -1,5 +1,5 @@
 
-import { action, date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, result, select, textarea } from './live.js';
+import { action, date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, result, retryKey, select, textarea, toast } from './live.js';
 
 const endpoint = '/v1/customer-service';
 const senderLabels = { assistant: 'AI 助手', customer: '客户', operator: '人工客服' };
@@ -17,12 +17,18 @@ export async function customerPage(ctx) {
   const [conversations, bases] = await Promise.all([
     ctx.all(endpoint + '/conversations'), ctx.all('/v1/knowledge/bases'),
   ]);
-  ctx.html(heading('客服工作台') + (ctx.manager ? link('飞书消息','feishu') : '') + grid(panel('新会话', form('new-conversation', field('主题', input('subject', 'required maxlength="160"')) +
+  ctx.html(heading('客服工作台') + '<div class="live-row">'+link('权利通知','rights')+
+    (ctx.manager ? link('飞书消息','feishu') : '')+'</div>' + grid(panel('新会话', form('new-conversation', field('主题', input('subject', 'required maxlength="160"')) +
+    field('商品编号（选填）',input('productReference','maxlength="100"')) +
+    field('订单编号（选填）',input('orderReference','maxlength="100"')) +
     (bases.length ? field('允许引用的知识库（可多选）', select('baseId', bases.map(base => [base.id, base.name]), undefined, 'multiple')) : ''), '创建会话')),
     panel('会话', list(conversations, row => item(row.subject, row.state === 'human' ? '人工接待' : 'AI 接待',
       link('打开会话', 'customer/' + row.id))))) + link('快捷话术', 'customer/replies'));
   ctx.submit('new-conversation', async data => {
-    const row = await post(ctx, endpoint + '/conversations', { subject: data.get('subject'), knowledgeBaseIds: data.getAll('baseId') });
+    const references=Object.fromEntries(['productReference','orderReference']
+      .map(key=>[key,data.get(key)?.trim()]).filter(([,value])=>value));
+    const row = await post(ctx, endpoint + '/conversations',
+      { subject: data.get('subject'), knowledgeBaseIds: data.getAll('baseId'), ...references });
     ctx.go('customer/' + row.id);
   });
 }
@@ -45,8 +51,13 @@ async function conversation(ctx, id) {
     (assigned && replies.length ? field('插入快捷话术', select('reply', [['', '选择话术'], ...replies.map(reply => [reply.id, reply.title])])) : '') +
     field(assigned ? '客服回复' : '客户消息', textarea('content', 'required maxlength="4000"')) +
     (current.state === 'assistant' && sender === 'customer' ? field('知识检索关键词（选填）', input('search', 'maxlength="160"')) : ''), '发送') : '';
+  const references=[current.productReference && '商品 ' + current.productReference,
+    current.orderReference && '订单 ' + current.orderReference].filter(Boolean).join(' · ');
+  const turns=new Map(messages.filter(message=>message.sender==='customer').map((message,index)=>[message.id,index+1]));
   ctx.html(heading(current.subject, current.state === 'human' ? '人工接待' : 'AI 知识库接待') +
-    panel('消息', list(messages, message => item(senderLabels[message.sender], date(message.createdAt),
+    (references?notice(references):'') +
+    panel('消息', list(messages, message => item(senderLabels[message.sender], date(message.createdAt) +
+      (turns.has(message.replyTo)?' · 回复第 '+turns.get(message.replyTo)+' 条客户消息':''),
       result(message.content) + message.sources.map(source => '<p>' + h(source.baseName + ' · ' + source.documentName) + ' ' +
         link('引用文档', 'resources/' + source.baseId + '/' + source.documentId) + '</p>').join('')))) +
     (controls ? panel('发送消息', controls) : '') +
@@ -56,9 +67,12 @@ async function conversation(ctx, id) {
     const reply = replies.find(entry => entry.id === node.value);
     if (reply) document.querySelector('[name=content]').value = reply.content;
   });
+  const messageKey=retryKey();
   ctx.submit('message', async data => {
-    const search = data.get('search');
-    await post(ctx, route + '/messages', { sender, content: data.get('content'), ...(search ? { search } : {}) });
+    const search=data.get('search')?.trim();
+    const body={sender,content:data.get('content'),...(search?{search}:{})};
+    const saved=await post(ctx,route+'/messages',{...body,clientId:messageKey(body)});
+    if (sender==='customer' && saved.state==='assistant' && !saved.assistant) toast('消息已保存，本轮暂无自动回复。');
     ctx.reload();
   });
   ctx.click('handoff', async () => { await post(ctx, route + '/handoff'); ctx.reload(); });

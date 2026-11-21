@@ -43,7 +43,10 @@ test('Studio entry only serves real app code and current theme components', asyn
   assert.match(entry.body, /\/studio\/components\.css/);
   assert.doesNotMatch(entry.body, /src="studio\.js"/);
   assert.match(entry.headers['content-security-policy'], /connect-src 'self'/);
-  for (const file of ['live.js', 'live-tasks.js', 'live-workspace.js', 'live-products.js', 'live-drafts.js', 'live-operations.js', 'operations-file.js', 'live-customer.js', 'components.css', 'assets/aurora.webp']) {
+  for (const file of ['live.js', 'live-tasks.js', 'live-workspace.js', 'live-products.js', 'live-drafts.js',
+    'live-operations.js', 'operations-file.js', 'live-customer.js', 'live-skills.js', 'live-copy-review.js',
+    'live-rights.js', 'live-files.js', 'live-media.js', 'live-media-controls.js', 'live-image-studio.js',
+    'live-storyboards.js', 'components.css', 'assets/aurora.webp']) {
     assert.equal((await send('GET', '/studio/' + file)).statusCode, 200, file);
   }
   assert.equal((await send('GET', '/studio/studio.js')).statusCode, 404);

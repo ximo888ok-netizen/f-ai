@@ -1,6 +1,7 @@
 
 import { action, date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, result, select, textarea, toast, uid } from './live.js';
 import { downloadAsset } from './live-tasks.js';
+import { rightsActions } from './live-rights.js';
 
 const body = data => Object.fromEntries(data);
 const post = (ctx, endpoint, fields) => ctx.api(endpoint, { method: 'POST', body: fields });
@@ -175,16 +176,20 @@ async function assets(ctx) {
   const [files,cloud,video] = await Promise.all([
     ctx.all('/v1/assets'),ctx.api('/v1/cloud-assets/status'),ctx.api('/v1/video-export/status'),
   ]);
-  ctx.html(heading('素材库') + link('网盘备份','cloud-assets') + grid(panel('上传素材', form('upload',
+  ctx.html(heading('素材库') + '<div class="live-row">'+link('图片与视频处理','media')+
+    link('网盘备份','cloud-assets')+'</div>' + grid(panel('上传素材', form('upload',
     field('文件', input('file', 'type="file" required accept=".png,.jpg,.jpeg,.mp3,.mp4,.psd"')) +
     field('素材来源', input('source', 'required maxlength="200"')) + field('使用用途', input('purpose', 'required maxlength="200"')) +
     field('授权凭证编号（选填）', input('consentReference', 'maxlength="200"')) +
     field('授权截止时间（与凭证同时填写）', input('consentExpiresAt', 'type="datetime-local"')), '上传至工作区')),
     panel('我的素材', list(files, file => item(file.name,
       file.mediaType + ' · ' + Math.ceil(file.sizeBytes / 1024) + ' KiB' + (file.consentExpiresAt ? ' · 授权至 ' + date(file.consentExpiresAt) : ''),
-      action('下载', 'download', file.id) + (cloud.available ? action('备份到网盘','cloud-backup',file.id) : '') +
-      (video.available && file.mediaType==='video/mp4' ? action('导出带 AI 标识视频','mark-video',file.id) : '') +
-      action('删除', 'delete-asset', file.id))))));
+      '<div class="live-row">'+action('下载', 'download', file.id) +
+      (cloud.available ? action('备份到网盘','cloud-backup',file.id) : '') +
+      (['image/png','image/jpeg'].includes(file.mediaType)?link('处理图片','media/images/new/'+file.id):'') +
+      (video.available && file.mediaType==='video/mp4' ? link('视频导出','media/video/'+file.id) +
+        action('导出带 AI 标识视频','mark-video',file.id) : '') +
+      link('提交权利通知','rights/new/'+file.id)+action('删除', 'delete-asset', file.id)+'</div>')))));
   ctx.submit('upload', async data => { await uploadMedia(ctx, data); ctx.reload(); });
   ctx.click('download', id => downloadAsset(ctx, id, files.find(file => file.id === id).name));
   ctx.click('mark-video',async id=>{
@@ -225,11 +230,15 @@ async function account(ctx) {
 
 async function inbox(ctx) {
   const [summary, messages] = await Promise.all([ctx.api('/v1/notifications?limit=1'), ctx.all('/v1/notifications')]);
-  const types = { 'task.succeeded':'任务成功', 'task.failed':'任务失败', 'task.cancelled':'任务取消' };
+  const types = { 'task.succeeded':'任务成功', 'task.failed':'任务失败', 'task.cancelled':'任务取消',
+    ...Object.fromEntries(Object.entries(rightsActions).map(([key,label])=>['rights.'+key,label])),
+  };
   ctx.html(heading('消息中心', summary.unread + ' 条未读') +
     panel('通知', (summary.unread ? action('全部标为已读', 'read-all') : '') + list(messages, message => item(types[message.type] ?? message.type,
       date(message.createdAt) + (message.readAt ? ' · 已读' : ' · 未读'),
-      (message.data.taskId ? link('查看任务', 'tasks/' + message.data.taskId) : '') + (message.readAt ? '' : action('标为已读', 'read-id', message.id))))));
+      (message.data.taskId ? link('查看任务', 'tasks/' + message.data.taskId) : '') +
+      (message.data.noticeId?link('查看案件','rights/'+message.data.noticeId):'') +
+      (message.readAt ? '' : action('标为已读', 'read-id', message.id))))));
   ctx.click('read-all', async () => { await post(ctx, '/v1/notifications/read-all'); ctx.reload(); });
   ctx.click('read-id', async id => { await post(ctx, '/v1/notifications/' + path(id) + '/read'); ctx.reload(); });
 }

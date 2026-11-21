@@ -14,6 +14,12 @@
 .live-form select[multiple]{min-height:5rem}
 .live-form fieldset{display:grid;gap:.85rem;margin:0;padding:.75rem;border:1px solid var(--line,#7f839a);border-radius:9px}
 .live-form button{justify-self:start}
+.live-fields{display:grid;gap:.85rem}
+.live-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:.5rem .75rem;margin:.75rem 0}
+.live-facts dt{font-weight:600}
+.live-facts dd{margin:0;overflow-wrap:anywhere}
+.live-item button+button,.live-panel>[data-storyboard-export],.live-panel>[data-storyboard-delete]{margin-inline-start:.5rem}
+[data-skill-result]:not(:empty),[data-story-prompts]:not(:empty),[data-copy-result]:not(:empty){margin-top:1rem}
 .live-row{display:flex;align-items:center;flex-wrap:wrap;gap:.65rem;margin:.6rem 0}
 .live-item{border-top:1px solid var(--line,#8887);padding:.83rem 0;overflow-wrap:anywhere}
 .live-item:first-child{border-top:0}

@@ -7,6 +7,10 @@ import { listingDrafts } from './live-drafts.js';
 import { productPages } from './live-products.js';
 import { psdPage } from './live-psd.js';
 import { cloudAssetsPage, feishuPage } from './live-connectors.js';
+import { skillsPage } from './live-skills.js';
+import { copyReviewPage } from './live-copy-review.js';
+import { rightsPage } from './live-rights.js';
+import { mediaPage } from './live-media.js';
 
 const main = document.querySelector('#main');
 const tokenKey = 'fai.live.session';
@@ -16,6 +20,10 @@ const pages = {
   desk: ['生产工作台', dashboard],
   create: ['创作台', taskPages.create],
   library: ['工具库', taskPages.library],
+  skills: ['技能运行', skillsPage],
+  'copy-review': ['平台文案校验', copyReviewPage],
+  media: ['图片与视频处理', mediaPage],
+  rights: ['权利通知', rightsPage],
   assets: ['素材库', workspacePages.assets],
   psd: ['分层设计', psdPage],
   'cloud-assets': ['网盘备份', cloudAssetsPage],
@@ -36,12 +44,13 @@ const pages = {
   account: ['账户与积分', workspacePages.account],
   settings: ['设置与诊断', workspacePages.settings],
 };
-const groups = [['desk', 'create', 'library', 'assets', 'psd', 'tasks', 'schedules'], ['products', 'projects', 'team', 'resources', 'customer', 'shops', 'roi'], ['manager', 'inbox', 'account', 'settings']];
+const groups = [['desk', 'create', 'library', 'skills', 'assets', 'media', 'psd', 'tasks', 'schedules'],
+  ['products', 'projects', 'team', 'resources', 'customer', 'shops', 'roi'], ['manager', 'inbox', 'rights', 'account', 'settings']];
 const workspaceAliases = { home: 'desk', welcome: 'desk', assistant: 'schedules', image: 'create/image', video: 'create/video',
   copy: 'create/copywriting', service: 'customer', ops: 'shops',
-  'desk-mainimg': 'create/image/image.main-image', 'desk-skuimg': 'create/image/image.batch-sku',
-  'desk-detailimg': 'create/image/image.detail-page', 'desk-retouch': 'create/image/image.inpaint',
-  'desk-quickfilm': 'create/video/video.from-image', 'desk-direct': 'create/video/video.storyboard',
+  'desk-mainimg': 'create/image/image.main-image', 'desk-skuimg': 'media/images',
+  'desk-detailimg': 'media/images', 'desk-retouch': 'media/images',
+  'desk-quickfilm': 'create/video/video.from-image', 'desk-direct': 'media/storyboards',
   'desk-promptfilm': 'create/video/video.compose', 'desk-structure': 'create/video/video.reference',
   'desk-replace': 'create/video/video.replace-product', 'desk-speech': 'create/models/model.speech',
   'desk-roi': 'roi', 'desk-cloud': 'shops', 'desk-publish': 'create/operations/operations.publish',
@@ -74,6 +83,15 @@ export const result = value => '<pre class="live-result">' + h(typeof value === 
 export const date = value => value ? new Date(value).toLocaleString('zh-CN') : '—';
 export const path = value => encodeURIComponent(value);
 export const uid = () => crypto.randomUUID();
+export function retryKey() {
+  let previous;
+  let id;
+  return value => {
+    const next=JSON.stringify(value);
+    if (next!==previous) {id=uid();previous=next;}
+    return id;
+  };
+}
 export function select(name, options, selected, attrs = '') {
   return '<select name="' + h(name) + '" ' + attrs + '>' + options.map(([key, label]) => '<option value="' + h(key) + '"' +
     ((Array.isArray(selected) ? selected.includes(key) : key === selected) ? ' selected' : '') + '>' + h(label) + '</option>').join('') + '</select>';
@@ -103,6 +121,18 @@ Object.assign(errorLabels, {
   VIDEO_EXPORT_UNAVAILABLE:'当前部署的视频导出工具不可用。',
   VIDEO_EXPORT_BUSY:'有视频正在导出，请稍后重试。',
   VIDEO_EXPORT_TIMEOUT:'视频处理超时，请缩短素材后重试。',
+  VIDEO_NO_AUDIO:'这段视频没有可导出的音轨。',
+  VIDEO_FRAME_OUT_OF_RANGE:'抽帧时间超出视频时长。',
+  STORYBOARD_CHANGED:'分镜版本已变化，请重新打开后保存或导出。',
+  STORYBOARD_ASSET_LIMIT:'分镜使用的素材合计超过 24 MiB。',
+  IMAGE_BATCH_LIMIT:'此批次的素材合计超过 24 MiB。',
+  IMAGE_RENDER_BUSY:'图片服务正在处理其他请求，请稍后重试。',
+  IMAGE_RENDER_TIMEOUT:'图片处理超时，请减少素材或缩小尺寸后重试。',
+  IMAGE_RENDER_FAILED:'图片处理服务未完成本次处理。',
+  LIBRARY_CONFLICT:'技能有更新或仍被其他条目引用，请检查当前记录。',
+  LIBRARY_DISABLED:'这个技能已停用。',
+  COPY_RULES_CHANGED:'规则版本已变化，请重新打开当前平台的规则。',
+  RIGHTS_NOTICE_CONFLICT:'案件已更新或当前阶段不能执行该操作，请重新打开案件。',
 });
 
 function describeError(error) {

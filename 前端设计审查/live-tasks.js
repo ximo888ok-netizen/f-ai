@@ -1,4 +1,5 @@
 
+import { downloadFile } from './live-files.js';
 import { action, button, date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, result, select, textarea, toast, uid } from './live.js';
 
 const platforms = { taobao: '淘宝', pinduoduo: '拼多多', douyin: '抖店' };
@@ -33,7 +34,8 @@ async function library(ctx) {
     displayStatus(plugin, capability, ctx) + ' · ' + capability.cost + ' 积分',
     link('详情', capLink(capability)) + (editable ? action(favorites.has(capability.id) ? '取消收藏' : '收藏', 'favorite', capability.id) : ''));
   const saved = plugins.flatMap(plugin => plugin.capabilities.filter(capability => favorites.has(capability.id)).map(capability => tile(plugin, capability, false)));
-  ctx.html(heading('工具库') + panel('我的收藏', saved.length ? '<div class="live-grid">' + saved.join('') + '</div>' : notice('暂无收藏。')) +
+  ctx.html(heading('工具库') + '<div class="live-row">'+link('技能运行','skills')+
+    link('平台文案校验','copy-review')+link('图片与视频处理','media')+'</div>' + panel('我的收藏', saved.length ? '<div class="live-grid">' + saved.join('') + '</div>' : notice('暂无收藏。')) +
     plugins.map(plugin => panel(plugin.name, '<div class="live-grid">' + plugin.capabilities.map(capability => tile(plugin, capability, true)).join('') + '</div>')).join(''));
   let pendingFavorite = false;
   ctx.click('favorite', async id => {
@@ -144,14 +146,20 @@ async function create(ctx) {
       item(entry.enabled ? '已启用' : '已停用', '', link('查看能力', 'create/' + entry.id))))));
     return;
   }
+  const localTools={
+    image:link('打开本地图片处理','media/images'),
+    video:link('打开视频分镜','media/storyboards')+link('视频导出','media/video'),
+    copywriting:link('平台文案校验','copy-review'),
+  }[plugin.id] ?? '';
   if (!capability) {
-    ctx.html(heading(plugin.name) + grid(...plugin.capabilities.map(entry => panel(cardTitle(entry),
+    ctx.html(heading(plugin.name) + '<div class="live-row">'+localTools+'</div>' + grid(...plugin.capabilities.map(entry => panel(cardTitle(entry),
       item(displayStatus(plugin, entry, ctx), entry.cost + ' 积分', link('详情', capLink(entry)))))));
     return;
   }
   const title = heading(cardTitle(capability), plugin.name + ' · ' + displayStatus(plugin, capability, ctx));
   if (capability.endpoint || !capability.available || !plugin.enabled || (plugin.id === 'operations' && !ctx.manager)) {
-    ctx.html(title + (capability.endpoint ? link('打开客服工作台', 'customer') : notice('当前工作区无法提交此能力。')) + link('返回创作台', 'create/' + plugin.id));
+    ctx.html(title + (capability.endpoint ? link('打开客服工作台', 'customer') : notice('当前工作区无法提交此能力。')) +
+      '<div class="live-row">'+localTools+link('返回创作台','create/'+plugin.id)+'</div>');
     return;
   }
 
@@ -223,16 +231,8 @@ function httpsUrl(value) {
   catch { return null; }
 }
 
-export async function downloadAsset(ctx, id, name, variant = 'content', options = {}) {
-  const data = await ctx.api('/v1/assets/' + path(id) + '/' + variant, { ...options, raw: true });
-  const blob = await data.blob();
-  const url = URL.createObjectURL(blob);
-  if (!ctx.active()) { URL.revokeObjectURL(url); return; }
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 3000);
+export function downloadAsset(ctx,id,name,variant='content',options={}) {
+  return downloadFile(ctx,'/v1/assets/'+path(id)+'/'+variant,name,options);
 }
 
 async function tasks(ctx) {
@@ -260,7 +260,8 @@ async function tasks(ctx) {
         outputPanel += action('下载带标识图片','delivery-download',output.assetId) + link('用作新草稿主图', 'drafts/new/image/' + path(output.assetId));
       } else if (output.mediaType==='video/mp4') {
         const {available}=await ctx.api('/v1/video-export/status');
-        if (available) outputPanel += action('下载带标识视频','delivery-download',output.assetId);
+        if (available) outputPanel += action('下载带标识视频','delivery-download',output.assetId) +
+          link('调整画幅或导出音轨','media/video/'+output.assetId);
         else outputPanel += notice('当前部署未启用视频标识导出。');
       }
     }

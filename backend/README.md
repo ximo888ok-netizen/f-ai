@@ -169,17 +169,23 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 
 ## 技能执行与文案校验
 
+工作台侧栏的「技能运行」可执行内置和自定义技能，管理员可管理自定义技能和各技能的启停。平台文案校验可从该页或工具库打开。
+
 `POST /v1/library/{id}/runs` 执行指定版本的技能。内容审阅传 `revision` 和 `content`，返回命中范围与建议文案。SKU 核对传 `revision` 和本人的 `draftId`，返回各规格和缺项。模型技能传 `revision`、`content` 和 `idempotencyKey`，可选 `modelId` 和 `projectId`。模型任务沿用任务查询、积分、重试和权限流程。管理员创建或编辑技能时可指定 `skillAction` 为 `copy-review`、`sku-review` 或 `model-chat`。已有技能默认使用模型对话。禁用或版本过期的技能会拒绝新请求。
 
 管理员可在 `/v1/copywriting/rules/{platform}` 配置工作区的淘宝、拼多多、抖店文案规则，包括标题字数、单条卖点字数和禁用短语。首次保存用 `revision: 0`。用 `POST /v1/copywriting/review` 提交 `platform`、最近读取的 `revision`、`title` 和 `sellingPoints`，返回逐项问题。字数按 Unicode 码点计算。规则由工作区管理者提供，检查结果供发布前审阅。
 
 ## 工作区权利通知
 
+从侧栏「权利通知」查看或提交案件。素材库的提交入口会带入素材编号，消息中心的案件链接直接打开对应处理记录。
+
 `POST /v1/rights/notices` 接受客户端生成的 `id`、工作区内的 `assetId`、`statement` 和 `evidenceReference`。证据引用保存在工作区，后端不会访问其中的链接。提交者、受影响素材所有者和工作区管理者按参与权限读取案件与事件。
 
 使用 `POST /v1/rights/notices/{id}/actions` 提交 `eventId`、案件 `revision`、`action` 和 `explanation`。管理者可转送通知（`forward`）、限制访问（`restrict`）或驳回通知（`dismiss`）。素材所有者可在限制期提交反通知（`counter`），管理者用 `forward-counter` 转给提交者，再维持限制（`uphold`）或恢复访问（`restore`）。事件按版本保存并通过站内消息转送。限制期间，工作台停用对应素材的下载、备份恢复和新处理请求，保留原始字节。若同一素材还有其他有效限制，解除单个案件不会恢复素材访问。已经导出或保存在第三方的副本由实际持有人处理。
 
 ## 本地图片与视频处理
+
+工作台的「图片与视频处理」提供图片批次、视频导出与分镜编辑。素材库可将所选图片或 MP4 带入对应工具。图片批次可逐项预览和下载，视频分镜的提示词和导出文件取自已保存版本。
 
 - `POST /v1/media/images/batches` 接受客户端批次 `id` 和最多八个 `items`。每项填写 `key`、本人素材 `assetIds` 和尺寸选项。尺寸可选 `square`、`portrait`、`story`、`wide`、`detail` 预设，也可填写 `width`、`height` 或对单图使用 `scale`。支持等比适配、裁切、六图纵向拼接、使用透明背景或素材背景，以及基于等尺寸蒙版的抠图、着色和局部替换。结果按条返回素材 ID 或失败原因。使用同一 ID 重试不会再次写入，完成后也可用 `GET /v1/media/images/batches/{id}` 查看结果。缩放使用常规插值，抠图和替换以用户提交的蒙版为依据。
 - `PUT /v1/media/storyboards/{id}` 保存 `revision`、`title`、`ratio`、`template`、有序的 `shots` 和可选的 `audioAssetId`。每个镜头填写图片 `assetId`、`durationMs` 及可选字幕和提示词。模板可用 `product-showcase`、`feature-details` 或 `steps`。`GET .../{id}/prompts` 提取提示词，`POST .../{id}/export` 使用指定保存版本生成 MP4。分镜合成支持最多十二个镜头、最长六十秒和可选 MP3 音轨。
