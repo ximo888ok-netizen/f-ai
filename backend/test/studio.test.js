@@ -46,7 +46,7 @@ test('Studio entry only serves real app code and current theme components', asyn
   for (const file of ['live.js', 'live-tasks.js', 'live-workspace.js', 'live-products.js', 'live-drafts.js',
     'live-operations.js', 'operations-file.js', 'live-customer.js', 'live-skills.js', 'live-copy-review.js',
     'live-rights.js', 'live-files.js', 'live-media.js', 'live-media-controls.js', 'live-image-studio.js',
-    'live-storyboards.js', 'components.css', 'assets/aurora.webp']) {
+    'live-storyboards.js', 'components.css', 'studio-appearance.css', 'studio-motion.js', 'assets/aurora.webp']) {
     assert.equal((await send('GET', '/studio/' + file)).statusCode, 200, file);
   }
   assert.equal((await send('GET', '/studio/studio.js')).statusCode, 404);
@@ -310,7 +310,7 @@ test('server settings save favorites and theme and suppress task notifications w
   assert.deepEqual(directory.models.capabilities.map(entry => entry.id), [
     'model.chat', 'model.embed', 'model.rerank', 'model.speech', 'model.transcribe', 'model.voice-turn',
   ]);
-  const preferences = { studioTheme: 'jade', studioMotion: 'off', favoriteCapabilities: ['copywriting.detect-terms'], taskNotifications: false };
+  const preferences = { studioTheme: 'studio', studioMotion: 'off', favoriteCapabilities: ['copywriting.detect-terms'], taskNotifications: false };
   assert.deepEqual(data(await send('PATCH', '/v1/settings', owner, preferences), 200).preferences, preferences);
   assert.deepEqual(data(await send('GET', '/v1/settings', other), 200).preferences, {});
   await provisionCredits(db, owner.workspaces[0].id, owner.account.id, 4, 'studio-prefs-test');

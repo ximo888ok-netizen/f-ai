@@ -1,6 +1,7 @@
 /* Loaded before styles so the saved appearance is used on the first paint. */
 (() => {
   const themes=[
+    {id:'studio',name:'雾白工作台',detail:'雾白 · 松绿强调色'},
     {id:'glass',name:'冰蓝玻璃',detail:'透光 · 极光折射'},
     {id:'paper',name:'暖白纸笺',detail:'暖白 · 朱砂细线'},
     {id:'jade',name:'雨后青玉',detail:'松绿 · 柔雾釉面'},
@@ -13,7 +14,7 @@
   if(!valid(current)){
     try{current=localStorage.getItem(storageKey);}catch{current=null;}
   }
-  if(!valid(current))current='glass';
+  if(!valid(current))current='studio';
   const root=document.documentElement;
   root.dataset.theme=current;
   function setTheme(id,save=false){

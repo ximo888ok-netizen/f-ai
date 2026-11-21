@@ -10,7 +10,7 @@ const memoryTags = ['Memory'];
 const notificationId = { type: 'string', pattern: '^[1-9][0-9]{0,17}$' };
 const preferenceSchema = object({
   theme: choice('system', 'light', 'dark'),
-  studioTheme: choice('glass', 'paper', 'jade', 'noir'),
+  studioTheme: choice('studio', 'glass', 'paper', 'jade', 'noir'),
   studioMotion: choice('on', 'off'),
   favoriteCapabilities: { ...array(capabilityId, capabilityId.enum.length), uniqueItems: true },
   locale: choice('zh-CN', 'en-US'),

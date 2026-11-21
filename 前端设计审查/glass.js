@@ -37,7 +37,7 @@ const StudioGlass = (() => {
     animation.onfinish = clear; animation.oncancel = clear;
   }
   function rebound(target) {
-    motion(target,[{scale:'1 1'},{scale:'1.016 .981',offset:.18},{scale:'.992 1.009',offset:.68},{scale:'1 1'}],340);
+    motion(target,[{scale:'1 1'},{scale:'1.012 .986',offset:.18},{scale:'.994 1.007',offset:.68},{scale:'1 1'}],310);
   }
 
   // A neutral displacement map preserves the centre. Only the rounded bevel bends the backdrop.

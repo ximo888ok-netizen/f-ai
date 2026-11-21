@@ -11,6 +11,7 @@ import { skillsPage } from './live-skills.js';
 import { copyReviewPage } from './live-copy-review.js';
 import { rightsPage } from './live-rights.js';
 import { mediaPage } from './live-media.js';
+import { studioMotion } from './studio-motion.js';
 
 const main = document.querySelector('#main');
 const tokenKey = 'fai.live.session';
@@ -47,6 +48,7 @@ const pages = {
 };
 const groups = [['desk', 'create', 'models', 'library', 'skills', 'assets', 'media', 'psd', 'tasks', 'schedules'],
   ['products', 'projects', 'team', 'resources', 'customer', 'shops', 'roi'], ['manager', 'inbox', 'rights', 'account', 'settings']];
+const groupLabels = ['内容生产', '经营管理', '系统与账户'];
 const workspaceAliases = { home: 'desk', welcome: 'desk', assistant: 'schedules', image: 'create/image', video: 'create/video',
   copy: 'create/copywriting', service: 'customer', ops: 'shops',
   'desk-mainimg': 'create/image/image.main-image', 'desk-skuimg': 'media/images',
@@ -192,9 +194,11 @@ function setIdentity(data, selected = workspace?.id ?? sessionStorage.getItem(wo
 }
 
 function updateHeader(route, title) {
-  document.querySelector('#nav').innerHTML = identity ? groups.map(group => '<div class="live-navgroup">' +
-    group.map(id => '<a class="navitem ' + (id === route ? 'active' : '') + '" href="#' + id + '"' +
+  studioMotion.links.innerHTML = identity ? groups.map((group, index) => '<div class="live-navgroup">' +
+    '<p class="studio-nav-title">' + h(groupLabels[index]) + '</p>' + group.map(id =>
+      '<a class="navitem ' + (id === route ? 'active' : '') + '" href="#' + id + '"' +
       (id === route ? ' aria-current="page"' : '') + '><span>' + h(pages[id][0]) + '</span></a>').join('') + '</div>').join('') : '';
+  studioMotion.align(route);
   document.querySelector('#profile').textContent = identity ? identity.account.displayName + ' · ' + roleNames[workspace?.role] : '';
   document.querySelector('#queueLink').hidden = !identity;
   document.querySelector('#crumb').innerHTML = workspace ? field('工作区', select('workspace',
@@ -207,7 +211,7 @@ function updateHeader(route, title) {
   });
 }
 
-function viewContext(controller, routeArgs) {
+function viewContext(controller, routeArgs, transition) {
   const selected = workspace;
   const session = identity;
   const active = () => !controller.signal.aborted;
@@ -219,7 +223,10 @@ function viewContext(controller, routeArgs) {
     all: url => getAll(ctx, url),
     html: body => {
       if (!active()) return;
-      main.innerHTML = '<div class="live-main">' + body + '</div>';
+      const view = document.createElement('div');
+      view.className = 'live-main';
+      view.innerHTML = body;
+      studioMotion.mount(view, transition);
       if (typeof StudioGlass !== 'undefined') StudioGlass.schedule();
     },
     go: to => {
@@ -283,17 +290,43 @@ function authPage(ctx) {
   });
 }
 
+const deskLink = (title, route, style = 'studio-text-link') =>
+  '<a class="' + style + '" data-expand-route href="#' + h(route) + '">' + h(title) + '<span aria-hidden="true">→</span></a>';
+const deskMetric = (value, unit) => '<p class="studio-stat-line"><strong>' + h(value) + '</strong><span>' + h(unit) + '</span></p>';
+
+function serviceCard(plugin) {
+  const supported = plugin.capabilities.filter(capability => capability.available);
+  const spotlight = plugin.id === 'customer-service' && plugin.enabled && supported.length > 0;
+  const route = { 'customer-service': 'customer', operations: 'shops' }[plugin.id] ?? 'create/' + plugin.id;
+  const status = plugin.enabled ? supported.length + ' 项服务可用' : '工作区已停用';
+  const detail = spotlight ? '<div>' + deskMetric(supported.length, '项服务可用') +
+    '<p class="studio-service-description">' + h(supported.map(capability => capability.name).join(' · ')) + '</p></div>' :
+    '<p>' + h(status) + '</p>';
+  return '<a class="studio-service' + (spotlight ? ' studio-service-spotlight' : '') + '" data-expand-route href="#' + h(route) +
+    '"><h3>' + h(plugin.name) + '</h3>' + detail + '<span class="studio-service-arrow" aria-hidden="true">' +
+    (spotlight ? '查看服务 <span>→</span>' : '→') + '</span></a>';
+}
+
 async function dashboard(ctx) {
   const [wallet, data, tasks, messages] = await Promise.all([
     ctx.api('/v1/credits/wallet'), ctx.api('/v1/plugins'), ctx.api('/v1/tasks?limit=5'), ctx.api('/v1/notifications?limit=1'),
   ]);
-  ctx.html(heading('商品上新工作台', ctx.workspace.name + ' · ' + roleNames[ctx.workspace.role]) +
-    grid(panel('账户余额', item(wallet.available + ' 可用积分', wallet.reserved + ' 积分预占', link('查看账本', 'account'))),
-      panel('消息', item(messages.unread + ' 条未读', '', link('消息中心', 'inbox')))) +
-    panel('创作与经营', '<div class="live-grid">' + data.items.map(plugin => item(plugin.name,
-      plugin.enabled ? plugin.capabilities.filter(capability => capability.available).length + ' 项服务可用' : '工作区已停用',
-      link('查看', { 'customer-service': 'customer', operations: 'shops' }[plugin.id] ?? 'create/' + plugin.id))).join('') + '</div>') +
-    panel('最近任务', list(tasks.items, task => item(task.capabilityId, date(task.createdAt), link('查看任务', 'tasks/' + task.id)))));
+  const title = '<div class="live-title"><div><h1>商品上新工作台</h1>' +
+    notice(ctx.workspace.name + ' · ' + roleNames[ctx.workspace.role]) + '</div>' +
+    deskLink('打开创作台', 'create', 'smallbtn studio-start') + '</div>';
+  const summary = '<div class="studio-summary"><section class="studio-summary-card"><div><h2>账户余额</h2>' +
+    deskMetric(wallet.available, '可用积分') + '<p class="studio-summary-note">' + h(wallet.reserved) + ' 积分预占</p></div>' +
+    deskLink('查看账本', 'account') + '</section><section class="studio-summary-card"><div><h2>消息</h2>' +
+    deskMetric(messages.unread, '条未读') + '</div>' + deskLink('消息中心', 'inbox') + '</section></div>';
+  const services = '<section aria-labelledby="studio-services"><div class="studio-section-head"><h2 id="studio-services">创作与经营</h2>' +
+    '</div><div class="studio-service-grid">' + data.items.map(serviceCard).join('') + '</div></section>';
+  const capabilityNames = new Map(data.items.flatMap(plugin => plugin.capabilities.map(capability => [capability.id, capability.name])));
+  const activity = '<section aria-labelledby="studio-tasks"><div class="studio-section-head"><h2 id="studio-tasks">最近任务</h2>' +
+    deskLink('查看任务记录', 'tasks') + '</div><div class="studio-tasks-list">' +
+    list(tasks.items, task => item(capabilityNames.get(task.capabilityId) ?? task.capabilityId,
+      date(task.createdAt), link('查看任务', 'tasks/' + task.id)), '暂无任务记录。') +
+    '</div></section>';
+  ctx.html('<div class="studio-desk">' + title + summary + services + activity + '</div>');
 }
 
 async function syncPreferences(id) {
@@ -301,7 +334,7 @@ async function syncPreferences(id) {
     const response = await request('/v1/settings', { workspaceId: id });
     if (workspace?.id !== id) return;
     preferences = response.preferences;
-    window.applyStudioTheme?.(preferences.studioTheme ?? 'glass');
+    window.applyStudioTheme?.(preferences.studioTheme ?? 'studio');
     window.applyStudioMotion?.(preferences.studioMotion);
   } catch (error) {
     if (workspace?.id === id) toast(describeError(error));
@@ -326,7 +359,7 @@ function persistAppearance(key, choice, restore) {
     }
   });
 }
-document.addEventListener('studio-theme', event => persistAppearance('studioTheme', event.detail, value => window.applyStudioTheme?.(value ?? 'glass')));
+document.addEventListener('studio-theme', event => persistAppearance('studioTheme', event.detail, value => window.applyStudioTheme?.(value ?? 'studio')));
 document.addEventListener('studio-motion', event => persistAppearance('studioMotion', event.detail, value => window.applyStudioMotion?.(value)));
 
 async function render() {
@@ -337,13 +370,16 @@ async function render() {
   const [requested, ...args] = (Object.hasOwn(workspaceAliases, fragment) ? workspaceAliases[fragment] : fragment).split('/');
   const route = Object.hasOwn(pages, requested) ? requested : 'desk';
   const [label, page] = pages[route];
-  const ctx = viewContext(controller, args);
+  const transition = studioMotion.takeTransition();
+  if (!identity || !workspace) studioMotion.discardTransition(transition);
+  const ctx = viewContext(controller, args, transition);
   updateHeader(route, label);
   if (!identity || !workspace) { authPage(ctx); return; }
-  ctx.html(heading(label) + notice('正在读取工作区…'));
+  if (!transition) ctx.html(heading(label) + notice('正在读取工作区…'));
   try { await page(ctx); }
   catch (error) {
     if (error.name === 'AbortError' || !ctx.active()) return;
+    studioMotion.discardTransition(transition);
     ctx.html(heading(label) + '<p class="live-error" role="alert">' + h(describeError(error)) + '</p>' + action('重试', 'retry'));
     ctx.click('retry', ctx.reload);
   }
