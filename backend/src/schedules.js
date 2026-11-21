@@ -75,20 +75,27 @@ export function registerSchedules(app, db, providers) {
   });
 }
 
-export async function dispatchSchedule({ db, providers, shops }) {
+export async function dispatchSchedule({ db, providers, shops, identityDb = db }) {
   return db.transaction(async connection => {
     const pending = await row(connection, [
       'SELECT s.id, s.workspace_id, s.account_id, s.request, m.role, w.kind',
       'FROM schedules s JOIN memberships m ON m.workspace_id = s.workspace_id AND m.account_id = s.account_id',
       'JOIN workspaces w ON w.id = s.workspace_id',
-      "WHERE s.state = 'pending' AND s.run_at <= now() ORDER BY s.run_at, s.id",
+      "WHERE s.state = 'pending' AND s.run_at <= now()",
+      'AND NOT EXISTS (SELECT 1 FROM workspace_database_routes r WHERE r.workspace_id = s.workspace_id)',
+      'ORDER BY s.run_at, s.id',
       'LIMIT 1 FOR UPDATE OF s SKIP LOCKED',
     ].join(' '));
     if (!pending) return false;
 
-    const context = { workspaceId: pending.workspace_id, accountId: pending.account_id, role: pending.role, kind: pending.kind };
     await connection.query('SAVEPOINT submit_schedule');
     try {
+      const {workspace_id:workspaceId,account_id:accountId}=pending;
+      const membership = identityDb === db ? pending : await row(identityDb,
+        'SELECT m.role,w.kind FROM memberships m JOIN workspaces w ON w.id=m.workspace_id WHERE m.workspace_id=$1 AND m.account_id=$2',
+        [workspaceId,accountId]);
+      if (!membership) throw new ApiError(403,'MEMBERSHIP_REVOKED','Workspace membership no longer exists');
+      const context = { workspaceId, accountId, role:membership.role, kind:membership.kind };
       const { task } = await submitInTransaction(connection, providers, shops, context, {
         ...pending.request, idempotencyKey: 'schedule:' + pending.id,
       });

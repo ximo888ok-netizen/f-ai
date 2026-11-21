@@ -8,7 +8,7 @@ import { registerAuth } from './auth.js';
 import { contracts, errorContracts } from './contracts.js';
 import { registerCustomerService } from './customer.js';
 import { checkMigrations, migrationFiles } from './db.js';
-import { ApiError } from './http.js';
+import { ApiError, choice, object, route } from './http.js';
 import { createProviders } from './providers.js';
 import { registerSchedules } from './schedules.js';
 import { registerListingDrafts } from './listing-drafts.js';
@@ -23,9 +23,11 @@ import { registerWorkspace } from './workspace.js';
 import { registerWorkspaceLibrary } from './workspace-library.js';
 import { registerWorkspaceDiagnostics } from './workspace-diagnostics.js';
 import { registerWebSearch } from './web-search.js';
+import { workspaceDatabaseRouter } from './workspace-database.js';
+import { registerStudioPsd } from './studio-psd.js';
 
 export async function buildApp({
-  db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null,
+  db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(),
 }) {
   const app = Fastify({
     logger,
@@ -78,6 +80,10 @@ export async function buildApp({
   }));
 
   const requiredMigrations = await migrationFiles();
+  const databaseRouter = workspaceDatabaseRouter(db, dedicatedDatabases, requiredMigrations);
+  const workspaceDb = databaseRouter.db;
+  app.decorate('workspaceDatabaseRouter', databaseRouter);
+  app.decorate('withWorkspaceDatabase', (id, handler) => databaseRouter.run(id, handler));
   app.get('/health', { schema: { tags: ['Health'], summary: 'Check server liveness' } }, async () => ({ status: 'ok' }));
   app.get('/ready', { schema: { tags: ['Health'], summary: 'Check the database and migration readiness' } }, async () => {
     try {
@@ -91,19 +97,24 @@ export async function buildApp({
 
   registerStudio(app);
   registerAuth(app, db);
-  registerStudioProducts(app, db);
-  registerListingDrafts(app, db);
-  registerShopOperations(app, db);
-  registerWallet(app, db);
-  registerWorkspace(app, db);
-  registerWorkspaceLibrary(app, db);
-  registerWorkspaceDiagnostics(app, db, requiredMigrations);
+  route(app,'GET','/v1/workspace/database',{
+    database:'identity', manager:true, tags:['Workspace support'], summary:'Read the current workspace database mode and connection state',
+    response:{200:object({mode:choice('shared','dedicated'),state:choice('ready','preparing','unavailable')})},
+  }, request => databaseRouter.status(request.context.workspaceId));
+  registerStudioProducts(app, workspaceDb);
+  registerStudioPsd(app, workspaceDb);
+  registerListingDrafts(app, workspaceDb);
+  registerShopOperations(app, workspaceDb);
+  registerWallet(app, workspaceDb);
+  registerWorkspace(app, workspaceDb);
+  registerWorkspaceLibrary(app, workspaceDb);
+  registerWorkspaceDiagnostics(app, workspaceDb, requiredMigrations);
   registerWebSearch(app, webSearch);
-  registerAssets(app, db);
-  registerSupport(app, db);
-  registerCustomerService(app, db);
+  registerAssets(app, workspaceDb);
+  registerSupport(app, workspaceDb);
+  registerCustomerService(app, workspaceDb);
   registerModels(app, providers);
-  registerTasks(app, db, providers, shops);
-  registerSchedules(app, db, providers);
+  registerTasks(app, workspaceDb, providers, shops);
+  registerSchedules(app, workspaceDb, providers);
   return app;
 }

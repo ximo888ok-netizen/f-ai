@@ -5,6 +5,7 @@ import { customerPage } from './live-customer.js';
 import { operationsPage } from './live-operations.js';
 import { listingDrafts } from './live-drafts.js';
 import { productPages } from './live-products.js';
+import { psdPage } from './live-psd.js';
 
 const main = document.querySelector('#main');
 const tokenKey = 'fai.live.session';
@@ -15,6 +16,7 @@ const pages = {
   create: ['创作台', taskPages.create],
   library: ['工具库', taskPages.library],
   assets: ['素材库', workspacePages.assets],
+  psd: ['分层设计', psdPage],
   tasks: ['任务记录', taskPages.tasks],
   commerce: ['拼多多运营', operationsPage],
   drafts: ['拼多多草稿', listingDrafts],
@@ -31,7 +33,7 @@ const pages = {
   account: ['账户与积分', workspacePages.account],
   settings: ['设置与诊断', workspacePages.settings],
 };
-const groups = [['desk', 'create', 'library', 'assets', 'tasks', 'schedules'], ['products', 'projects', 'team', 'resources', 'customer', 'shops', 'roi'], ['manager', 'inbox', 'account', 'settings']];
+const groups = [['desk', 'create', 'library', 'assets', 'psd', 'tasks', 'schedules'], ['products', 'projects', 'team', 'resources', 'customer', 'shops', 'roi'], ['manager', 'inbox', 'account', 'settings']];
 const workspaceAliases = { home: 'desk', welcome: 'desk', assistant: 'schedules', image: 'create/image', video: 'create/video',
   copy: 'create/copywriting', service: 'customer', ops: 'shops',
   'desk-mainimg': 'create/image/image.main-image', 'desk-skuimg': 'create/image/image.batch-sku',

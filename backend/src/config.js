@@ -31,10 +31,38 @@ export function config(env = process.env) {
   }
   return {
     port, host: env.HOST || '127.0.0.1', databaseUrl: env.DATABASE_URL, origins,
-    models, videoArchiveOrigins,
+    models, videoArchiveOrigins, dedicatedDatabases: loadDedicatedDatabases(env),
     gateway: { url: env.GATEWAY_URL, token: env.GATEWAY_TOKEN, capabilities },
     shops: loadShops(env.SHOP_BINDINGS_JSON),
   };
+}
+
+function loadDedicatedDatabases(env) {
+  const entries = JSON.parse(env.DEDICATED_DATABASES_JSON || '{}');
+  if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
+    throw new Error('DEDICATED_DATABASES_JSON must map database aliases to secret environment variable names');
+  }
+  const byAlias = new Map();
+  if (!Object.keys(entries).length) return byAlias;
+  const destination = url => [url.hostname.toLowerCase(), url.port || '5432', url.pathname].join('|');
+  let control;
+  try { control = new URL(env.DATABASE_URL); } catch { throw new Error('Invalid control database connection setting'); }
+  const targets = new Set([destination(control)]);
+  for (const [alias, name] of Object.entries(entries)) {
+    if (!/^[a-z][a-z0-9_-]{0,63}$/.test(alias) || typeof name !== 'string' || !/^[A-Z][A-Z0-9_]{0,127}$/.test(name)) {
+      throw new Error('Invalid dedicated database alias or secret variable name');
+    }
+    const secret = env[name];
+    let parsed;
+    try { parsed = new URL(secret); } catch { throw new Error('Missing or invalid dedicated database connection setting'); }
+    if (!['postgresql:','postgres:'].includes(parsed.protocol) || !parsed.hostname || !parsed.pathname.slice(1)
+        || targets.has(destination(parsed))) {
+      throw new Error('Dedicated connection settings must identify distinct PostgreSQL databases');
+    }
+    targets.add(destination(parsed));
+    byAlias.set(alias,secret);
+  }
+  return byAlias;
 }
 
 function loadShops(value) {

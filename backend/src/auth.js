@@ -2,7 +2,7 @@
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { row, rows } from './db.js';
-import { notify } from './notifications.js';
+import { recordMemberEvent } from './workspace-database.js';
 import { ApiError, choice, invalid, notFound, object, requireEnterprise, route, text, uuid } from './http.js';
 
 const derive = promisify(scrypt);
@@ -114,13 +114,13 @@ export function registerAuth(app, db) {
       reply.code(204).send();
     });
 
-  route(app, 'GET', '/v1/members', { manager: true, tags, summary: 'List workspace members' }, async request => {
+  route(app, 'GET', '/v1/members', { manager: true, database: 'identity', tags, summary: 'List workspace members' }, async request => {
     requireEnterprise(request);
     return { items: await rows(db, 'SELECT a.id, a.email, a.display_name AS "displayName", m.role FROM memberships m JOIN accounts a ON a.id = m.account_id WHERE m.workspace_id = $1 ORDER BY m.created_at, a.id', [request.context.workspaceId]) };
   });
 
   route(app, 'POST', '/v1/invitations', {
-    manager: true, tags, summary: 'Create a one-time invitation for a specific email',
+    manager: true, database: 'identity', tags, summary: 'Create a one-time invitation for a specific email',
     body: object({ email: emailSchema, role: choice('admin', 'member') }),
   }, async (request, reply) => {
     requireEnterprise(request);
@@ -144,14 +144,16 @@ export function registerAuth(app, db) {
     if (!invitation) throw notFound('Invitation');
     const workspaceId = invitation.workspace_id;
     const membership = await row(connection, 'INSERT INTO memberships (workspace_id, account_id, role) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, account_id) DO NOTHING RETURNING role', [workspaceId, request.account.id, invitation.role]);
-    await connection.query('INSERT INTO wallets (workspace_id, account_id) VALUES ($1, $2) ON CONFLICT (workspace_id, account_id) DO NOTHING', [workspaceId, request.account.id]);
+    await connection.query(`INSERT INTO wallets(workspace_id,account_id)
+      SELECT $1,$2 WHERE NOT EXISTS (SELECT 1 FROM workspace_database_routes WHERE workspace_id=$1)
+      ON CONFLICT (workspace_id,account_id) DO NOTHING`,[workspaceId,request.account.id]);
     await connection.query('UPDATE invitations SET accepted_at = now() WHERE token_hash = $1', [tokenHash]);
-    if (membership) await notify(connection,workspaceId,request.account.id,'member','member.joined','member:join:' + workspaceId,{role:membership.role});
+    if (membership) await recordMemberEvent(connection,workspaceId,request.account.id,'member.joined','member:join:' + workspaceId,{role:membership.role});
     return { workspaceId, workspaces: await getWorkspaces(connection, request.account.id) };
   }));
 
   route(app, 'PATCH', '/v1/members/:id', {
-    manager: true, tags, summary: 'Change an enterprise member role',
+    manager: true, database: 'identity', tags, summary: 'Change an enterprise member role',
     params: object({ id: uuid }), body: object({ role: choice('admin', 'member') }),
   }, async request => {
     requireEnterprise(request);
@@ -164,7 +166,7 @@ export function registerAuth(app, db) {
       if (!member) throw notFound('Editable member');
       if (member.role === role) return member;
       await tx.query('UPDATE memberships SET role=$3 WHERE workspace_id=$1 AND account_id=$2', [...key,role]);
-      await notify(tx,workspaceId,member.id,'member','member.role-changed','member:role:' + randomUUID(),{previousRole:member.role,role});
+      await recordMemberEvent(tx,workspaceId,member.id,'member.role-changed','member:role:' + randomUUID(),{previousRole:member.role,role});
       return {id:member.id,role};
     });
   });

@@ -4,7 +4,7 @@ import { notFound } from './http.js';
 
 const directory = new URL('../../前端设计审查/', import.meta.url);
 const styles = ['studio.css', 'creation.css', 'commerce.css', 'glass.css', 'workspace.css', 'themes.css', 'components.css', 'live.css'];
-const scripts = ['themes.js', 'glass.js', 'live.js', 'live-workspace.js', 'live-tasks.js', 'live-customer.js', 'live-products.js', 'live-drafts.js', 'live-operations.js', 'operations-file.js'];
+const scripts = ['themes.js', 'glass.js', 'live.js', 'live-workspace.js', 'live-tasks.js', 'live-customer.js', 'live-products.js', 'live-drafts.js', 'live-operations.js', 'operations-file.js', 'live-psd.js'];
 const types = new Map([
   ...styles.map(name => [name, 'text/css; charset=utf-8']),
   ...scripts.map(name => [name, 'text/javascript; charset=utf-8']),

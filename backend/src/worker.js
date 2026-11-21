@@ -18,7 +18,8 @@ async function claim(db) {
   return db.transaction(async connection => {
     const task = await row(connection, [
       'SELECT * FROM tasks',
-      "WHERE (state = 'queued' AND available_at <= now()) OR (state = 'running' AND lease_until <= now())",
+      "WHERE ((state = 'queued' AND available_at <= now()) OR (state = 'running' AND lease_until <= now()))",
+      'AND NOT EXISTS (SELECT 1 FROM workspace_database_routes r WHERE r.workspace_id = tasks.workspace_id)',
       'ORDER BY available_at, created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED',
     ].join(' '));
     if (!task) return null;
@@ -44,8 +45,8 @@ async function claim(db) {
   });
 }
 
-async function providerPayload(db, task, capability, shops) {
-  const scope = await row(db, 'SELECT m.role, w.kind FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.workspace_id = $1 AND m.account_id = $2', [task.workspace_id, task.account_id]);
+async function providerPayload(db, identityDb, task, capability, shops) {
+  const scope = await row(identityDb, 'SELECT m.role, w.kind FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.workspace_id = $1 AND m.account_id = $2', [task.workspace_id, task.account_id]);
   if (!scope) throw new ProviderError('MEMBERSHIP_REVOKED');
   const context = { ...scope, workspaceId: task.workspace_id, accountId: task.account_id };
   await accessibleProject(db, context, task.project_id, true);
@@ -87,7 +88,7 @@ async function providerPayload(db, task, capability, shops) {
   };
 }
 
-export async function workOnce({ db, providers, shops, videoArchive }) {
+export async function workOnce({ db, providers, shops, videoArchive, identityDb = db }) {
   const task = await claim(db);
   if (!task) return false;
   if (task.expired) return true;
@@ -101,7 +102,7 @@ export async function workOnce({ db, providers, shops, videoArchive }) {
     if (task.provider_job_id) {
       result = await provider.poll(task.provider_job_id);
     } else {
-      const payload = await providerPayload(db, task, capability, shops);
+      const payload = await providerPayload(db, identityDb, task, capability, shops);
       if (provider.signature) {
         const marked = await row(db, 'UPDATE tasks SET provider_sent_at = now() WHERE id = $1 AND lease_id = $2 RETURNING id', [task.id, task.lease_id]);
         if (!marked) return true;
@@ -158,8 +159,14 @@ export function startWorker(dependencies, logger) {
   let pending;
   const run = () => {
     if (stopping) return;
-    pending = dispatchSchedule(dependencies)
-      .then(() => workOnce(dependencies))
+    pending = Promise.resolve()
+      .then(() => dependencies.resolveDatabase ? dependencies.resolveDatabase() : dependencies.db)
+      .then(async db => {
+        if (!db) return;
+        const scoped = { ...dependencies, db };
+        await dispatchSchedule(scoped);
+        await workOnce(scoped);
+      })
       .catch(() => logger.error('Background work could not be processed'))
       .finally(() => {
         if (!stopping) timer = setTimeout(run, 500);
