@@ -223,8 +223,8 @@ function httpsUrl(value) {
   catch { return null; }
 }
 
-export async function downloadAsset(ctx, id, name) {
-  const data = await ctx.api('/v1/assets/' + path(id) + '/content', { raw: true });
+export async function downloadAsset(ctx, id, name, variant = 'content') {
+  const data = await ctx.api('/v1/assets/' + path(id) + '/' + variant, { raw: true });
   const blob = await data.blob();
   const url = URL.createObjectURL(blob);
   if (!ctx.active()) { URL.revokeObjectURL(url); return; }
@@ -253,10 +253,11 @@ async function tasks(ctx) {
   const extension = { 'image/png': '.png', 'image/jpeg': '.jpg', 'audio/mpeg': '.mp3', 'video/mp4': '.mp4' }[output?.mediaType] ?? '';
   let outputPanel = '';
   if (output) {
+    if (['image','video'].includes(output.type)) outputPanel += notice('AI 生成');
     if (output.assetId) {
       outputPanel += action('下载结果', 'asset-download', output.assetId) + link('在素材库查看', 'assets') + '<div id="media-result"></div>';
       if (['image/png','image/jpeg'].includes(output.mediaType)) {
-        outputPanel += link('用作新草稿主图', 'drafts/new/image/' + path(output.assetId));
+        outputPanel += action('下载带标识图片','delivery-download',output.assetId) + link('用作新草稿主图', 'drafts/new/image/' + path(output.assetId));
       }
     }
     else if (externalUrl) outputPanel += mediaTag(externalUrl, output.type) + '<a class="smallbtn" href="' + h(externalUrl) +
@@ -282,6 +283,7 @@ async function tasks(ctx) {
     ctx.go(taskRoute(child.id));
   });
   ctx.click('asset-download', asset => downloadAsset(ctx, asset, task.id + extension));
+  ctx.click('delivery-download',asset=>downloadAsset(ctx,asset,'delivery-'+task.id+extension,'delivery'));
   if (output?.assetId && ['image','audio','video'].includes(output.type)) {
     try {
       const response = await ctx.api('/v1/assets/' + path(output.assetId) + '/content', { raw: true });

@@ -11,6 +11,7 @@ import { dispatchSchedule } from './schedules.js';
 import { finishTask, shopFingerprint } from './tasks.js';
 import { accessibleProject } from './workspace.js';
 import { logTask } from './task-events.js';
+import { dispatchFeishuReply } from './feishu-channel.js';
 
 const maxAttempts = 3;
 
@@ -164,8 +165,11 @@ export function startWorker(dependencies, logger) {
       .then(async db => {
         if (!db) return;
         const scoped = { ...dependencies, db };
-        await dispatchSchedule(scoped);
-        await workOnce(scoped);
+        const tasks = dispatchSchedule(scoped).then(() => workOnce(scoped));
+        const results = await Promise.allSettled(scoped.feishu ? [tasks,dispatchFeishuReply(scoped)] : [tasks]);
+        for (const result of results) {
+          if (result.status==='rejected') logger.error('Background work could not be processed');
+        }
       })
       .catch(() => logger.error('Background work could not be processed'))
       .finally(() => {

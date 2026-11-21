@@ -1,6 +1,7 @@
 import { Worker } from 'node:worker_threads';
 import { row, rows } from './db.js';
 import { ApiError, array, choice, integer, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
+import { generatedAsset } from './ai-export-mark.js';
 
 const root = '/v1/studio/psd-documents';
 const tags = ['Studio PSD'];
@@ -110,6 +111,25 @@ export function registerStudioPsd(app, db) {
     reply.code(204).send();
   });
 
+  route(app,'GET','/v1/assets/:id/delivery',{tags,params,summary:'Export an AI-generated image with visible and embedded provenance',
+    produces:['image/png','image/jpeg']},async (request,reply)=>{
+    if (active>=2) throw new ApiError(503,'PSD_RENDER_BUSY','The renderer is busy; retry in a moment');
+    active++;
+    try {
+      const key=[request.context.workspaceId,request.context.accountId,request.params.id];
+      const owned=await row(db,`SELECT a.data,a.media_type,${generatedAsset('a')} AS generated
+        FROM assets a WHERE a.workspace_id=$1 AND a.account_id=$2 AND a.id=$3`,key);
+      if (!owned) throw notFound('Asset');
+      if (!owned.generated || !['image/png','image/jpeg'].includes(owned.media_type)) {
+        throw new ApiError(422,'AI_IMAGE_REQUIRED','Choose a previously generated PNG or JPEG image');
+      }
+      const bytes=await render({format:'marked-source',mime:owned.media_type,subject:owned.data});
+      const suffix=owned.media_type==='image/jpeg'?'.jpg':'.png';
+      return reply.header('content-disposition','attachment; filename="delivery-'+request.params.id+suffix+'"')
+        .type(owned.media_type).send(bytes);
+    } finally {active--;}
+  });
+
   for (const format of ['png','psd']) {
     const extension = format==='png' ? 'preview' : 'export';
     const mime = format==='png' ? 'image/png' : 'application/vnd.adobe.photoshop';
@@ -118,7 +138,8 @@ export function registerStudioPsd(app, db) {
       if (active>=2) throw new ApiError(503,'PSD_RENDER_BUSY','The renderer is busy; retry in a moment');
       active++;
       try {
-        const doc=await row(db,`SELECT d.layout,s.data AS subject,b.data AS background FROM studio_psd_documents d
+        const doc=await row(db,`SELECT d.layout,s.data AS subject,b.data AS background,
+          (${generatedAsset('s')} OR ${generatedAsset('b')}) AS "aiGenerated" FROM studio_psd_documents d
           JOIN assets s ON s.id=d.subject_asset_id AND s.workspace_id=d.workspace_id AND s.account_id=d.account_id
           LEFT JOIN assets b ON b.id=d.background_asset_id AND b.workspace_id=d.workspace_id AND b.account_id=d.account_id
           WHERE d.workspace_id=$1 AND d.account_id=$2 AND d.id=$3`,

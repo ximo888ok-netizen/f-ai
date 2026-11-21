@@ -6,6 +6,7 @@ import { operationsPage } from './live-operations.js';
 import { listingDrafts } from './live-drafts.js';
 import { productPages } from './live-products.js';
 import { psdPage } from './live-psd.js';
+import { cloudAssetsPage, feishuPage } from './live-connectors.js';
 
 const main = document.querySelector('#main');
 const tokenKey = 'fai.live.session';
@@ -17,6 +18,8 @@ const pages = {
   library: ['工具库', taskPages.library],
   assets: ['素材库', workspacePages.assets],
   psd: ['分层设计', psdPage],
+  'cloud-assets': ['网盘备份', cloudAssetsPage],
+  feishu: ['飞书消息', feishuPage],
   tasks: ['任务记录', taskPages.tasks],
   commerce: ['拼多多运营', operationsPage],
   drafts: ['拼多多草稿', listingDrafts],

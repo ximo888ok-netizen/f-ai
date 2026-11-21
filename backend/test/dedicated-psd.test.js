@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { initializeCanvas, readPsd } from 'ag-psd';
-import { createCanvas } from '@napi-rs/canvas';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { imageSize } from 'image-size';
 import { buildApp } from '../src/app.js';
 import { migrate, postgres, row } from '../src/db.js';
@@ -40,10 +40,10 @@ async function json(app,owner,method,url,status,payload) {
   return status===204 ? undefined : response.json();
 }
 async function logo(app,owner,format='png') {
-  const canvas = createCanvas(20,16);
+  const canvas = createCanvas(160,120);
   const context = canvas.getContext('2d');
   context.fillStyle='#ec3914';
-  context.fillRect(0,0,20,16);
+  context.fillRect(0,0,canvas.width,canvas.height);
   const mime='image/'+format;
   const original=canvas.toBuffer(mime);
   const image=await json(app,owner,'POST','/v1/assets',201,{
@@ -97,6 +97,28 @@ test('PNG preview and PSD export keep editable text and separately movable layer
     assert.deepEqual(psd.children[2].text.transform,[1,0,0,1,7,25]);
     assert.ok(psd.children[2].imageData.data.some((v,index)=>index%4===3 && v>0));
     assert.ok(psd.imageData);
+    await json(app,owner,'GET','/v1/assets/'+assetId+'/delivery',422);
+    for (const image of [assetId,background]) {
+      await db.query(`INSERT INTO tasks(id,workspace_id,account_id,capability_id,provider_id,plugin_id,input,
+        request_hash,idempotency_key,state,cost,result) VALUES($1,$2,$3,'image.main-image','model:fixture','image',
+        '{}','fixture',$4,'succeeded',1,$5)`,[randomUUID(),owner.workspace,owner.account.id,randomUUID(),JSON.stringify({assetId:image})]);
+      const marked=await send(app,owner,'GET','/v1/assets/'+image+'/delivery');
+      assert.equal(marked.statusCode,200,marked.statusCode===200?'':marked.body);
+      assert.ok(marked.rawPayload.includes('AI-generated content'));
+      const changed=await loadImage(marked.rawPayload);
+      const canvas=createCanvas(changed.width,changed.height);
+      const context=canvas.getContext('2d');
+      context.drawImage(changed,0,0);
+      const [red]=context.getImageData(153,109,1,1).data;
+      assert.ok(red<100);
+      await json(app,other,'GET','/v1/assets/'+image+'/delivery',404);
+    }
+    const taggedPsd=await send(app,owner,'GET',url+'/export');
+    assert.equal(taggedPsd.statusCode,200);
+    const tagged=readPsd(taggedPsd.rawPayload,{useImageData:true,skipThumbnail:true});
+    assert.equal(tagged.children.at(-1).name,'AI generated');
+    assert.match(tagged.imageResources.xmpMetadata,/aiGenerated="true"/);
+    assert.equal(tagged.children[2].text.text,'Editable QA');
     await json(app,owner,'DELETE',url,204);
     await json(app,owner,'DELETE','/v1/assets/'+assetId,204);
   } finally {

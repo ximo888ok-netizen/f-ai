@@ -17,7 +17,7 @@ export async function customerPage(ctx) {
   const [conversations, bases] = await Promise.all([
     ctx.all(endpoint + '/conversations'), ctx.all('/v1/knowledge/bases'),
   ]);
-  ctx.html(heading('客服工作台') + grid(panel('新会话', form('new-conversation', field('主题', input('subject', 'required maxlength="160"')) +
+  ctx.html(heading('客服工作台') + (ctx.manager ? link('飞书消息','feishu') : '') + grid(panel('新会话', form('new-conversation', field('主题', input('subject', 'required maxlength="160"')) +
     (bases.length ? field('允许引用的知识库（可多选）', select('baseId', bases.map(base => [base.id, base.name]), undefined, 'multiple')) : ''), '创建会话')),
     panel('会话', list(conversations, row => item(row.subject, row.state === 'human' ? '人工接待' : 'AI 接待',
       link('打开会话', 'customer/' + row.id))))) + link('快捷话术', 'customer/replies'));

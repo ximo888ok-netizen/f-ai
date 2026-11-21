@@ -25,9 +25,12 @@ import { registerWorkspaceDiagnostics } from './workspace-diagnostics.js';
 import { registerWebSearch } from './web-search.js';
 import { workspaceDatabaseRouter } from './workspace-database.js';
 import { registerStudioPsd } from './studio-psd.js';
+import { registerCloudAssets } from './cloud-assets.js';
+import { registerFeishuChannel } from './feishu-channel.js';
 
 export async function buildApp({
   db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(),
+  cloudAssets = new Map(), feishu = new Map(),
 }) {
   const app = Fastify({
     logger,
@@ -111,6 +114,8 @@ export async function buildApp({
   registerWorkspaceDiagnostics(app, workspaceDb, requiredMigrations);
   registerWebSearch(app, webSearch);
   registerAssets(app, workspaceDb);
+  registerCloudAssets(app,workspaceDb,cloudAssets);
+  registerFeishuChannel(app,workspaceDb,feishu);
   registerSupport(app, workspaceDb);
   registerCustomerService(app, workspaceDb);
   registerModels(app, providers);

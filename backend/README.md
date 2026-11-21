@@ -168,8 +168,18 @@ GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维
 
 店铺绑定由部署方维护。SHOP_BINDINGS_JSON 接受一个包含 id、workspaceId、name、platform、gatewayReference 和 capabilities 的数组。id 和 workspaceId 是 UUID，platform 为 taobao、pinduoduo 或 douyin。gatewayReference 是网关侧店铺标识，业务端不能修改或读取。发布及批量维护先提交店铺和参数换取有效期 5 分钟的 confirmationId，再用相同参数提交任务。后端在执行前复核角色、绑定目标及店铺能力。
 
+## AI 产物导出标识
+
+任务详情显示 AI 图片及视频的来源提示。带有成功生成记录的本人 PNG 或 JPEG 可用 `GET /v1/assets/{id}/delivery` 导出，渲染可见标识并写入文件元数据。用了生成素材的分层设计，预览 PNG 带可见标识，导出的 PSD 还带独立标识图层和 XMP 元数据。素材库原件和网盘备份保持原始字节。视频当前使用工作台提示，视频文件内标识需独立的视频处理流程。
+
+## 自有网盘与飞书消息
+
+网盘使用部署方提供的 HTTPS WebDAV 集合。设置 `WEBDAV_BINDINGS_JSON`，为每个工作区填写 `workspaceId`、`baseUrl` 和 `authorizationEnv`。在部署密钥中注入该变量的 Basic 或 Bearer 授权头。集合须由部署方预先创建。素材库「备份到网盘」需要明确确认。服务只传所选原文件，远端文件名使用项目生成的标识。备份通过 SHA-256 读回验证后显示为「已核验」，同一素材重试不会覆盖远端不同内容。工作台可下载备份或恢复到原素材 ID。现有远端文件由网盘管理员按归档政策管理。连接配置移除后可查看备份记录，远端操作暂停。协议参考 [WebDAV RFC 4918](https://www.rfc-editor.org/rfc/rfc4918.html)。
+
+飞书使用企业自建机器人和加密 HTTP 事件订阅。通过 `FEISHU_BINDINGS_JSON` 配置每个工作区的连接标识、应用 ID、租户标识和三项部署密钥变量名。事件回调使用 `POST /v1/channels/feishu/{connector}/events`。启用 `im.message.receive_v1` 和机器人接收私聊、发送文本的权限。服务验证签名、时间和应用租户，只接收加密的私聊文本，并对重复事件和消息去重。管理员在「客服工作台 → 飞书消息」查看并确认回复，后台显示排队、发送、失败或待核实。服务用同一飞书消息 UUID 重试，超过重试窗口后保留待核实状态。接入依据 [飞书事件加密文档](https://open.feishu.cn/document/server-docs/event-subscription-guide/event-subscription-configure-/encrypt-key-encryption-configuration-case) 和 [发送消息接口](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/message/create)。
+
 ## 交付范围与验证
 
-当前分支交付可运行的后端首版。图片和视频模型已有原生协议适配，独立数据库路由与分层 PSD 已完成测试环境验证。实际模型生成质量、第三方店铺授权和平台回执仍需实测。购物平台 OAuth、支付与订阅、代理计佣、自有网盘、外部消息渠道仍待实现或接入。专家和技能库、任务额度、事件日志及工作区支持接口已可用于前端联调。客服当前提供本地知识检索回复。42 项是能力目录，第三方能力是否可调用以配置及实际联调为准。
+当前分支交付可运行的后端首版。图片和视频模型已有原生协议适配，独立数据库路由与分层 PSD 已完成测试环境验证。实际模型生成质量、第三方店铺授权和平台回执仍需实测。购物平台 OAuth、支付与订阅、代理计佣仍待实现或接入。WebDAV 与飞书私聊已通过模拟服务测试，真实部署需配置对应连接。专家和技能库、任务额度、事件日志及工作区支持接口已可用于前端联调。客服当前提供本地知识检索回复。42 项是能力目录，第三方能力是否可调用以配置及实际联调为准。
 
 运行 npm test 会使用内存 PostgreSQL（PGlite）执行 API 集成测试。也可把 FAI_TEST_DATABASE_URL 指向空的专用 PostgreSQL 测试库再运行。测试会应用迁移并写入固定测试账号和样例，使用完后可丢弃该测试库。

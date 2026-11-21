@@ -172,17 +172,25 @@ export async function uploadMedia(ctx, data) {
 }
 
 async function assets(ctx) {
-  const files = await ctx.all('/v1/assets');
-  ctx.html(heading('素材库') + grid(panel('上传素材', form('upload',
+  const [files,cloud] = await Promise.all([ctx.all('/v1/assets'),ctx.api('/v1/cloud-assets/status')]);
+  ctx.html(heading('素材库') + link('网盘备份','cloud-assets') + grid(panel('上传素材', form('upload',
     field('文件', input('file', 'type="file" required accept=".png,.jpg,.jpeg,.mp3,.mp4,.psd"')) +
     field('素材来源', input('source', 'required maxlength="200"')) + field('使用用途', input('purpose', 'required maxlength="200"')) +
     field('授权凭证编号（选填）', input('consentReference', 'maxlength="200"')) +
     field('授权截止时间（与凭证同时填写）', input('consentExpiresAt', 'type="datetime-local"')), '上传至工作区')),
     panel('我的素材', list(files, file => item(file.name,
       file.mediaType + ' · ' + Math.ceil(file.sizeBytes / 1024) + ' KiB' + (file.consentExpiresAt ? ' · 授权至 ' + date(file.consentExpiresAt) : ''),
-      action('下载', 'download', file.id) + action('删除', 'delete-asset', file.id))))));
+      action('下载', 'download', file.id) + (cloud.available ? action('备份到网盘','cloud-backup',file.id) : '') +
+      action('删除', 'delete-asset', file.id))))));
   ctx.submit('upload', async data => { await uploadMedia(ctx, data); ctx.reload(); });
   ctx.click('download', id => downloadAsset(ctx, id, files.find(file => file.id === id).name));
+  ctx.click('cloud-backup',async id=>{
+    const file=files.find(asset=>asset.id===id);
+    if (!confirm('将「'+file.name+'」复制到此工作区的自有网盘？')) return;
+    await ctx.api('/v1/cloud-assets/'+path(id),{method:'PUT',body:{confirmed:true}});
+    toast('已备份并核对文件');
+    ctx.go('cloud-assets');
+  });
   deleteButton(ctx, 'delete-asset', id => '/v1/assets/' + path(id), '从工作区删除这项素材？');
 }
 
