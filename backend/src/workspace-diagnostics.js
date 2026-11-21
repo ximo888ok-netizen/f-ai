@@ -11,6 +11,7 @@ const feedbackRecord = object({ ...feedbackFields, createdAt: {type:'string',for
 const columns = 'id,category,message,created_at AS "createdAt"';
 const resultState = choice('ok','degraded','unavailable');
 const bytes = {type:'string',pattern:'^[0-9]+$'};
+const count = integer(0,2147483647);
 
 async function databaseHealth(db, migrations) {
   try {
@@ -39,6 +40,17 @@ export function registerWorkspaceDiagnostics(app, db, migrations) {
     return { database, filesystem, nodeVersion:process.versions.node, uptimeSeconds:Math.floor(process.uptime()),
       memoryBytes:String(process.memoryUsage.rss()), cpuMilliseconds:String(Math.floor((cpu.user+cpu.system)/1000)) };
   });
+
+  route(app, 'GET', '/v1/diagnostics/queue', { tags, manager:true, summary:'Read current workspace queue depth and lease recovery indicators',
+    response:{200:object({queued:count,runnable:count,running:count,expiredLeases:count,dueSchedules:count,
+      oldestRunnableSeconds:{anyOf:[count,{type:'null'}]}})} }, request => row(db, `SELECT
+        count(*) FILTER (WHERE state='queued')::integer AS queued,
+        count(*) FILTER (WHERE state='queued' AND available_at<=now())::integer AS runnable,
+        count(*) FILTER (WHERE state='running')::integer AS running,
+        count(*) FILTER (WHERE state='running' AND lease_until<=now())::integer AS "expiredLeases",
+        floor(extract(epoch FROM now()-(min(available_at) FILTER (WHERE state='queued' AND available_at<=now()))))::integer AS "oldestRunnableSeconds",
+        (SELECT count(*)::integer FROM schedules WHERE workspace_id=$1 AND state='pending' AND run_at<=now()) AS "dueSchedules"
+      FROM tasks WHERE workspace_id=$1 AND state IN ('queued','running')`, [request.context.workspaceId]));
 
   route(app, 'GET', feedback, { tags, summary:'List feedback submitted by this workspace member', querystring:page,
     response: {200: object({items:array(feedbackRecord,100)})} }, async request => ({

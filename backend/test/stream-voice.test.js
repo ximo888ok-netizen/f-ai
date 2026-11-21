@@ -22,11 +22,13 @@ const tinyAudio=process.env.FAI_TEST_FFMPEG_PATH
 const sse=data=>'data: '+JSON.stringify(data)+'\r\n\r\n';
 const fixtureText=text=>({choices:[{index:0,delta:{content:text},finish_reason:null}]});
 const stop=reason=>sse({choices:[{index:0,delta:{},finish_reason:reason}]});
+const namedEvent=(type,data={})=>'event: '+type+'\r\n'+sse({type,...data});
 
 async function fixture(t) {
   const db=process.env.FAI_TEST_DATABASE_URL?postgres(process.env.FAI_TEST_DATABASE_URL):new PGlite();
   const providers=createProviders(),shops=new Map(),requests=[];
   const {promise:releaseFirst,resolve:release}=Promise.withResolvers();
+  const nativeResponses=new Map();
   let speechReject=false;
   let streamingReplies=0;
   const mock=createServer(async (request,response)=>{
@@ -35,6 +37,14 @@ async function fixture(t) {
     const payload=Buffer.concat(parts);
     const body=request.url==='/v1/audio/transcriptions'?null:JSON.parse(payload.toString('utf8'));
     requests.push({path:request.url,body,payload});
+    if (nativeResponses.has(body?.model)) {
+      const {first,later,pause}=nativeResponses.get(body.model);
+      response.writeHead(200,{'content-type':'text/event-stream; charset=utf-8'});
+      response.write(first);
+      await pause;
+      response.end(later);
+      return;
+    }
     if (body?.stream) {
       streamingReplies++;
       response.writeHead(200,{'content-type':'text/event-stream; charset=utf-8'});
@@ -70,6 +80,7 @@ async function fixture(t) {
   const app=await buildApp({db,providers,shops});
   t.after(async()=>{
     release();
+    for (const entry of nativeResponses.values()) entry.resume?.();
     await app.close();
     await new Promise(resolve=>mock.close(resolve));
     await db.close();
@@ -91,8 +102,115 @@ async function fixture(t) {
   }
   const worker=()=>workOnce({db,providers,shops});
   return {db,base,call,register,worker,requests,release,rejectSpeech:()=>{speechReject=true;},
-    streamRequests:()=>streamingReplies,providers,definition};
+    streamRequests:()=>streamingReplies,providers,definition,nativeResponses};
 }
+
+const responsesDelta=(output_index,content_index,delta)=>namedEvent('response.output_text.delta',{output_index,content_index,delta});
+const completedResponses=(...text)=>namedEvent('response.completed',{response:{status:'completed',output:[
+  {type:'reasoning',summary:[{type:'summary_text',text:'内部推理'}]},
+  {type:'message',role:'assistant',content:text.map(part=>({type:'output_text',text:part}))},
+]}});
+const claudeStart=namedEvent('message_start',{message:{role:'assistant'}});
+const claudeBlock=(index,type,text='')=>namedEvent('content_block_start',{index,content_block:{type,text}});
+const claudeText=(index,text)=>namedEvent('content_block_delta',{index,delta:{type:'text_delta',text}});
+const claudeClose=index=>namedEvent('content_block_stop',{index});
+const claudeEnd=stop_reason=>namedEvent('message_delta',{delta:{stop_reason}})+namedEvent('message_stop');
+
+test('native stream adapters deliver visible text, resume the same task, and settle successful work once',async t=>{
+  const {base,call,register,worker,requests,providers,definition,nativeResponses}=await fixture(t);
+  const owner=await register('native-stream-owner');
+  const system={role:'system',content:'Only use product facts.'};
+  const user={role:'user',content:'Show the description.'};
+  const cases=[
+    {
+      id:'responses-qa',protocol:'responses',path:'/v1/responses',
+      first:namedEvent('response.reasoning_summary_text.delta',{delta:'内部推理'})+responsesDelta(1,0,'首段'),
+      later:responsesDelta(1,1,'续段')+completedResponses('首段','续段'),
+      expected:{input:[system,user],store:false},
+    },
+    {
+      id:'claude-qa',protocol:'anthropic-messages',path:'/v1/messages',
+      first:claudeStart+claudeBlock(0,'thinking')+namedEvent('content_block_delta',{index:0,delta:{type:'thinking_delta',thinking:'内部推理'}})
+        +claudeClose(0)+claudeBlock(1,'text')+namedEvent('ping')+claudeText(1,'首段'),
+      later:claudeClose(1)+claudeBlock(2,'text')+claudeText(2,'续段')+claudeClose(2)+claudeEnd('end_turn'),
+      expected:{messages:[user],system:system.content,max_tokens:2048},
+    },
+  ];
+  installModels(providers,cases.map(({id,protocol})=>definition(id,protocol,{streamText:true})));
+  const directory=await call('GET','/v1/models?capabilityId=model.chat',200,owner);
+  assert.deepEqual(directory.items.filter(model=>cases.some(entry=>entry.id===model.id)).map(model=>model.streamText),[true,true]);
+  for (const entry of cases) {
+    await t.test(entry.protocol,async()=>{
+      const {promise:pause,resolve:resume}=Promise.withResolvers();
+      nativeResponses.set(entry.id,{first:entry.first,later:entry.later,pause,resume});
+      const submitted=await call('POST','/v1/tasks',202,owner,{capabilityId:'model.chat',mode:'chat',modelId:entry.id,
+        parameters:{messages:[system,user],stream:true},idempotencyKey:randomUUID()});
+      const taskPath='/v1/tasks/'+submitted.id;
+      const initial=await fetch(base+taskPath+'/stream',{headers:owner,signal:AbortSignal.timeout(10000)});
+      const execution=worker();
+      try {
+        const reader=initial.body.getReader();
+        const decoder=new TextDecoder();
+        let wire='';
+        while (!wire.includes('首段')) {
+          const next=await reader.read();
+          assert.equal(next.done,false);
+          wire+=decoder.decode(next.value,{stream:true});
+        }
+        assert.match(wire,/id: 1\nevent: delta/);
+        assert.doesNotMatch(wire,/event: done|内部推理/);
+        assert.equal((await call('GET',taskPath,200,owner)).state,'running');
+        await reader.cancel();
+      } finally {resume();}
+      assert.equal(await execution,true);
+      const replay=await fetch(base+taskPath+'/stream?after=1',{headers:owner});
+      const wire=await replay.text();
+      assert.doesNotMatch(wire.split('event: done')[0],/首段|内部推理/);
+      assert.match(wire,/id: 2\nevent: delta/);
+      assert.match(wire,/event: done/);
+      assert.equal((await call('GET',taskPath,200,owner)).result.text,'首段\n续段');
+      const providerCalls=requests.filter(request=>request.path===entry.path && request.body?.model===entry.id);
+      assert.equal(providerCalls.length,1);
+      assert.deepEqual(providerCalls[0].body,{model:entry.id,...entry.expected,stream:true});
+    });
+  }
+  const wallet=await call('GET','/v1/credits/wallet',200,owner);
+  assert.equal(wallet.balance,26);
+  assert.equal(wallet.reserved,0);
+});
+
+test('native streams reject missing or conflicting final events and refund without leaking staged text',async t=>{
+  const {base,call,register,worker,requests,providers,definition,nativeResponses}=await fixture(t);
+  const owner=await register('native-stream-failures');
+  installModels(providers,[definition('responses-qa','responses',{streamText:true}),
+    definition('claude-qa','anthropic-messages',{streamText:true})]);
+  const cases=[
+    ['responses-qa',completedResponses('不一致结果'),'MODEL_RESPONSE_INCOMPLETE'],
+    ['responses-qa',namedEvent('response.refusal.delta',{delta:'拒绝解释'}),'MODEL_CONTENT_BLOCKED'],
+    ['claude-qa',claudeClose(0)+namedEvent('message_delta',{delta:{stop_reason:'end_turn'}}),'MODEL_RESPONSE_INCOMPLETE'],
+    ['claude-qa',claudeClose(0)+claudeEnd('max_tokens'),'MODEL_RESPONSE_INCOMPLETE'],
+    ['claude-qa',namedEvent('error',{error:{type:'overloaded_error',message:'未公开错误详情'}}),'MODEL_STREAM_INTERRUPTED'],
+  ];
+  for (const [modelId,later,errorCode] of cases) {
+    const first=modelId==='responses-qa'?responsesDelta(0,0,'未完成片段'):claudeStart+claudeBlock(0,'text')+claudeText(0,'未完成片段');
+    nativeResponses.set(modelId,{first,later});
+    const submitted=await call('POST','/v1/tasks',202,owner,{capabilityId:'model.chat',mode:'chat',modelId,
+      parameters:{messages:[{role:'user',content:'Exercise a model failure.'}],stream:true},idempotencyKey:randomUUID()});
+    await worker();
+    const taskPath='/v1/tasks/'+submitted.id;
+    const result=await call('GET',taskPath,200,owner);
+    assert.equal(result.state,'failed');
+    assert.equal(result.errorCode,errorCode);
+    assert.equal(result.attempts,1);
+    const replay=await fetch(base+taskPath+'/stream',{headers:owner});
+    assert.doesNotMatch(await replay.text(),/event: delta|未完成片段|未公开错误详情|拒绝解释/);
+  }
+  assert.equal(await worker(),false);
+  assert.equal(requests.length,cases.length);
+  const wallet=await call('GET','/v1/credits/wallet',200,owner);
+  assert.equal(wallet.balance,30);
+  assert.equal(wallet.reserved,0);
+});
 
 test('archive configuration errors omit connection credentials',async ()=>{
   const settings={databaseUrl:'postgresql://qa:fixture-private-value@invalid host/database',dedicatedDatabases:new Map()};

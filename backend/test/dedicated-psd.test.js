@@ -160,6 +160,8 @@ test('enterprise cutover handles interruption, preserves business data and fails
     });
     assert.equal(await workOnce({db:control,providers,shops}),true);
     const pending=await json(app,enterprise,'POST','/v1/tasks/'+original.id+'/regenerate',202,{idempotencyKey:'dedicated-test-again'});
+    const queue='/v1/diagnostics/queue';
+    assert.equal((await json(app,enterprise,'GET',queue,200)).runnable,1);
 
     const interrupted={query:(...args)=>control.query(...args),transaction:run=>control.transaction(tx=>run({
       query:(sql,args)=>{
@@ -169,6 +171,7 @@ test('enterprise cutover handles interruption, preserves business data and fails
     }))};
     await assert.rejects(cutoverWorkspace(interrupted,target,workspace,'dedicated'),/Simulated interruption/);
     assert.deepEqual(await json(app,enterprise,'GET','/v1/workspace/database',200),{mode:'dedicated',state:'preparing'});
+    await json(app,enterprise,'GET',queue,503);
     await json(app,enterprise,'POST','/v1/projects',503,{name:'Must not fall back'});
     const onSource=await row(control,'SELECT count(*)::int AS count FROM assets WHERE workspace_id=$1',[workspace]);
     assert.equal(onSource.count,1);
@@ -177,6 +180,8 @@ test('enterprise cutover handles interruption, preserves business data and fails
     assert.equal((await cutoverWorkspace(control,target,workspace,'dedicated')).state,'active');
     assert.equal((await cutoverWorkspace(control,target,workspace,'dedicated')).alreadyActive,true);
     assert.deepEqual(await json(app,enterprise,'GET','/v1/workspace/database',200),{mode:'dedicated',state:'ready'});
+    assert.equal((await json(app,enterprise,'GET',queue,200)).runnable,1);
+    assert.equal((await json(app,member,'GET',queue,200)).runnable,0);
     assert.equal((await json(app,enterprise,'GET','/v1/projects/'+project.id,200)).name,project.name);
     assert.equal((await json(app,enterprise,'GET',psdPath+'/'+design.id,200)).subjectAssetId,assetId);
     const migratedNotice=await json(app,enterprise,'GET','/v1/rights/notices/'+notice.id,200);
@@ -199,6 +204,7 @@ test('enterprise cutover handles interruption, preserves business data and fails
     const routed=await app.workspaceDatabaseRouter.workerDatabase('dedicated');
     assert.equal(await workOnce({db:routed,identityDb:control,providers,shops}),true);
     assert.equal((await json(app,enterprise,'GET','/v1/tasks/'+pending.id,200)).state,'succeeded');
+    assert.equal((await json(app,enterprise,'GET',queue,200)).oldestRunnableSeconds,null);
     const hosted=await send(app,member,'GET','/v1/assets/'+sharedAsset+'/content');
     assert.equal(hosted.statusCode,200);
     await json(app,member,'GET','/v1/assets/'+assetId+'/content',404);

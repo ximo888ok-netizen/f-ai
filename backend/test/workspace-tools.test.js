@@ -166,6 +166,36 @@ test('feedback replay, onboarding progress and diagnostics keep their access bou
   assert.ok(BigInt(diagnosis.memoryBytes)>0n);
 });
 
+test('queue diagnostics separate runnable, delayed and expired work and require workspace management', async () => {
+  const endpoint='/v1/diagnostics/queue';
+  await request('GET',endpoint,401,{workspace:owner.workspace});
+  await request('GET',endpoint,403,member);
+  const user=await request('POST','/v1/auth/register',201,undefined,{
+    email:'queue-health-owner@example.test',password:'test-workspace-tools-42',displayName:'Queue QA',type:'personal',
+  });
+  const account={...user,workspace:user.workspaces[0].id};
+  const empty={queued:0,runnable:0,running:0,expiredLeases:0,dueSchedules:0,oldestRunnableSeconds:null};
+  assert.deepEqual(await request('GET',endpoint,200,account),empty);
+  await provisionCredits(db,account.workspace,account.account.id,10,'queue-health-seed');
+  const submission=()=>({capabilityId:'copywriting.detect-terms',mode:'workflow',
+    parameters:{content:'Queue diagnostic sample'},idempotencyKey:randomUUID()});
+  const [ready,delayed,expired,active]=await Promise.all(Array.from({length:4},()=>request('POST','/v1/tasks',202,account,submission())));
+  await db.query("UPDATE tasks SET available_at=now()-interval '2 minutes' WHERE id=$1",[ready.id]);
+  await db.query("UPDATE tasks SET available_at=now()+interval '1 hour' WHERE id=$1",[delayed.id]);
+  for (const [task,minutes] of [[expired,-1],[active,1]]) {
+    await db.query("UPDATE tasks SET state='running',lease_id=$2,lease_until=now()+($3::integer * interval '1 minute') WHERE id=$1",
+      [task.id,randomUUID(),minutes]);
+  }
+  const runAt=new Date(Date.now()+3600000).toISOString();
+  const due=await request('POST','/v1/schedules',201,account,{...submission(),runAt});
+  await request('POST','/v1/schedules',201,account,{...submission(),runAt});
+  await db.query("UPDATE schedules SET run_at=now()-interval '3 minutes' WHERE id=$1",[due.id]);
+  const {oldestRunnableSeconds,...counts}=await request('GET',endpoint,200,account);
+  assert.deepEqual(counts,{queued:2,runnable:1,running:2,expiredLeases:1,dueSchedules:1});
+  assert.ok(oldestRunnableSeconds>=120 && oldestRunnableSeconds<180);
+  assert.deepEqual(await request('GET',endpoint,200,visitor),empty);
+});
+
 test('member notifications track actual role transitions and respect their own preference', async () => {
   const inbox='/v1/notifications';
   const role='/v1/members/'+member.account.id;

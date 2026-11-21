@@ -14,6 +14,29 @@ export function textPrompt(payload) {
   return instructions[payload.capabilityId] + '遵循输入中的平台、语言、文案类型和修订要求。仅使用给定商品事实。\n' + JSON.stringify(payload.parameters);
 }
 
+export function textRequest({ protocol, model }, messages) {
+  switch (protocol) {
+    case 'chat-completions': return ['chat/completions', { model, messages }];
+    case 'responses': return ['responses', { model, input: messages, store: false }];
+    case 'anthropic-messages': {
+      const instruction = messages[0].role === 'system' ? messages[0].content : undefined;
+      return ['messages', { model, max_tokens: 2048, messages: instruction === undefined ? messages : messages.slice(1), system: instruction }];
+    }
+    default: throw new ProviderError('CAPABILITY_UNAVAILABLE');
+  }
+}
+
+export function responsesText(response) {
+  if (response?.status !== 'completed') throw new ProviderError('MODEL_RESPONSE_INCOMPLETE');
+  if (!Array.isArray(response.output)) throw new ProviderError('INVALID_PROVIDER_RESULT');
+  const parts = response.output.filter(item => item?.type === 'message' && item.role === 'assistant')
+    .flatMap(item => Array.isArray(item.content) ? item.content : []);
+  if (parts.some(part => part?.type === 'refusal')) throw new ProviderError('MODEL_CONTENT_BLOCKED');
+  const text = parts.filter(part => part?.type === 'output_text').map(part => part.text);
+  if (text.some(part => typeof part !== 'string')) throw new ProviderError('INVALID_PROVIDER_RESULT');
+  return text.join('\n');
+}
+
 export async function generateText(route, payload, call) {
   const { protocol, model } = route;
   const prompt = textPrompt(payload);
@@ -25,19 +48,16 @@ export async function generateText(route, payload, call) {
   let data;
   switch (protocol) {
     case 'chat-completions':
-      data = await call('chat/completions', { model, messages });
+      data = await call(...textRequest(route, messages));
       if (data?.choices?.[0]?.finish_reason === 'content_filter') throw new ProviderError('MODEL_CONTENT_BLOCKED');
       if (data?.choices?.[0]?.finish_reason === 'length') throw new ProviderError('MODEL_RESPONSE_INCOMPLETE');
       text = data?.choices?.[0]?.message?.content;
       break;
     case 'responses':
-      data = await call('responses', { model, input: messages, store: false });
-      if (data?.status !== 'completed') throw new ProviderError('MODEL_RESPONSE_INCOMPLETE');
-      text = data.output?.filter(item => item.type === 'message' && item.role === 'assistant')
-        .flatMap(item => item.content ?? []).filter(part => part.type === 'output_text').map(part => part.text).join('\n');
+      text = responsesText(await call(...textRequest(route, messages)));
       break;
     case 'anthropic-messages':
-      data = await call('messages', { model, max_tokens: 2048, messages: turns, system });
+      data = await call(...textRequest(route, messages));
       if (['max_tokens', 'refusal'].includes(data?.stop_reason)) throw new ProviderError('MODEL_RESPONSE_INCOMPLETE');
       text = data?.content?.filter(block => block.type === 'text').map(block => block.text).join('\n');
       break;

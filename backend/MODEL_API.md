@@ -62,7 +62,9 @@ modelId 可省略。服务按配置顺序选择第一个声明支持该能力的
 
 ### 可续接的文本流
 
-为支持标准 SSE 的 `chat-completions` 模型配置 `streamText: true`。`GET /v1/models?capabilityId=model.chat` 中的 `streamText` 表示该模型是否启用此能力。通过 `POST /v1/tasks` 提交 `model.chat`，在 `parameters` 中填入 `stream: true` 和正常的 `messages`，沿用现有任务幂等键和积分规则。
+支持流式输出的 `chat-completions`、`responses` 和 `anthropic-messages` 模型可配置 `streamText: true`。`GET /v1/models?capabilityId=model.chat` 中的 `streamText` 表示该模型是否启用此能力。通过 `POST /v1/tasks` 提交 `model.chat`，在 `parameters` 中填入 `stream: true` 和正常的 `messages`，沿用现有任务幂等键和积分规则。
+
+Responses 请求沿用 `store: false`，成功时比对增量文本与最终回答。Anthropic Messages 沿用原有系统指令和消息字段，并检查完整的消息结束事件。两个协议都只向客户端发送可见的回答文本。[Responses 流式事件](https://developers.openai.com/api/reference/resources/responses/streaming-events) · [Anthropic 流式消息](https://platform.claude.com/docs/en/build-with-claude/streaming)
 
 持会话授权头和工作区头请求 `GET /v1/tasks/{id}/stream`。只允许任务所有者访问。服务依次提供 `state`、带序号和 `text` 的 `delta`、以及包含最终任务结果或错误的 `done`。断开后用最后收到的 `Last-Event-ID` 或 `after` 续接。长连接到期会给出 `reconnect` 及游标，客户端可重新连接。终态以 `done` 或原有任务查询为准。供应商返回不完整或被拦截时，失败任务会释放平台预占并移除暂存片段。客户端断开连接不取消已开始的队列任务。[Chat Completions 流式协议](https://developers.openai.com/api/reference/resources/chat/subresources/completions/streaming-events)
 

@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { catalog, modelAlias } from './catalog.js';
 import { invalid, object, route as httpRoute, text } from './http.js';
 import { requestProviderStream, requestUpstream } from './model-http.js';
-import { streamChat } from './model-stream.js';
+import { supportsTextStream, streamText } from './model-stream.js';
 import { generateImage } from './model-image.js';
 import { pollMapped, runMapped, validateMappedMedia, validateMapping } from './model-mapping.js';
-import { generateText, textCapabilities, textPrompt } from './model-text.js';
+import { generateText, textCapabilities, textPrompt, textRequest } from './model-text.js';
 import { utilityCapabilities, runUtility } from './model-utilities.js';
 import { pollVideo, startVideo } from './model-video.js';
 
@@ -101,8 +101,8 @@ export function installModels(providers, definitions, env = process.env) {
     const headers = headersFor(config, key);
     if (entry.streamText!==undefined && typeof entry.streamText!=='boolean') throw new Error('streamText must be a boolean');
     const streaming=entry.streamText===true;
-    if (streaming && (config.protocol!=='chat-completions' || !capabilities.includes('model.chat'))) {
-      throw new Error('Text streaming requires a Chat Completions model with model.chat');
+    if (streaming && (!supportsTextStream(config.protocol) || !capabilities.includes('model.chat'))) {
+      throw new Error('Text streaming requires a supported streaming protocol with model.chat');
     }
     const info = { id: config.id, model: config.model, protocol: config.protocol, kind, capabilities: [...new Set(capabilities)], streamText:streaming };
     const signature = createHash('sha256').update(JSON.stringify([base.href,config,entry.keyEnv,...(streaming?[true]:[])])).digest('hex');
@@ -129,9 +129,9 @@ export function installModels(providers, definitions, env = process.env) {
       },
     };
     if (streaming) adapter.streamText=async (payload,writeChunk)=>{
-      const body={model:config.model,messages:payload.parameters.messages,stream:true};
-      const content=await requestProviderStream(new URL('chat/completions',base),{headers,body});
-      return streamChat(config.id,content,writeChunk);
+      const [path,body]=textRequest(config,payload.parameters.messages);
+      const content=await requestProviderStream(new URL(path,base),{headers,body:{...body,stream:true}});
+      return streamText(config,content,writeChunk);
     };
     if (config.protocol === 'json-http' && entry.mapping.poll) adapter.poll = id => pollMapped(config, id, call);
     else if (config.protocol !== 'json-http' && kind === 'video') adapter.poll = id => pollVideo(config, id, call);
