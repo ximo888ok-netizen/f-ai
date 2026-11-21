@@ -13,6 +13,7 @@ import { createProviders } from './providers.js';
 import { registerSchedules } from './schedules.js';
 import { registerListingDrafts } from './listing-drafts.js';
 import { registerStudio } from './studio.js';
+import { registerShopOperations } from './shop-operations.js';
 import { registerStudioProducts } from './studio-products.js';
 import { registerSupport } from './support.js';
 import { registerModels } from './models.js';
@@ -46,7 +47,7 @@ export async function buildApp({
 
   app.addHook('onRoute', options => {
 
-    const response = contracts.get(options.url)?.[options.method];
+    const response = contracts.get(options.url)?.[options.method] ?? options.schema?.response;
     if (response && options.schema) options.schema.response = { ...response, ...errorContracts };
   });
 
@@ -90,6 +91,7 @@ export async function buildApp({
   registerAuth(app, db);
   registerStudioProducts(app, db);
   registerListingDrafts(app, db);
+  registerShopOperations(app, db);
   registerWallet(app, db);
   registerWorkspace(app, db);
   registerAssets(app, db);

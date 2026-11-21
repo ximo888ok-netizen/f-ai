@@ -2,6 +2,7 @@
 import { workspacePages } from './live-workspace.js';
 import { taskPages } from './live-tasks.js';
 import { customerPage } from './live-customer.js';
+import { operationsPage } from './live-operations.js';
 import { listingDrafts } from './live-drafts.js';
 import { productPages } from './live-products.js';
 
@@ -15,6 +16,7 @@ const pages = {
   library: ['工具库', taskPages.library],
   assets: ['素材库', workspacePages.assets],
   tasks: ['任务记录', taskPages.tasks],
+  commerce: ['拼多多运营', operationsPage],
   drafts: ['拼多多草稿', listingDrafts],
   products: ['商品档案', productPages.products],
   roi: ['投放收益测算', productPages.roi],

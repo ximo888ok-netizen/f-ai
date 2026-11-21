@@ -7,9 +7,16 @@ const textField = (label, name, value, attrs = '') => field(label, input(name, a
 
 export async function listingDrafts(ctx) {
   const [id] = ctx.args;
+  if (id === 'quality') {
+    const checks = await ctx.all(endpoint + '/quality');
+    ctx.html(heading('草稿资料检查', '按工作台字段检查完整度。平台资质和审核结果需在店铺核实。') +
+      link('返回草稿列表','drafts') + panel('检查结果', list(checks, check => item(check.title,
+        check.missing.length ? '待补：' + check.missing.join('、') : '工作台检查项均已填写', link('编辑商品草稿','drafts/' + check.id)))));
+    return;
+  }
   if (!id) {
     const records = await ctx.all(endpoint);
-    ctx.html(heading('拼多多草稿', '保存在当前工作区，仅自己可见。') + link('新建商品草稿', 'drafts/new') +
+    ctx.html(heading('拼多多草稿', '保存在当前工作区，仅自己可见。') + link('新建商品草稿', 'drafts/new') + link('检查草稿资料', 'drafts/quality') +
       panel('我的草稿', list(records, record => item(record.title, '最近保存于 ' + date(record.updatedAt),
         link('继续编辑', 'drafts/' + record.id)), '还没有保存的商品草稿。')));
     return;

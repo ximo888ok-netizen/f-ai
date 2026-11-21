@@ -48,6 +48,15 @@ export function registerListingDrafts(app, db) {
     items: await rows(db, `SELECT ${summary} FROM listing_drafts WHERE workspace_id=$1 AND account_id=$2
       ORDER BY updated_at DESC,id LIMIT $3 OFFSET $4`, [request.context.workspaceId, request.context.accountId, ...paginate(request.query)]),
   }));
+  route(app, 'GET', root + '/quality', { tags, summary: 'Check own Studio drafts for missing product information', querystring: page }, async request => ({
+    items: await rows(db, `SELECT id,title,array_remove(ARRAY[
+      CASE WHEN category='' THEN '类目' END, CASE WHEN specification='' THEN '规格' END,
+      CASE WHEN sku='' THEN '商家 SKU' END, CASE WHEN price_minor IS NULL THEN '售价' END,
+      CASE WHEN stock IS NULL THEN '库存' END, CASE WHEN description='' THEN '商品描述' END,
+      CASE WHEN NOT EXISTS (SELECT 1 FROM listing_draft_images i WHERE i.draft_id=d.id AND i.role='detail') THEN '详情图' END
+    ],NULL) AS missing FROM listing_drafts d WHERE workspace_id=$1 AND account_id=$2
+    ORDER BY updated_at DESC,id LIMIT $3 OFFSET $4`, [request.context.workspaceId,request.context.accountId,...paginate(request.query)]),
+  }));
   route(app, 'GET', root + '/:id', { tags, summary: 'Open a Studio draft with its ordered images', params }, request =>
     readDraft(db, [request.context.workspaceId, request.context.accountId, request.params.id]));
   route(app, 'PUT', root + '/:id', { tags, summary: 'Save a Studio draft at its expected revision (zero for new)', params, body }, async request => {

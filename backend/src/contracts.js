@@ -41,6 +41,13 @@ const plugin = shape({
 const draftSummary = { id: uuid, title: string, revision: count, updatedAt: date };
 const listingDraft = shape({ ...draftSummary, category: string, description: string, specification: string, sku: string,
   priceMinor: nullable(count), stock: nullable(count), images: items(shape({ role: enumOf('main','sku','detail'), assetId: uuid })) });
+const operationField = { type:'object', properties: { label:string, type:enumOf('text','money','date','integer','choice'),
+  min:count, max:count, optional:bool, choices:items(string) }, required:['label','type'] };
+const operationModule = shape({ label:string, keyLabel:string, fields:{type:'object',additionalProperties:operationField} });
+const operationTotals = shape({kind:string,total:count,pending:count,low:count});
+const operationInsights = shape({states:items(shape({kind:string,status:string,count})),overdue:shape({orders:count,tickets:count}),
+  reviewTags:items(shape({tag:string,count}))});
+const dailyOrders = shape({day:string,orders:count,withAmount:count,paidMinor:nullable(string),units:string});
 const studioCategory = shape({ id: uuid, name: string });
 const studioProduct = shape({ id: uuid, sku: string, name: string, description: string, categoryId: nullable(uuid), updatedAt: date });
 const studioTransfer = shape({ id: uuid, direction: enumOf('import', 'export'), count, createdAt: date });
@@ -110,7 +117,12 @@ export const contracts = new Map([
   ['/v1/notifications', { GET: { 200: shape({ items: items(notification), unread: count }) } }],
   ['/v1/notifications/:id/read', { POST: { 204: none } }],
   ['/v1/notifications/read-all', { POST: { 204: none } }],
+  ['/v1/studio/pinduoduo/modules', { GET: { 200: {type:'object',additionalProperties:operationModule} } }],
+  ['/v1/studio/pinduoduo/books/:book/summary', { GET: { 200: collection(operationTotals) } }],
+  ['/v1/studio/pinduoduo/books/:book/insights', { GET: { 200: operationInsights } }],
+  ['/v1/studio/pinduoduo/books/:book/analytics', { GET: { 200: collection(dailyOrders) } }],
   ['/v1/studio/pinduoduo-drafts', { GET: { 200: collection(shape(draftSummary)) } }],
+  ['/v1/studio/pinduoduo-drafts/quality', { GET: { 200: collection(shape({ id: uuid, title: string, missing: items(string) })) } }],
   ['/v1/studio/pinduoduo-drafts/:id', { GET: { 200: listingDraft }, PUT: { 200: listingDraft } }],
   ['/v1/studio/categories', { GET: { 200: collection(studioCategory) }, POST: { 201: studioCategory } }],
   ['/v1/studio/categories/:id', { PATCH: { 200: studioCategory }, DELETE: { 204: none } }],

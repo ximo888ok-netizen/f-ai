@@ -43,7 +43,7 @@ test('Studio entry only serves real app code and current theme components', asyn
   assert.match(entry.body, /\/studio\/components\.css/);
   assert.doesNotMatch(entry.body, /src="studio\.js"/);
   assert.match(entry.headers['content-security-policy'], /connect-src 'self'/);
-  for (const file of ['live.js', 'live-tasks.js', 'live-workspace.js', 'live-products.js', 'live-drafts.js', 'live-customer.js', 'components.css', 'assets/aurora.webp']) {
+  for (const file of ['live.js', 'live-tasks.js', 'live-workspace.js', 'live-products.js', 'live-drafts.js', 'live-operations.js', 'operations-file.js', 'live-customer.js', 'components.css', 'assets/aurora.webp']) {
     assert.equal((await send('GET', '/studio/' + file)).statusCode, 200, file);
   }
   assert.equal((await send('GET', '/studio/studio.js')).statusCode, 404);
@@ -101,6 +101,10 @@ test('Studio drafts keep ordered owned images, reject publication, and handle ed
   assert.equal(saved.revision, 1);
   assert.equal(saved.priceMinor, null);
   assert.equal(saved.stock, null);
+  const check = data(await send('GET', root + '/quality', owner), 200).items.find(r => r.id === saved.id);
+  assert.ok(check.missing.includes('售价') && check.missing.includes('库存'));
+  assert.ok(!check.missing.includes('详情图'));
+  assert.deepEqual(data(await send('GET', root + '/quality', other), 200).items, []);
   assert.deepEqual(saved.images, input.images);
   assert.deepEqual(await put(input, 200), saved);
   assert.deepEqual(data(await send('GET', url, owner), 200), saved);
@@ -120,6 +124,71 @@ test('Studio drafts keep ordered owned images, reject publication, and handle ed
   data(await send('DELETE', '/v1/assets/' + detail, owner), 204);
   assert.equal(data(await send('GET', root, owner), 200).items.length, 1);
   assert.deepEqual(data(await send('GET', '/v1/tasks', owner), 200).items, []);
+});
+
+test('shop ledgers isolate business records and compute local backlog and sales from committed data', async () => {
+  const root = '/v1/studio/pinduoduo';
+  const book = data(await send('POST', root+'/books', owner, {name:'QA Ledger'}),200);
+  assert.deepEqual(data(await send('POST', root+'/books', owner, {name:'QA Ledger'}),200),book);
+  const base = root + '/books/' + book.id;
+  const url = base + '/records/orders';
+  const details = {title:'Sample basket',day:'2026-02-01',shipBy:'2026-02-04',units:2,status:'待发货',paidMinor:1250};
+  const entry = {reference:'Q/01',details};
+  const write = (payload, code) => send('PUT',url,owner,payload).then(r => data(r,code));
+  const original = await write({...entry,revision:0},200);
+  assert.equal(original.revision,1);
+  assert.deepEqual(await write({...entry,revision:0},200),original);
+  data(await send('GET',url,other),404);
+  data(await send('GET',base+'/insights?asOf=2026-02-05',other),404);
+  data(await send('PUT',url,other,{...entry,revision:1}),404);
+  const memberId = other.account.id;
+  await db.query("INSERT INTO memberships(workspace_id,account_id,role) VALUES($1,$2,'member')",[owner.workspaces[0].id,memberId]);
+  const member = {...other,workspaces:[owner.workspaces[0]]};
+  data(await send('GET',root+'/books',member),403);
+  data(await send('PUT',url,member,{...entry,revision:1}),403);
+  assert.deepEqual(data(await send('GET',url+'/lookup?reference=Q%2F01',owner),200),original);
+  const batch = (items,code) => send('POST',url+'/import',owner,{items}).then(r=>data(r,code));
+  await batch([{reference:'A',details},{...entry,details:{...details,units:7}}],409);
+  assert.deepEqual(data(await send('GET',url,owner),200).items,[original]);
+  await batch([{reference:'A',details},{reference:' A ',details}],400);
+  const {paidMinor,...unpriced} = details;
+  const more = [{reference:'B',details:unpriced},{reference:'C',details:{...details,status:'已取消'}}];
+  assert.deepEqual(await batch(more,200),{inserted:2,unchanged:0});
+  assert.deepEqual(await batch(more,200),{inserted:0,unchanged:2});
+  const updated = await write({...entry,revision:1,details:{...details,paidMinor:0}},200);
+  assert.equal(updated.revision,2);
+  await write({...entry,revision:1},409);
+  assert.equal(data(await send('GET',url+'?status='+encodeURIComponent('已取消'),owner),200).items.length,1);
+  assert.equal(data(await send('GET',url+'?overdueOn=2026-02-04',owner),200).items.length,0);
+  assert.equal(data(await send('GET',url+'?overdueOn=2026-02-05',owner),200).items.length,2);
+  const analytic = data(await send('GET',base+'/analytics?from=2026-02-01&to=2026-02-01',owner),200);
+  assert.deepEqual(analytic.items,[{day:'2026-02-01',orders:2,withAmount:1,paidMinor:'0',units:'4'}]);
+  const save = (kind,reference,details,code=200) => send('PUT',base+'/records/'+kind,owner,{reference,details,revision:0}).then(r=>data(r,code));
+  await save('reviews','R',{title:'Item',day:'2026-02-02',content:'Good',status:'已拟回复'},400);
+  await save('reviews','R',{title:'Item',day:'2026-02-02',content:'Good',tags:'service, service，delivery',status:'已拟回复',reply:'Thank you'});
+  await save('shipments','S',{title:'Box',orderRef:'Q/01',status:'已交运'},400);
+  await save('shipments','S',{title:'Box',orderRef:'Q/01',status:'已交运',carrier:'Carrier',tracking:'T1'});
+  await save('inventory','SKU1',{title:'Item',stock:0,threshold:0,day:'2026-02-01'});
+  await save('inventory','SKU2',{title:'Item',stock:3,threshold:2,day:'2026-02-01'});
+  await save('tickets','T1',{title:'Check',status:'跟进中',due:'2026-02-02'});
+  await save('returns','A1',{title:'Review request',status:'待处理',kind:'仅退款',orderRef:'Q/01'});
+  await save('campaigns','C1',{title:'Plan',status:'筹备中',start:'2026-03-01',end:'2026-02-01'},400);
+  await save('campaigns','C1',{title:'Plan',status:'筹备中',start:'2026-02-01',end:'2026-03-01'});
+  await save('shippingTemplates','F',{title:'Standard',regions:'Local',firstFeeMinor:400,nextFeeMinor:50});
+  await save('attributes','P',{title:'Sizes',category:'Home',properties:'Material'});
+  await save('qualifications','DOC',{title:'Documentation',productRef:'SKU1',status:'待收集'});
+  await save('returnRules','RR',{title:'Returns',scope:'Local',instructions:'Contact team'});
+  const metrics={title:'Item',sku:'SKU1',day:'2026-02-01',views:20,visitors:5,buyers:2,salesMinor:3500};
+  await save('performance','M',metrics);
+  await save('performance','M2',metrics,409);
+  const totals=data(await send('GET',base+'/summary',owner),200).items;
+  assert.equal(totals.find(i=>i.kind==='inventory').low,1);
+  const insights=data(await send('GET',base+'/insights?asOf=2026-02-05',owner),200);
+  assert.deepEqual(insights.overdue,{orders:2,tickets:1});
+  assert.deepEqual(insights.reviewTags,[{tag:'delivery',count:1},{tag:'service',count:1}]);
+  assert.equal(data(await send('GET',base+'/records/inventory?low=true',owner),200).items[0].reference,'SKU1');
+  data(await send('POST',base+'/publish',owner,{}),404);
+  assert.deepEqual(data(await send('GET','/v1/tasks',owner),200).items,[]);
 });
 
 test('server settings save favorites and theme and suppress task notifications when disabled', async () => {
