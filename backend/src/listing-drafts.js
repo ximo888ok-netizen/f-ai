@@ -36,15 +36,58 @@ export async function readDraft(db, key) {
 function normalized(input) {
   const title = input.title.trim();
   if (!title) throw invalid('Enter a product title');
-  const images = input.images.map(({ role, assetId }) => ({ role, assetId: assetId.toLowerCase() }));
+  const images = normalizeDraftImages(input.images);
+  return { title, category: input.category?.trim() ?? '', description: input.description?.trim() ?? '',
+    specification: input.specification?.trim() ?? '', sku: input.sku?.trim() ?? '',
+    priceMinor: input.priceMinor ?? null, stock: input.stock ?? null, images };
+}
+
+function normalizeDraftImages(entries) {
+  const images = entries.map(({ role, assetId }) => ({ role, assetId: assetId.toLowerCase() }));
   if (images[0].role !== 'main' || images.filter(i => i.role === 'main').length !== 1 ||
       images.filter(i => i.role === 'sku').length > 1 || images.filter(i => i.role === 'detail').length > 20 ||
       new Set(images.map(i => i.role + i.assetId)).size !== images.length) {
     throw invalid('Choose one main image first, at most one SKU image and up to 20 distinct detail images');
   }
-  return { title, category: input.category?.trim() ?? '', description: input.description?.trim() ?? '',
-    specification: input.specification?.trim() ?? '', sku: input.sku?.trim() ?? '',
-    priceMinor: input.priceMinor ?? null, stock: input.stock ?? null, images };
+  return images;
+}
+
+async function verifyImageAssets(db, key, entries) {
+  const ids = [...new Set(entries.map(image => image.assetId).filter(Boolean))];
+  const assets = await rows(db, `SELECT id, media_type FROM assets WHERE workspace_id=$1 AND account_id=$2
+    AND id=ANY($3::uuid[]) AND NOT rights_restricted ORDER BY id FOR SHARE`, [key[0], key[1], ids]);
+  if (assets.length !== ids.length) throw notFound('Asset');
+  if (assets.some(asset => !['image/png','image/jpeg'].includes(asset.media_type))) throw invalid('Use JPEG or PNG images');
+}
+
+async function writeImages(db, draftId, images) {
+  for (const [position, image] of images.entries()) {
+    await db.query('INSERT INTO listing_draft_images (draft_id,position,role,asset_id) VALUES ($1,$2,$3,$4)',
+      [draftId, position, image.role, image.assetId]);
+  }
+}
+
+async function lockDraft(db, key) {
+  const lock = await row(db, 'SELECT id FROM listing_drafts WHERE workspace_id=$1 AND account_id=$2 AND id=$3 FOR UPDATE', key);
+  if (!lock) throw notFound('Draft');
+  return readDraft(db, key);
+}
+
+export async function applyDraftImages(db, key, revision, {main, details}) {
+  await lockPlugin(db, key[0], 'operations');
+  const draft = await lockDraft(db, key);
+  const images = normalizeDraftImages([main, ...draft.images.filter(image => image.role === 'sku'), ...details]);
+  if (draft.revision !== revision) {
+    if (draft.revision === revision + 1 && matches(draft, {images})) return draft;
+    throw new ApiError(409, 'DRAFT_CHANGED', 'The draft was edited in another session');
+  }
+  await verifyImageAssets(db, key, images);
+  if (matches(draft, {images})) return draft;
+  await db.query(`UPDATE listing_drafts SET revision=revision+1,updated_at=now()
+    WHERE workspace_id=$1 AND account_id=$2 AND id=$3`, key);
+  await db.query('DELETE FROM listing_draft_images WHERE draft_id=$1', [key[2]]);
+  await writeImages(db, key[2], images);
+  return readDraft(db, key);
 }
 
 function normalizeVariants(variants) {
@@ -110,9 +153,7 @@ export function registerListingDrafts(app, db) {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO NOTHING RETURNING id`, args);
       let current;
       if (!inserted) {
-        const lock = await row(tx, 'SELECT id FROM listing_drafts WHERE workspace_id=$1 AND account_id=$2 AND id=$3 FOR UPDATE', key);
-        if (!lock) throw notFound('Draft');
-        current = await readDraft(tx, key);
+        current = await lockDraft(tx, key);
       }
       const variants = submittedVariants ?? current?.variants ?? [];
       if (current && current.revision !== expected) {
@@ -120,20 +161,13 @@ export function registerListingDrafts(app, db) {
         throw new ApiError(409, 'DRAFT_CHANGED', 'The draft was edited in another session');
       }
       validateVariants(values, variants);
-      const ids = [...new Set([...values.images, ...(submittedVariants ?? [])].map(img => img.assetId).filter(Boolean))];
-      const assets = await rows(tx, `SELECT id, media_type FROM assets WHERE workspace_id=$1 AND account_id=$2
-        AND id=ANY($3::uuid[]) AND NOT rights_restricted ORDER BY id FOR KEY SHARE`, [key[0], key[1], ids]);
-      if (assets.length !== ids.length) throw notFound('Asset');
-      if (assets.some(asset => !['image/png','image/jpeg'].includes(asset.media_type))) throw invalid('Use JPEG or PNG images');
+      await verifyImageAssets(tx, key, [...values.images, ...(submittedVariants ?? [])]);
       if (!inserted) {
         await tx.query(`UPDATE listing_drafts SET title=$4,category=$5,description=$6,specification=$7,sku=$8,price_minor=$9,
           stock=$10,revision=revision+1,updated_at=now() WHERE workspace_id=$1 AND account_id=$2 AND id=$3`, args);
         await tx.query('DELETE FROM listing_draft_images WHERE draft_id=$1', [key[2]]);
       }
-      for (const [i, image] of values.images.entries()) {
-        await tx.query('INSERT INTO listing_draft_images (draft_id,position,role,asset_id) VALUES ($1,$2,$3,$4)',
-          [key[2], i, image.role, image.assetId]);
-      }
+      await writeImages(tx, key[2], values.images);
       if (submittedVariants !== undefined) {
         if (current) await tx.query('DELETE FROM listing_draft_variants WHERE draft_id=$1', [key[2]]);
         for (const [i, v] of submittedVariants.entries()) {

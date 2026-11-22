@@ -59,11 +59,12 @@ async function submit(db, providers, shops, context, input, parentId = null) {
   return db.transaction(connection => submitInTransaction(connection, providers, shops, context, input, parentId));
 }
 
-export async function submitInTransaction(connection, providers, shops, context, input, parentId = null) {
+export async function submitInTransaction(connection, providers, shops, context, input, parentId = null, { requireImageAsset = false } = {}) {
   const { workspaceId, accountId } = context;
   const { capabilityId: id, projectId, mode, parameters, idempotencyKey, confirmationId } = input;
   const capability = catalog.get(id);
   const storedInput = { mode, parameters };
+  if (requireImageAsset) storedInput.requireImageAsset = true;
   if (input.modelId !== undefined) storedInput.modelId = input.modelId;
   const hash = digest(stableJson({ id, projectId: projectId ?? null, storedInput, parentId, confirmationId: confirmationId ?? null }));
   // The workspace plugin lock prevents submit/disable races. A per-wallet lock also
@@ -221,6 +222,9 @@ export function registerTasks(app, db, providers, shops) {
     params: idParams, body: object({ idempotencyKey: keySchema, instructions:text(2000) }, ['idempotencyKey']),
   }, async (request, reply) => {
     const previous = await findTask(db, request.context, request.params.id, '*');
+    if (previous.input.requireImageAsset) {
+      throw new ApiError(409, 'IMAGE_PLAN_RETRY_REQUIRED', 'Retry this image from its product image plan');
+    }
     if (['queued', 'running'].includes(previous.state)) throw new ApiError(409, 'TASK_IN_PROGRESS', 'Wait for the original task to finish');
     if (catalog.get(previous.capability_id).requiresConfirmation) {
       throw new ApiError(409, 'CONFIRMATION_REQUIRED', 'Create a fresh shop preview before submitting again');

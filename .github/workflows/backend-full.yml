@@ -2,7 +2,7 @@ name: Backend full regression
 
 on:
   push:
-    branches: [feat/backend-native-streams]
+    branches: [feat/backend-native-streams, 'ci/backend-*']
     paths:
       - 'backend/**'
       - '前端设计审查/**'
@@ -95,6 +95,7 @@ jobs:
   windows-offline:
     name: Build and verify Windows x64 offline backend
     needs: regression
+    if: github.ref == 'refs/heads/feat/backend-native-streams'
     runs-on: windows-2022
     timeout-minutes: 35
     steps:

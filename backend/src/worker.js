@@ -116,7 +116,12 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
         result=await provider.streamText(payload,(sequence,text)=>appendTaskText(db,task,sequence,text));
       } else result=await provider.run(task,payload);
     }
+    if (task.input.requireImageAsset && !(result instanceof PendingModelJob)) {
+      if (!(result instanceof GeneratedFile)) result = GeneratedFile.image(result?.dataBase64, result?.mediaType);
+      if (!['image/png','image/jpeg'].includes(result.mediaType)) throw new ProviderError('INVALID_PROVIDER_IMAGE');
+    }
   } catch (error) {
+    if (task.input.requireImageAsset) result = undefined;
     if (error instanceof ApiError) failure = new ProviderError(error.code);
     else if (error instanceof ProviderError) failure = error;
     else failure = new ProviderError('TASK_EXECUTION_ERROR', (!provider?.signature && !provider?.nonRepeatable) || Boolean(task.provider_job_id));

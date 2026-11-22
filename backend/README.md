@@ -160,6 +160,23 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 
 实时通话客户端通过 `GET /v1/voice/realtime/options` 查询当前工作区可用的音色、通话时长和积分。WebRTC 会话的建立、恢复状态和挂断步骤见[实时双工语音](./MODEL_API.md#实时双工语音)。
 
+## 商品套图
+
+套图方案可以由商品名称、要求和当前成员上传的 PNG/JPEG 素材生成初稿。初稿按内置构图模板生成，可修改。真正的出图由部署中支持 `image.main-image` 的模型或业务网关执行，每张按独立任务排队。选择模型时用 `GET /v1/models?capabilityId=image.main-image`。套图需要可保存的 PNG 或 JPEG，模型需返回图片字节。配置业务网关时，可回 `result.dataBase64` 和可选的 `result.mediaType`。仅返回预览 URL 的结果会标为失败并释放积分。
+
+以下路径均以 `/v1/media/images/product-plans` 开头。
+
+| 方法 | 请求 | 结果 |
+| --- | --- | --- |
+| `POST /` | `{id, productName, requirements, assetIds, detailCount}`。客户端生成 UUID，最多 6 张参考图、合计 20 MiB。详情可选 0–7 张 | 返回含 1 张主图和详情图的初稿。相同 ID 和内容重发可找回已保存方案 |
+| `GET /`，`GET /:id` | 列表支持 `limit`、`offset` | 查询自己的方案、总状态、各图片的 `position`、`taskId`、`state`、`errorCode` 和可用的 `assetId` |
+| `PUT /:id` | `{revision, designNotes, images:[{role,title,direction}]}`。第一张为 `main`，其余为 `detail` | 保存编辑并递增版本。409 表示版本过期或方案已确认 |
+| `POST /:id/confirm` | `{revision, modelId?}` | 锁定方案，原子预占整组积分并入队。余额不足时整组保持草稿。重复确认返回已建任务 |
+| `POST /:id/images/:position/retry` | `{taskId}`，传该位置失败或已取消的任务 ID | 返回新尝试。重发同一请求返回同一重试任务 |
+| `POST /:id/apply-to-draft` | `{draftId, draftRevision, detailPositions:[1,2,3]}` | 用已生成的第 0 张作为主图，按所选顺序替换详情图，保留草稿的 SKU 图、商品信息和变体。目标需为当前成员已有的拼多多草稿 |
+
+`estimatedCredits` 按方案中图片数量和当前每张任务成本计算。部分完成时可先选已有的成功图片回填。刷新后按方案 ID 恢复状态。CI 使用合成商品和本机回环模型适配器验收失败、重试、积分及草稿回填。
+
 ## 本地商品草稿
 
 「商品档案 → 拼多多草稿」支持主规格和最多 49 个附加规格。先上传图片至素材库，再为附加规格选图。点「检查草稿资料」可看到各规格未填的商家 SKU、售价或库存。

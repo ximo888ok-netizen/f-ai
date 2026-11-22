@@ -36,6 +36,7 @@ import { registerVideoDelivery } from './video-delivery.js';
 import { registerRightsNotices } from './rights-notices.js';
 import { registerSkillRuns } from './skill-runs.js';
 import { registerImageStudio } from './image-studio.js';
+import { registerProductImagePlans } from './product-image-plans.js';
 import { registerImagePreflight } from './image-preflight.js';
 import { registerStoryboards } from './video-storyboards.js';
 import { registerCopywritingReview } from './copywriting-review.js';
@@ -145,6 +146,7 @@ export async function buildApp({
   registerWebSearch(app, webSearch);
   registerAssets(app, workspaceDb);
   registerImageStudio(app,workspaceDb);
+  registerProductImagePlans(app, workspaceDb, providers, shops);
   registerImagePreflight(app,workspaceDb);
   registerCopywritingReview(app,workspaceDb);
   registerCopywritingDrafts(app,workspaceDb);
