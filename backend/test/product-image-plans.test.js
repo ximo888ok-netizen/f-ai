@@ -39,8 +39,8 @@ test('product image plans generate one main and three details, retry one failure
       assert.deepEqual(Buffer.from(await form.get('image').arrayBuffer()),sourceImage);
       const prompt = form.get('prompt');
       assert.match(prompt,/整体设计：统一使用深蓝底色/);
-      const title = prompt.match(/图片标题：([^\n]+)/)[1];
-      assert.ok(resultImages.has(title));
+      const title = prompt.match(/^图片标题：([^\r\n]+)/m)?.[1];
+      assert.ok(resultImages.has(title),'Unexpected image title: '+JSON.stringify(title));
       providerCalls.push(title);
       const firstScene = title === '使用场景' && providerCalls.filter(value=>value===title).length === 1;
       // A URL-only provider response cannot be applied to a draft or paid as a successful image.
