@@ -36,7 +36,7 @@ async function run(tool,args,timeout) {
 async function inspect(ffprobe,file) {
   return JSON.parse(await run(ffprobe,[
     '-v','error',...mp4Input,'-i',file,
-    '-show_entries','stream=codec_type,width,height,r_frame_rate,duration,sample_aspect_ratio:stream_disposition=attached_pic:stream_side_data=rotation:format=duration:format_tags=fai_ai_generated',
+    '-show_entries','stream=codec_type,codec_name,width,height,r_frame_rate,duration,sample_aspect_ratio:stream_disposition=attached_pic:stream_side_data=rotation:format=duration:format_tags=fai_ai_generated',
     '-of','json',
   ],10000));
 }
@@ -171,8 +171,10 @@ export function createVideoDelivery({
         videoMap.splice(0,videoMap.length,'-filter_complex_threads','1','-filter_complex',filter,'-map','[marked]');
       }
       const hasAudio=keepAudio && Boolean(video.audio);
+      // Keep existing AAC packets and their timestamps when only the video is edited.
+      const audioOutput=video.audio?.codec_name==='aac'?['-c:a','copy']:audioEncoding;
       await run(ffmpeg,[...base,...inputArgs,...badgeArgs,...videoMap,
-        ...(hasAudio?['-map','0:a:0',...audioEncoding]:['-an']),...videoEncoding,
+        ...(hasAudio?['-map','0:a:0',...audioOutput]:['-an']),...videoEncoding,
         '-t',String(maxSeconds+1),...mux(mark),output],90000);
       const duration=hasAudio?video.duration:(video.videoDuration || video.duration);
       return verify(output,{...target,duration,tolerance:Math.max(0.15,1/video.fps),videoDuration:video.videoDuration,
