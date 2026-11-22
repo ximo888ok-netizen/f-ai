@@ -10,6 +10,20 @@
 
 ## 发布前
 
+### Windows x64 后端离线包
+
+在联网准备机预热本锁文件的 npm 缓存后，从后端目录运行 `npm run release:offline -- <全新交付目录绝对路径>`。构建读取当前 Git 提交中的后端、SDK 和工作台公开运行文件。设置 `FAI_NODE_DIST` 为 Node.js 24 Windows x64 发行目录、`FAI_PG_DIST_ARCHIVE` 为含 pgsql 目录的 EDB Windows x64 二进制 ZIP、`VIDEO_FFMPEG_PATH` 为 LGPL 共享版 ffmpeg.exe 的绝对路径、`FAI_QA_NPM_CACHE` 为 npm 缓存。构建使用锁文件离线安装生产依赖，输出压缩包与 SHA-256。包内 release.json 记录源码提交、依赖版本和许可、运行工具来源、版本及每个原生文件的摘要。
+
+将压缩包传到目标机后，用可信交付记录中的 SHA-256 核验，再对新目录运行 `tar -xf <压缩包> -C <空目录>`。包内 `runtime/postgres/bin` 提供 initdb、pg_ctl、psql 和归档工具。在私有数据目录用 `initdb -D <新库目录> -U <管理员> -A scram-sha-256 -W` 初始化，再用 `pg_ctl -D <库目录> -l <日志文件> -w start` 启动实例。创建应用数据库并配置受保护的 DATABASE_URL，将 FAI_PG_BIN 指向包内 PostgreSQL bin 目录，媒体工具路径指向 runtime/media，编码器与构建匹配。在包内 backend 目录运行 `../runtime/node.exe src/admin.js migrate` 和 `../runtime/node.exe src/server.js`。包内服务从随包文件读取提交编号，无需目标机安装 Node 或运行 npm。
+
+构建机可用独立验收脚本复验完整包。设置 `FAI_QA_OFFLINE_ARCHIVE` 和可信的 `FAI_QA_OFFLINE_SHA256`，运行 `npm run accept:deployment`。脚本在空目录验证摘要和候选提交，用包内运行时初始化临时 PostgreSQL、启动 HTTP 并恢复两库。正式目标机另按相同流程记录验收。
+
+### 任务日志与候选版本观察
+
+在后端目录运行 `npm run ops:logs -- <工作区UUID> <私有绝对目录> --watch`。部署服务管理器可持续运行该命令；省略 `--watch` 会导出一次。导出器按绑定读取当前企业库，按 UTC 日期生成工作区专属 JSONL。当日重复导出会刷新已提交事件。文件只含时间、级别、事件、任务 ID、事件 ID 和错误码。默认保留七个日历日，可通过 `FAI_LOG_KEEP_DAYS` 设为 1–90 天。业务接口按本人任务、级别和时间检索 `GET /v1/tasks/{id}/events?level=warn&from=...&to=...`。本地目录权限由部署账号管理。
+
+将 `FAI_RELEASE_REVISION` 设置为候选的完整 Git 提交编号，配置 `FAI_PROBE_ORIGIN` 及测试工作区和会话后，运行 `npm run ops:observe -- watch <证据库绝对路径>`。每分钟检查就绪状态、候选版本和已配置的工作区探测。SQLite 证据按候选、来源和工作区隔离，保留实际时间及错误码。`once` 执行一次，`report` 读取记录。失败、时钟倒退或超过两分钟的缺口会重新起算。满七天且最近样本仍新鲜时报告 `qualified: true`。账户、机器配置、核心业务的抽测分母和质量复核随外部验收单记录。
+
 使用指定的 Git 提交建立干净的发布目录。安装 Node.js 24，使用 `npm ci --omit=dev` 安装后端依赖。保留 `backend` 和工作台前端目录的相对位置。将数据库连接和可选供应商配置通过部署环境注入。视频处理需要 FFmpeg、FFprobe 和所选编码器。
 
 对每个企业独立库使用与现有绑定一致的别名。发布前停止共享库和独立库的所有写入，包括应用实例、队列和定时任务。备份完成后运行 `npm run migrate`，再运行 `npm start`。用 `/health` 检查进程，用 `/ready` 检查版本和主数据库，用企业管理账号读取 `/v1/workspace/database` 验证独立库路由。环境使用自己的密钥，测试账号和测试物料留在隔离环境。

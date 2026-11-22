@@ -14,7 +14,7 @@ function verifier(password) {
     createHash('sha256').update(hmac('Client Key')).digest('base64') + ':' + hmac('Server Key').toString('base64');
 }
 
-export async function rotationFixture({ work, application, env, port, Client, controlUrl, sql, cliLogs }) {
+export async function rotationFixture({ work, application, node, env, port, Client, controlUrl, sql, cliLogs }) {
   const dir = join(work, 'encrypted');
   const keysFile = join(work, 'keys.dbkeys.json');
   await mkdir(dir, { mode: 0o700 });
@@ -26,7 +26,7 @@ export async function rotationFixture({ work, application, env, port, Client, co
   const newPassword = randomBytes(24).toString('hex') + ':@/%';
   const tenantUrl = (db, password) => 'postgresql://fai_tenant_qa:' + encodeURIComponent(password) + '@127.0.0.1:' + port + '/' + db;
   function credentialCommand(args, input, expected = 0) {
-    const result = spawnSync(process.execPath, ['src/database-credentials.js', ...args], {
+    const result = spawnSync(node, ['src/database-credentials.js', ...args], {
       env: { ...env, ...credentialEnv }, cwd: application, windowsHide: true, encoding: 'utf8', input, timeout: 15000 });
     cliLogs.push(result.stdout || '', result.stderr || '');
     assert.equal(result.status, expected, 'Unexpected credential CLI exit status');

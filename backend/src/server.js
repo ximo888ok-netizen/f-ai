@@ -1,5 +1,6 @@
 
 import { loadEnvFile } from 'node:process';
+import { readFileSync } from 'node:fs';
 import { buildApp } from './app.js';
 import { config } from './config.js';
 import { postgres } from './db.js';
@@ -12,6 +13,7 @@ import { createVideoDelivery } from './video-delivery.js';
 import { createCustomerAnswer } from './customer-answer.js';
 import { assertControlDatabase } from './workspace-database.js';
 import { createFeishuBindings } from './feishu.js';
+import { createWechatBindings } from './wechat-channel.js';
 import { createWebdavBindings } from './webdav.js';
 import { createRealtimeBindings } from './realtime-provider.js';
 import { createSmsBindings } from './tencent-sms.js';
@@ -23,13 +25,18 @@ try {
 }
 
 const settings = config();
+try {
+  const revision=readFileSync(new URL('../release-revision.txt',import.meta.url),'utf8').trim();
+  if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error('Invalid packaged release revision');
+  process.env.FAI_RELEASE_REVISION=revision;
+} catch (error) {if (error.code!=='ENOENT') throw error;}
 const feishu=createFeishuBindings();
 const cloudAssets=createWebdavBindings();
 const db = postgres(settings.databaseUrl);
 await assertControlDatabase(db);
 const dedicatedDatabases = new Map([...settings.dedicatedDatabases].map(([key,url])=>[key,postgres(url)]));
 const providers = installModels(createProviders(settings.gateway), settings.models);
-const dependencies = { db, providers, shops: settings.shops, feishu, sms:createSmsBindings(), realtimeVoice:createRealtimeBindings(),
+const dependencies = { db, providers, shops: settings.shops, feishu, wechat:createWechatBindings(), sms:createSmsBindings(), realtimeVoice:createRealtimeBindings(),
   videoArchive: createVideoArchive(settings.videoArchiveOrigins) };
 const app = await buildApp({ ...dependencies, dedicatedDatabases, cloudAssets, videoDelivery:createVideoDelivery(),
   customerAnswer:createCustomerAnswer(providers,process.env.CUSTOMER_ASSISTANT_LOCAL_MODEL_ID), origins: settings.origins, webSearch:createExaSearch(process.env.EXA_API_KEY), logger: true });

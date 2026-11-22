@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { row, rows } from './db.js';
 import { capabilityId } from './catalog.js';
+import { registerMemoryChanges } from './memory-changes.js';
 import { array, bool, choice, integer, invalid, notFound, object, page, paginate, requireEnterprise, requireManager, route, text, uuid } from './http.js';
 
 const notificationTags = ['Notifications'];
@@ -59,7 +60,8 @@ export function registerSupport(app, db) {
   ].join(' '), [request.context.workspaceId, request.context.accountId, request.body]));
 
   const scopeSchema = choice('personal', 'enterprise');
-  const memoryFields = 'id, content, scope, created_at AS "createdAt"';
+  registerMemoryChanges(app, db);
+  const memoryFields = 'id, content, scope, revision, created_at AS "createdAt"';
   route(app, 'GET', '/v1/memory', {
     tags: memoryTags, summary: 'Read personal or enterprise memory in the current workspace',
     querystring: object({ scope: scopeSchema, ...page.properties }, ['scope']),

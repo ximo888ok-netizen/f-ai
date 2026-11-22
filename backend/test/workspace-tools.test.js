@@ -11,6 +11,13 @@ import { workOnce } from '../src/worker.js';
 import { createExaSearch } from '../src/web-search.js';
 import { ProviderError } from '../src/model-http.js';
 import { probe } from '../src/ops-probe.js';
+import { bindPluginV1 } from '../sdk/workspace-v1.mjs';
+import { manifest,overview } from '../sdk/examples/asset-inbox.mjs';
+import { exportTaskLogs } from '../src/task-log-export.js';
+import { observationSummary } from '../src/ops-observation.js';
+import { mkdtemp,readFile,readdir,rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const db = process.env.FAI_TEST_DATABASE_URL ? postgres(process.env.FAI_TEST_DATABASE_URL) : new PGlite();
 const providers = createProviders();
@@ -64,6 +71,80 @@ before(async () => {
 after(async () => {
   await app?.close();
   await db.close();
+});
+
+test('confirmed memory evolution is versioned, reversible and scoped to each member or enterprise', async () => {
+  for (const scope of ['personal','enterprise']) {
+    const item=await request('POST','/v1/memory',201,owner,{scope,content:'Original QA'});
+    const path='/v1/memory/'+item.id+'/changes', event=path+'/'+randomUUID();
+    const update={action:'update',revision:item.revision,content:'Revised QA'};
+    assert.equal(item.revision,0);
+    await request('GET',path,404,visitor);
+    await request('PUT',event,scope==='personal'?404:403,member,update);
+    const results=await Promise.all([request('PUT',event,200,owner,update),request('PUT',event,200,owner,update)]);
+    assert.deepEqual(results[0],results[1]);
+    await request('PUT',path+'/'+randomUUID(),409,owner,update);
+    const undo=await request('PUT',path+'/'+randomUUID(),200,owner,{action:'undo',revision:1});
+    assert.equal(undo.revision,2);
+    assert.equal((await request('GET','/v1/memory?scope='+scope,200,owner)).items.find(i=>i.id===item.id).content,'Original QA');
+    await request('PUT',event,200,owner,update);
+    await request('PUT',event,409,owner,{...update,content:'Conflict'});
+    const history=await request('GET',path,200,scope==='enterprise'?member:owner);
+    assert.deepEqual(history.items.map(i=>i.action),['undo','update']);
+    assert.ok(!JSON.stringify(history).includes('Original QA'));
+    await request('DELETE','/v1/memory/'+item.id,204,owner);
+    assert.equal((await db.query('SELECT count(*) AS n FROM memory_changes WHERE item_id=$1',[item.id])).rows[0].n.toString(),'0');
+  }
+});
+
+test('versioned sample plugin uses authenticated asset and notification routes and honors revocation', async () => {
+  let allowed=true;
+  const transport=async (method,url,input)=>request(method,url,method==='POST'?201:200,owner,input);
+  const writer=bindPluginV1(transport,{sdkVersion:1,permissions:['assets.write']},()=>true);
+  const asset=await writer.uploadAsset({name:'Plugin QA',mediaType:'image/png',source:'fixture',purpose:'SDK',
+    dataBase64:Buffer.from('89504e470d0a1a0a','hex').toString('base64')});
+  const reader=bindPluginV1(transport,manifest,()=>allowed);
+  assert.ok((await overview(reader)).recentAssets.some(a=>a.id===asset.id));
+  assert.equal((await reader.asset(asset.id)).name,'Plugin QA');
+  assert.equal(reader.uploadAsset,undefined);
+  allowed=false;
+  assert.throws(()=>reader.asset(asset.id),/DENIED/);
+  assert.throws(()=>bindPluginV1(transport,{...manifest,sdkVersion:2},()=>true),/manifest/);
+  assert.throws(()=>bindPluginV1(transport,{...manifest,permissions:['everything']},()=>true),/permission/);
+  await request('GET','/v1/assets/'+asset.id,404,member);
+});
+
+test('committed task logs rotate by UTC date, expire, and exclude business content',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'fai-task-logs-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  await provisionCredits(db,owner.workspace,owner.account.id,1,'event-export-qa');
+  const task=await request('POST','/v1/tasks',202,owner,{capabilityId:'copywriting.detect-terms',mode:'workflow',
+    parameters:{content:'DO-NOT-LOG-QA-SENTINEL'},idempotencyKey:randomUUID()});
+  await request('POST','/v1/tasks/'+task.id+'/cancel',200,owner);
+  const now=Date.now(), today=new Date(now).toISOString().slice(0,10);
+  await exportTaskLogs(db,owner.workspace,root,2,now);
+  const directory=join(root,owner.workspace);
+  const file=join(directory,'tasks-'+today+'.jsonl');
+  const content=await readFile(file,'utf8');
+  assert.ok(!content.includes('DO-NOT-LOG') && !content.includes(owner.token));
+  assert.equal(content.trim().split('\n').map(JSON.parse).filter(r=>r.taskId===task.id && r.level==='info' && r.event==='queued').length,1);
+  await exportTaskLogs(db,owner.workspace,root,2,now);
+  assert.equal(await readFile(file,'utf8'),content);
+  await exportTaskLogs(db,visitor.workspace,root,2,now);
+  for (const name of await readdir(join(root,visitor.workspace))) assert.ok(!(await readFile(join(root,visitor.workspace,name),'utf8')).includes(task.id));
+  await exportTaskLogs(db,owner.workspace,root,2,now+2*86400000);
+  assert.ok(!(await readdir(directory)).includes('tasks-'+today+'.jsonl'));
+});
+
+test('continuous observation earns seven days only with a full uninterrupted candidate window',()=>{
+  const samples=Array.from({length:7*24*60+1},(_,i)=>({ok:true,time:i*60000}));
+  assert.equal(observationSummary(samples.slice(1)).qualified,false);
+  assert.equal(observationSummary(samples).qualified,true);
+  assert.equal(observationSummary(samples,samples.at(-1).time+180000).qualified,false);
+  samples[200].ok=false;
+  assert.equal(observationSummary(samples).qualified,false);
+  samples.splice(400,5);
+  assert.equal(observationSummary(samples).gaps,1);
 });
 
 test('workspace skills and experts are scoped and support chat, state and revisions', async () => {

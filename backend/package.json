@@ -12,7 +12,10 @@
     "studio:demo": "node src/local-studio.js",
     "migrate": "node src/admin.js migrate",
     "ops:probe": "node src/ops-probe.js",
+    "ops:logs": "node src/task-log-export.js",
+    "ops:observe": "node src/ops-observation.js",
     "release:inventory": "node src/package-inventory.js",
+    "release:offline": "node ops/build-offline.mjs",
     "accept:deployment": "node acceptance/deployment.mjs",
     "db:credential": "node src/database-credentials.js",
     "db:backup": "node src/admin.js backup",
@@ -30,7 +33,8 @@
     "ag-psd": "34.2.2",
     "fastify": "^5.12.8",
     "image-size": "2.1.0",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "sax": "1.6.1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.17"

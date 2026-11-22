@@ -29,6 +29,7 @@ import { workspaceDatabaseRouter } from './workspace-database.js';
 import { registerStudioPsd } from './studio-psd.js';
 import { registerCloudAssets } from './cloud-assets.js';
 import { registerFeishuChannel } from './feishu-channel.js';
+import { registerWechatChannels } from './wechat-channel.js';
 import { registerSmsChannel } from './sms-channel.js';
 import { registerVideoDelivery } from './video-delivery.js';
 import { registerRightsNotices } from './rights-notices.js';
@@ -41,7 +42,7 @@ import { registerCopywritingDrafts } from './copywriting-drafts.js';
 
 export async function buildApp({
   db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(),
-  cloudAssets = new Map(), feishu = new Map(), sms = new Map(), realtimeVoice = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false,
+  cloudAssets = new Map(), feishu = new Map(), wechat = new Map(), sms = new Map(), realtimeVoice = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false,
 }) {
   const app = Fastify({
     logger,
@@ -107,6 +108,9 @@ export async function buildApp({
   app.decorate('workspaceDatabaseRouter', databaseRouter);
   app.decorate('withWorkspaceDatabase', (id, handler) => databaseRouter.run(id, handler));
   app.get('/health', { schema: { tags: ['Health'], summary: 'Check server liveness' } }, async () => ({ status: 'ok' }));
+  app.get('/version',{schema:{tags:['Health'],summary:'Read the configured release revision'}},async()=>({
+    revision:/^[a-f0-9]{40}$/.test(process.env.FAI_RELEASE_REVISION || '')?process.env.FAI_RELEASE_REVISION:null,
+  }));
   app.get('/ready', { schema: { tags: ['Health'], summary: 'Check the database and migration readiness' } }, async () => {
     try {
       if (!(await checkMigrations(db, requiredMigrations))) throw new Error('Migration missing');
@@ -144,6 +148,7 @@ export async function buildApp({
   registerCopywritingDrafts(app,workspaceDb);
   registerCloudAssets(app,workspaceDb,cloudAssets);
   registerFeishuChannel(app,workspaceDb,feishu);
+  registerWechatChannels(app,workspaceDb,wechat);
   registerSmsChannel(app,workspaceDb,sms);
   registerSupport(app, workspaceDb);
   registerCustomerService(app, workspaceDb, customerAnswer);

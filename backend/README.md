@@ -267,3 +267,10 @@ GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维
 图片和视频模型已有原生协议适配，独立数据库路由与分层 PSD 已完成测试环境验证。三平台店铺 OAuth、支付订阅及自动核验渠道回款仍待接入。实店发布与对账、供应商实际生成质量、真实飞书和 WebDAV 渠道、独立生产部署及七天观察需在相应环境验收。客服默认提供带来源的多轮知识检索回复，也支持部署方显式配置的本机对话模型。42 项能力的实际可用性可通过当前工作区的插件目录和模型配置查看。
 
 运行 npm test 会使用内存 PostgreSQL（PGlite）执行 API 集成测试。也可把 FAI_TEST_DATABASE_URL 指向空的专用 PostgreSQL 测试库再运行。测试会应用迁移并写入固定测试账号和样例，使用完后可丢弃该测试库。
+## 后端插件、消息渠道与记忆接口
+
+受信任的宿主以当前成员会话和工作区构造 `workspaceV1(request)`。给插件使用 `bindPluginV1(request, manifest, isGranted)`，由宿主在每次调用时检查该插件当前是否启用、权限是否仍获准；后端继续验证成员、工作区、业务开关与资源归属。V1 新增素材列表、元数据、二进制下载、上传，以及本人通知列表和标为已读。运输层遇到非 2xx 应抛出 API 错误，下载应返回字节。兼容已有的 V1 任务与事件方法。未知 SDK 主版本或权限在绑定时拒绝。支持的权限以及可运行的只读示例见 [SDK](sdk/workspace-v1.mjs) 和[样例插件](sdk/examples/asset-inbox.mjs)。
+
+记忆只在用户明确提交更改时更新。列表和创建结果含 `revision`，已有记忆从 0 开始。用 `PUT /v1/memory/{id}/changes/{请求UUID}` 提交 `{"revision":0,"action":"update","content":"新内容"}`。撤回最近一次更新时传当前版本和 `"action":"undo"`。同一请求可以重试，过期版本返回 409。个人记忆仅本人可读写，企业记忆由成员读取、管理者修改。历史接口 `GET /v1/memory/{id}/changes` 返回版本、操作者、动作和时间；删除记忆一并删除历史。
+
+微信适配范围为公众号安全模式和企业微信自建应用的文本消息。部署方用 `WECHAT_BINDINGS_JSON` 配置渠道、连接别名、工作区、接收标识、两项密钥的环境变量名和被动回复文本。公众号的 `receiver` 为 AppID、`recipient` 为公众号原始 ID；企业微信的 `channel` 为 `wecom`，两者均填 CorpID，另填 `agentId`。回调地址为 `/v1/channels/{wechat或wecom}/{别名}/callback`。GET 完成绑定验证，POST 验签解密、按企业和消息编号去重、保存接收文本并加密返回配置好的确认消息。管理者可从 `GET /v1/channels/{渠道}/inbox` 查询绑定状态、消息和回复内容；外部是否收到被动回复由渠道端核实。飞书继续使用已有的人工确认回复队列。[企业微信回调示例](https://github.com/sbzhu/weworkapi_python/blob/master/callback/WXBizMsgCrypt.py)

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
-import { closeSync, openSync } from 'node:fs';
-import { mkdtemp, readdir, rm, unlink, writeFile } from 'node:fs/promises';
+import { closeSync, createReadStream, openSync } from 'node:fs';
+import { mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -14,11 +14,12 @@ import { client, exerciseCustomer, exerciseFilesAndWorker, exerciseImagePrefligh
 import { rotationFixture } from './credential-rotation.mjs';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
-const pgBin = process.env.FAI_QA_PG_BIN;
-const pgClient = process.env.FAI_QA_PG_CLIENT_BIN || pgBin;
+let pgBin = process.env.FAI_QA_PG_BIN;
+let pgClient = process.env.FAI_QA_PG_CLIENT_BIN || pgBin;
 const cache = process.env.FAI_QA_NPM_CACHE || process.env.npm_config_cache;
 const npm = process.env.npm_execpath;
-if (![pgBin, pgClient, cache, npm].every(value => value && isAbsolute(value))) {
+const archive=process.env.FAI_QA_OFFLINE_ARCHIVE;
+if (!archive && ![pgBin, pgClient, cache, npm].every(value => value && isAbsolute(value))) {
   throw new Error('Run via npm with absolute FAI_QA_PG_BIN and FAI_QA_NPM_CACHE; optional FAI_QA_PG_CLIENT_BIN supplies client tools.');
 }
 const osEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
@@ -31,8 +32,7 @@ function run(executable, args, env = osEnv, cwd = repo, stdio = 'pipe') {
 }
 const executable = (dir, tool) => join(dir, tool + (process.platform === 'win32' ? '.exe' : ''));
 const serverTool = name => executable(pgBin, name);
-const sqlTool = executable(pgClient, 'psql');
-const node = process.execPath;
+let sqlTool,node=process.execPath;
 async function freePort() {
   const listener = createServer();
   listener.listen(0, '127.0.0.1');
@@ -90,11 +90,30 @@ try {
   const web = '前端设计审查/';
   const gitDir = run('git', ['rev-parse', '--absolute-git-dir']);
   const indexEnv = { ...osEnv, GIT_INDEX_FILE: join(work, 'qa.index') };
-  run('git', ['--git-dir=' + gitDir, '--work-tree=' + work, '-c', 'core.autocrlf=false',
+  if (archive) {
+    const digest=createHash('sha256');
+    for await (const chunk of createReadStream(archive)) digest.update(chunk);
+    assert.equal(digest.digest('hex'),process.env.FAI_QA_OFFLINE_SHA256,'Offline archive integrity');
+    run('tar',['-xf',archive,'-C',work]);
+    const release=JSON.parse(await readFile(join(work,'release.json'),'utf8'));
+    assert.equal(release.revision,revision);
+    pgBin=join(work,'runtime','postgres','bin');
+    pgClient=pgBin;
+    node=join(work,'runtime','node.exe');
+    for (const tool of release.tools) {
+      const hash=createHash('sha256');
+      for await (const part of createReadStream(join(work,'runtime',tool.path))) hash.update(part);
+      assert.equal(hash.digest('hex'),tool.sha256);
+    }
+    console.log(JSON.stringify({offlineArchiveVerified:true,runtimes:release.tools.length}));
+  } else {
+    run('git', ['--git-dir=' + gitDir, '--work-tree=' + work, '-c', 'core.autocrlf=false',
     'restore', '--source=' + revision, '--worktree', '--', 'backend/package.json', 'backend/package-lock.json',
     'backend/src', 'backend/migrations', web + '打开设计稿.html', ':(glob)' + web + '*.js', ':(glob)' + web + '*.css',
     web + 'assets/aurora.webp', web + 'assets/optic-wave.webp'], indexEnv);
   run(node, [npm, 'ci', '--offline', '--omit=dev', '--no-audit', '--no-fund', '--cache', cache], osEnv, application);
+  }
+  sqlTool=executable(pgClient,'psql');
   const inventory = JSON.parse(run(node, ['src/package-inventory.js'], osEnv, application));
   console.log(JSON.stringify({ revision, node: process.version, postgres: run(serverTool('postgres'), ['--version']),
     lockSha256: inventory.lockSha256, productionLockEntries: inventory.packages.length }));
@@ -116,8 +135,8 @@ try {
   for (const db of ['control', 'restore_control']) sql('postgres', 'CREATE DATABASE ' + db);
   for (const db of ['tenant', 'restore_tenant']) sql('postgres', 'CREATE DATABASE ' + db + ' OWNER fai_tenant_qa');
   const { Client } = createRequire(join(application, 'package.json'))('pg');
-  const rotation = await rotationFixture({ work, application, env: osEnv, port, Client, controlUrl: url('control'), sql, cliLogs });
-  const connect = (control, version) => ({ ...osEnv, DATABASE_URL: url(control), FAI_PG_BIN: pgClient, ...rotation.connection(version) });
+  const rotation = await rotationFixture({ work, application, node, env: osEnv, port, Client, controlUrl: url('control'), sql, cliLogs });
+  const connect = (control, version) => ({ ...osEnv, DATABASE_URL: url(control), FAI_RELEASE_REVISION:revision, FAI_PG_BIN: pgClient, ...rotation.connection(version) });
   databaseEnv = connect('control', 1);
   admin('migrate');
   admin('migrate');
@@ -131,6 +150,9 @@ try {
   const login = { email: 'deployment@example.test', password: randomBytes(24).toString('hex') };
   const registered = await anonymous('POST', '/v1/auth/register', 201, { ...login, displayName: 'QA', type: 'enterprise', workspaceName: 'Deployment QA' });
   const workspace = registered.workspaces[0].id;
+  const initial=client(origin,registered);
+  const memory=await initial('POST','/v1/memory',201,{scope:'enterprise',content:'Initial QA note'});
+  await initial('PUT','/v1/memory/'+memory.id+'/changes/'+workspace,200,{revision:0,action:'update',content:'QA update'});
   await client(origin, registered)('POST', '/v1/studio/products', 201, { sku: 'QA-CUTOVER', name: 'Synthetic product' });
   await stopService();
   admin('workspace-cutover', workspace, 'qa', '--confirm');
@@ -144,6 +166,16 @@ try {
   assert.deepEqual(await api('GET', '/v1/workspace/database', 200), { mode: 'dedicated', state: 'ready' });
   await exerciseWorkspace(origin, session);
   const { asset, taskId } = await exerciseFilesAndWorker(api);
+  const changes=await api('GET','/v1/memory/'+memory.id+'/changes',200);
+  assert.equal(changes.items[0].revision,1);
+  const logDir=join(work,'task-logs');
+  const exported=JSON.parse(run(node,['src/task-log-export.js',workspace,logDir],databaseEnv,application));
+  assert.ok(exported.events>=3);
+  const logged=await readFile(join(logDir,workspace,'tasks-'+exported.lastDay+'.jsonl'),'utf8');
+  assert.ok(logged.split('\n').some(line=>line && JSON.parse(line).taskId===taskId));
+  const observed=JSON.parse(run(node,['src/ops-observation.js','once',join(work,'observations.sqlite')],
+    {...databaseEnv,FAI_PROBE_ORIGIN:origin,FAI_PROBE_SESSION:session.token,FAI_PROBE_WORKSPACE_ID:workspace},application));
+  assert.equal(observed.samples,1);assert.equal(observed.failures,0);assert.equal(observed.qualified,false);
   const { readPsd } = createRequire(join(application, 'package.json'))('ag-psd');
   await exercisePsd(api, asset, readPsd);
   await exerciseImagePreflight(api);

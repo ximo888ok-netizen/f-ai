@@ -8,7 +8,7 @@ const segments = [
   ['wallets'], ['ledger'], ['realtime_voice_sessions'], ['projects'], ['project_members'],
   ['knowledge_bases'], ['knowledge_grants'], ['knowledge_categories'], ['documents'], ['document_chunks',related('document_id','documents')],
   ['assets'], ['plugin_settings'], ['tasks'], ['task_events',related('task_id','tasks')], ['task_text_chunks',related('task_id','tasks')],
-  ['notifications'], ['account_settings'], ['memory_items'], ['shop_previews'],
+  ['notifications'], ['account_settings'], ['memory_items'], ['memory_changes',related('item_id','memory_items')], ['wechat_messages'], ['shop_previews'],
   ['service_conversations'], ['service_messages'], ['service_replies'], ['schedules'],
   ['studio_categories'], ['studio_products'], ['studio_transfers'],
   ['listing_drafts'], ['listing_draft_images',related('draft_id','listing_drafts')], ['listing_draft_variants',related('draft_id','listing_drafts')],
