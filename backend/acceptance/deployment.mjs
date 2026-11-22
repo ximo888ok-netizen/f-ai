@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { client, exerciseCustomer, exerciseFilesAndWorker, exerciseImagePreflight, exercisePsd, exerciseWorkspace, verifyAsset } from './fixtures.mjs';
 import { rotationFixture } from './credential-rotation.mjs';
-import { publishFixtureTemplates, verifyPlatformExports } from './image-templates.mjs';
+import { publishFixtureTemplates } from './image-templates.mjs';
 import { verifyOfflineRelease, sha256File } from '../src/verify-offline-release.js';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
@@ -203,7 +203,13 @@ try {
   const { readPsd } = createRequire(join(application, 'package.json'))('ag-psd');
   await exercisePsd(api, asset, readPsd);
   await exerciseImagePreflight(api);
-  const platformExports=await verifyPlatformExports(api,createRequire(join(application,'package.json'))('@napi-rs/canvas'));
+  // A child owns the candidate's native canvas library so Windows releases the DLL before cleanup.
+  const imageCheck = spawnSync(node, [fileURLToPath(new URL('./image-templates.mjs', import.meta.url)), origin], {
+    cwd: application, env: osEnv, input: JSON.stringify(session), encoding: 'utf8', windowsHide: true, timeout: 120000,
+  });
+  if (imageCheck.error) throw imageCheck.error;
+  assert.equal(imageCheck.status, 0, 'Image fixture failed: ' + imageCheck.stderr.slice(-1200));
+  const platformExports = JSON.parse(imageCheck.stdout);
   const sample = await exerciseCustomer(api);
   const probe = JSON.parse(run(node, ['src/ops-probe.js'], { ...osEnv, FAI_PROBE_ORIGIN: origin,
     FAI_PROBE_SESSION: session.token, FAI_PROBE_WORKSPACE_ID: workspace }, application));

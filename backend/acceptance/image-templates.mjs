@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
+import { client } from './fixtures.mjs';
 
 // Small, synthetic workspace specifications. No merchant account or marketplace data is used.
 const specs=[
@@ -79,4 +83,10 @@ export async function verifyPlatformExports(api,{createCanvas,loadImage}) {
   const pixel=ctx.getImageData(43,85,1,1).data;
   assert.ok([24,32,48].every((v,i)=>Math.abs(v-pixel[i])<=18));
   return {platforms:specs.length,sourceFixtures:assets.length,decodedExports:result.items.length,updatedCoverExports:1};
+}
+
+if (import.meta.main) {
+  const session = JSON.parse(readFileSync(0, 'utf8'));
+  const canvas = createRequire(join(process.cwd(), 'package.json'))('@napi-rs/canvas');
+  console.log(JSON.stringify(await verifyPlatformExports(client(process.argv[2], session), canvas)));
 }
