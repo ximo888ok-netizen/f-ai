@@ -1,4 +1,5 @@
 import { generatedAsset } from './ai-export-mark.js';
+import { lockPlugin, requirePlugin } from './plugin-policy.js';
 import { row, rows } from './db.js';
 import { ApiError, array, choice, integer, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 import { stableJson } from './tasks.js';
@@ -74,6 +75,7 @@ export function registerStoryboards(app,db,renderer) {
     const configuration=takeConfiguration(request.body);
     const {revision}=request.body;
     return db.transaction(async tx=>{
+      await lockPlugin(tx,key[0],'video');
       await sources(tx,key,configuration);
       const values=[...key,title,JSON.stringify(configuration)];
       const saved=revision===0
@@ -106,6 +108,7 @@ export function registerStoryboards(app,db,renderer) {
   route(app,'POST',root+'/:id/export',{tags,params,summary:'Render a saved sequence of images and optional audio to MP4',
     body:object({revision:integer(1,2147483646)}),produces:['video/mp4']},async (request,reply)=>{
     const key=keyOf(request);
+    await requirePlugin(db,key[0],'video');
     const saved=await load(db,key);
     if (saved.revision!==request.body.revision) throw conflict();
     if (!renderer?.storyboard) throw new ApiError(503,'VIDEO_EXPORT_UNAVAILABLE','Video processing is not configured on this server');

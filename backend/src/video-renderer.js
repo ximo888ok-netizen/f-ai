@@ -224,5 +224,15 @@ export function createVideoDelivery({
     });
   }
 
-  return Object.assign(bytes=>convert(bytes,{mark:true}),{process:convert,storyboard});
+  async function measure(bytes) {
+    if (bytes.byteLength>maxInputBytes) throw invalidVideo();
+    return withFiles(async file=>{
+      const input=file('source.mp4');
+      await writeFile(input,bytes);
+      const {width,height,duration,videoDuration}=geometry(await inspect(ffprobe,input));
+      const durationSeconds=videoDuration>0 ? videoDuration : duration;
+      return {width,height,durationSeconds,containerSeconds:duration};
+    });
+  }
+  return Object.assign(bytes=>convert(bytes,{mark:true}),{process:convert,storyboard,measure});
 }

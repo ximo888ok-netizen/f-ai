@@ -3,6 +3,8 @@ import { row, rows } from './db.js';
 import { ApiError, array, choice, integer, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 import { operationForms } from './operation-forms.js';
 import { readDraft } from './listing-drafts.js';
+import { registerLedgerReport } from './ledger-report.js';
+import { lockPlugin } from './plugin-policy.js';
 
 const root = '/v1/studio/pinduoduo';
 const options = { tags: ['Studio Operations'], manager: true };
@@ -69,7 +71,7 @@ async function saveRecord(db, book, kind, input, expected) {
       WHERE book_id=$1 AND kind=$2 AND reference=$3 RETURNING ${fields}`, values);
     return { record: updated, inserted: false };
   } catch (error) {
-    if (error.code === '23505') throw conflict('该商品同一天已有统计记录，请编辑原记录');
+    if (error.code === '23505') throw conflict('该商品或渠道在同一天已有统计记录，请编辑原记录');
     throw error;
   }
 }
@@ -121,6 +123,7 @@ function registerRecords(app, db, kind, form) {
     const book = await requireBook(db, request);
     const input = clean(request.body, kind);
     return db.transaction(async tx => {
+      await lockPlugin(tx,request.context.workspaceId,'operations');
       if (kind === 'inventory') await requireBook(tx, request, true);
       return (await saveRecord(tx, book, kind, input, request.body.revision)).record;
     });
@@ -132,6 +135,7 @@ function registerRecords(app, db, kind, form) {
     if (new Set(inputs.map(i => i.reference)).size !== inputs.length) throw invalid('文件内存在重复编号');
     inputs.sort((a,b) => a.reference < b.reference ? -1 : 1);
     return db.transaction(async tx => {
+      await lockPlugin(tx,request.context.workspaceId,'operations');
       if (kind === 'inventory') await requireBook(tx, request, true);
       let inserted = 0;
       for (const input of inputs) if ((await saveRecord(tx, book, kind, input)).inserted) inserted++;
@@ -188,6 +192,7 @@ function registerInventoryDraftImport(app, db) {
   route(app, 'POST', url + '/confirm', { ...options, params, summary: 'Confirm unchanged draft preview and insert the whole batch',
     body: object({ ...draftImportFields, previewId }), response: { 200: object({ inserted: integer(1,50) }) } },
   request => db.transaction(async tx => {
+    await lockPlugin(tx,request.context.workspaceId,'operations');
     const book = await requireBook(tx, request, true);
     const { accountId } = request.context;
     const { draftId, previewId: digest, day, threshold } = request.body;
@@ -222,11 +227,15 @@ export function registerShopOperations(app, db) {
   route(app, 'POST', root + '/books', { ...options, summary: 'Open a named workspace ledger', body: object({ name: text(120) }), response: {200: bookFields} }, async request => {
     const name = request.body.name.trim();
     if (!name) throw invalid('请填写台账名称');
-    return row(db, `INSERT INTO operation_books(id,workspace_id,name) VALUES($1,$2,$3)
+    return db.transaction(async tx=>{
+      await lockPlugin(tx,request.context.workspaceId,'operations');
+      return row(tx, `INSERT INTO operation_books(id,workspace_id,name) VALUES($1,$2,$3)
       ON CONFLICT (workspace_id,name) DO UPDATE SET name=excluded.name RETURNING id,name`, [randomUUID(),request.context.workspaceId,name]);
+    });
   });
   for (const [kind, form] of Object.entries(operationForms)) registerRecords(app, db, kind, form);
   registerInventoryDraftImport(app, db);
+  registerLedgerReport(app,db,requireBook);
   route(app, 'GET', root + '/books/:book/summary', { ...options, params, summary: 'Aggregate this book’s recorded shop activity' }, async request => {
     const book = await requireBook(db, request);
     const counts = await rows(db, `SELECT kind, count(*)::int AS total,

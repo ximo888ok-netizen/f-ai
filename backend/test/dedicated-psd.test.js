@@ -139,6 +139,13 @@ test('enterprise cutover handles interruption, preserves business data and fails
     const enterprise=await register(app,'dedicated-owner@example.test');
     const member=await register(app,'dedicated-member@example.test','personal');
     const {workspace}=enterprise;
+    const copyPath='/v1/copywriting/drafts/'+randomUUID();
+    await json(app,enterprise,'PUT',copyPath,200,{revision:0,title:'Synthetic copy',content:'Shared before cutover'});
+    const agencyReceipt='/v1/agency/receipts/CUTOVER-01';
+    await json(app,enterprise,'PUT','/v1/agency/partners/'+enterprise.account.id,200,{parentId:null});
+    await json(app,enterprise,'PUT','/v1/agency/rates',200,{revision:0,directBps:500,managementBps:50});
+    await json(app,enterprise,'PUT',agencyReceipt,200,{agentId:enterprise.account.id,paidMinor:2200,rateRevision:1,bookedOn:'2026-01-01'});
+    await json(app,enterprise,'PUT',agencyReceipt+'/reversals/REFUND-01',200,{bookedOn:'2026-01-02',amountMinor:200,reason:'refund'});
     const [assetId,bytes]=await logo(app,enterprise);
     const [sharedAsset]=await logo(app,member);
     const design=await json(app,enterprise,'PUT',psdPath+'/'+randomUUID(),200,{
@@ -187,6 +194,11 @@ test('enterprise cutover handles interruption, preserves business data and fails
     assert.equal(staged.count,1);
     assert.equal((await cutoverWorkspace(control,target,workspace,'dedicated')).state,'active');
     assert.equal((await cutoverWorkspace(control,target,workspace,'dedicated')).alreadyActive,true);
+    const statement=await json(app,enterprise,'GET','/v1/agency/statements?month=2026-01',200);
+    assert.equal(statement.items[0].netMinor,'100');
+    assert.equal((await json(app,enterprise,'GET',copyPath,200)).content,'Shared before cutover');
+    await json(app,enterprise,'PUT',copyPath,200,{revision:1,title:'Synthetic copy',content:'Dedicated edit'});
+    assert.equal((await row(target,'SELECT content FROM copywriting_drafts WHERE workspace_id=$1',[workspace])).content,'Dedicated edit');
     assert.deepEqual(await json(app,enterprise,'GET','/v1/workspace/database',200),{mode:'dedicated',state:'ready'});
     assert.equal((await json(app,enterprise,'GET',voiceUrl,200)).state,'active');
     assert.equal((await json(app,enterprise,'DELETE',voiceUrl,200)).state,'closed');

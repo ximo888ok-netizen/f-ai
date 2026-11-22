@@ -12,6 +12,9 @@ import { imageSize } from 'image-size';
 import { buildApp } from '../src/app.js';
 import { migrate,postgres } from '../src/db.js';
 import { createVideoDelivery } from '../src/video-delivery.js';
+import { createProviders } from '../src/providers.js';
+import { provisionCredits } from '../src/wallet.js';
+import { workOnce } from '../src/worker.js';
 
 const ffmpeg=process.env.FAI_TEST_FFMPEG_PATH;
 const ffprobe=process.env.FAI_TEST_FFPROBE_PATH;
@@ -31,9 +34,9 @@ function format(bytes,dimensions) {
   assert.deepEqual([width,height,type],dimensions);
 }
 
-async function fixture(t,render) {
+async function fixture(t,render,providers) {
   const db=process.env.FAI_TEST_DATABASE_URL?postgres(process.env.FAI_TEST_DATABASE_URL):new PGlite();
-  const app=await buildApp({db,videoDelivery:render});
+  const app=await buildApp({db,videoDelivery:render,providers});
   t.after(async()=>{await app.close();await db.close();});
   await migrate(db);
   async function user(handle) {
@@ -48,8 +51,8 @@ async function fixture(t,render) {
       assert.equal(response.statusCode,status,response.statusCode===status?'':response.body);
       return binary?response.rawPayload:status===204?undefined:response.json();
     };
-    const upload=(bytes,mediaType='image/png')=>request('POST','/v1/assets',201,{
-      name:'fixture',mediaType,source:'Synthetic fixture',purpose:'QA',dataBase64:bytes.toString('base64'),
+    const upload=(bytes,mediaType='image/png',consent={})=>request('POST','/v1/assets',201,{
+      name:'fixture',mediaType,source:'Synthetic fixture',purpose:'QA',dataBase64:bytes.toString('base64'),...consent,
     });
     return {request,upload,workspace,account:account.id};
   }
@@ -61,6 +64,53 @@ async function gen(db,owner,assetId) {
     request_hash,idempotency_key,state,cost,result) VALUES($1,$2,$3,'image.main-image','model:fixture','image',
     '{}','fixture',$4,'succeeded',1,$5)`,[randomUUID(),owner.workspace,owner.account,randomUUID(),JSON.stringify({assetId})]);
 }
+
+test('actual video measurements and reviewed scene limits gate try-on and replacement before debit and dispatch',
+  {skip:!(ffmpeg && ffprobe)},async t=>{
+    const providers=createProviders();
+    let dispatched=0;
+    providers.set('gateway',{supports:c=>['video.try-on','video.replace-product'].includes(c.id),
+      run:async ()=>{dispatched++;return {type:'text',text:'local provider accepted the fixture'};}});
+    const {db,user}=await fixture(t,createVideoDelivery({ffmpeg,ffprobe,encoder}),providers);
+    const owner=await user('video-envelope'),other=await user('video-envelope-other');
+    await provisionCredits(db,owner.workspace,owner.account,20,'video-envelope-tests');
+    const consent={consentReference:'synthetic-source',consentExpiresAt:new Date(Date.now()+86400000).toISOString()};
+    const image=await owner.upload(picture('blue'),'image/png',consent);
+    const directory=await mkdtemp(join(tmpdir(),'fai-video-review-'));
+    const file=join(directory,'source.mp4');
+    t.after(async()=>{await unlink(file);await rmdir(directory);});
+    const make=async (size,seconds)=>{
+      await run(ffmpeg,['-y','-v','error','-f','lavfi','-i','color=red:s='+size+':r=10','-t',seconds,'-threads','1','-c:v',encoder,file]);
+      return owner.upload(await readFile(file),'video/mp4',consent);
+    };
+    const video=await make('1280x720','1');
+    const path='/v1/media/videos/'+video.id+'/preflight';
+    const observations={revision:0,shotCount:1,personCount:1,maxFacingAngle:60};
+    const task=(capabilityId,code)=>owner.request('POST','/v1/tasks',code,{capabilityId,mode:'workflow',
+      parameters:{assetIds:[video.id,image.id]},idempotencyKey:randomUUID()});
+    assert.equal((await task('video.try-on',422)).error.code,'VIDEO_PREFLIGHT_REQUIRED');
+    await other.request('PUT',path,404,observations);
+    const measured=await owner.request('PUT',path,200,observations);
+    assert.deepEqual([measured.width,measured.height,measured.durationSeconds,measured.eligible],[1280,720,1,true]);
+    assert.equal((await owner.request('PUT',path,200,observations)).revision,1);
+    const queued=await task('video.try-on',202);
+    const rejected=await owner.request('PUT',path,200,{revision:1,shotCount:2,personCount:2,maxFacingAngle:61});
+    assert.deepEqual(rejected.reasons,['MULTIPLE_SHOTS','PERSON_COUNT','FACING_ANGLE']);
+    await workOnce({db,providers,shops:new Map()});
+    assert.equal((await owner.request('GET','/v1/tasks/'+queued.id,200)).errorCode,'VIDEO_PREFLIGHT_REQUIRED');
+    assert.equal((await owner.request('GET','/v1/credits/wallet',200)).available,20);
+    assert.equal(dispatched,0);
+    await owner.request('PUT',path,200,{...observations,revision:2});
+    await task('video.replace-product',202);
+    await workOnce({db,providers,shops:new Map()});
+    assert.equal(dispatched,1);
+    const unsuitable=await make('320x240','10.1');
+    const low=await owner.request('PUT','/v1/media/videos/'+unsuitable.id+'/preflight',200,observations);
+    assert.deepEqual(low.reasons,['DURATION','RESOLUTION']);
+    await owner.request('PUT','/v1/plugins/video/state',200,{enabled:false});
+    await owner.request('PUT',path,409,{...observations,revision:3});
+    assert.equal((await owner.request('GET',path,200)).revision,3);
+  });
 
 test('image batches persist valid SKU results, render six stacked panels and keep provenance',async t=>{
   const {db,user}=await fixture(t);

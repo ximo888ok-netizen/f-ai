@@ -13,6 +13,7 @@ import { guidedMessages } from './workspace-library.js';
 import { notify } from './notifications.js';
 import { logTask, registerTaskEvents } from './task-events.js';
 import { registerTaskStream } from './task-stream.js';
+import { lockPlugin } from './plugin-policy.js';
 
 const tags = ['Tasks'];
 const idParams = object({ id: uuid });
@@ -21,6 +22,8 @@ const taskFields = [
   'id', 'capability_id AS "capabilityId"', 'plugin_id AS "pluginId"', 'project_id AS "projectId"',
   'parent_id AS "parentId"', "CASE WHEN provider_id LIKE 'model:%' THEN substr(provider_id, 7) END AS \"modelId\"", 'state', 'cost', 'attempts', 'result', 'error_code AS "errorCode"',
   'created_at AS "createdAt"', 'updated_at AS "updatedAt"',
+  `CASE WHEN plugin_id='copywriting' AND capability_id<>'copywriting.detect-terms'
+    THEN coalesce((input->'parameters'->>'templateVersion')::integer,1) END AS "templateVersion"`,
   "COALESCE(capability_id = 'model.chat' AND input->'parameters'->'stream' = 'true'::jsonb, false) AS streamed",
 ].join(', ');
 const stateSchema = choice('queued', 'running', 'succeeded', 'failed', 'cancelled');
@@ -43,13 +46,6 @@ function bindingFor(shops, context, capability, parameters) {
   if (!shop || shop.workspaceId !== context.workspaceId || shop.platform !== parameters.platform) throw notFound('Authorized shop');
   if (!shop.capabilities.includes(capability.id)) throw new ApiError(403, 'SHOP_PERMISSION_DENIED', 'This shop lacks the requested permission');
   return shop;
-}
-
-async function lockPlugin(db, workspaceId, pluginId) {
-  // A missing row means enabled. Write once so disabling and submitting serialize.
-  await db.query('INSERT INTO plugin_settings (workspace_id, plugin_id, enabled) VALUES ($1, $2, true) ON CONFLICT DO NOTHING', [workspaceId, pluginId]);
-  const setting = await row(db, 'SELECT enabled FROM plugin_settings WHERE workspace_id = $1 AND plugin_id = $2 FOR UPDATE', [workspaceId, pluginId]);
-  if (!setting.enabled) throw new ApiError(409, 'PLUGIN_DISABLED', 'Plugin is disabled for this workspace');
 }
 
 async function findTask(db, context, id, fields = taskFields, lock = false) {
@@ -81,6 +77,9 @@ export async function submitInTransaction(connection, providers, shops, context,
 
   const providerId = providerFor(providers,capability,input.modelId,id==='model.chat' && parameters.stream===true);
   const provider = taskProvider(providers,providerId);
+  if (capability.pluginId==='copywriting' && capability.execution==='gateway') {
+    storedInput.parameters={...parameters,templateVersion:parameters.templateVersion ?? 2};
+  }
   provider.validate?.(capability, parameters);
   if (provider.taskConfiguration) storedInput.providerConfiguration=provider.taskConfiguration(parameters);
   if (id === 'model.chat' && parameters.guidanceIds?.length) {
@@ -139,7 +138,7 @@ export function registerTasks(app, db, providers, shops) {
       ...plugin, enabled: settings.get(plugin.id) ?? true,
       capabilities: [...catalog.values()].filter(capability => capability.pluginId === plugin.id).map(capability => {
         const { execution, ...contract } = capability;
-        return { ...contract, available: execution === 'endpoint' || matchingProviders(providers, capability).length > 0 };
+        return { ...contract, available: settings.get(plugin.id) !== false && (execution === 'endpoint' || matchingProviders(providers, capability).length > 0) };
       }),
     });
     return { items: plugins.map(describe), models: describe({ id: 'models', name: '模型工具' }) };
@@ -214,16 +213,27 @@ export function registerTasks(app, db, providers, shops) {
 
   route(app, 'POST', '/v1/tasks/:id/regenerate', {
     tags, summary: 'Create a new execution linked to a completed task',
-    params: idParams, body: object({ idempotencyKey: keySchema }),
+    params: idParams, body: object({ idempotencyKey: keySchema, instructions:text(2000) }, ['idempotencyKey']),
   }, async (request, reply) => {
     const previous = await findTask(db, request.context, request.params.id, '*');
     if (['queued', 'running'].includes(previous.state)) throw new ApiError(409, 'TASK_IN_PROGRESS', 'Wait for the original task to finish');
     if (catalog.get(previous.capability_id).requiresConfirmation) {
       throw new ApiError(409, 'CONFIRMATION_REQUIRED', 'Create a fresh shop preview before submitting again');
     }
+    let parameters=previous.input.parameters;
+    if (previous.plugin_id==='copywriting' && previous.capability_id!=='copywriting.detect-terms') {
+      parameters={...parameters,templateVersion:parameters.templateVersion ?? 1};
+    }
+    if (request.body.instructions!==undefined) {
+      if (previous.plugin_id!=='copywriting' || previous.capability_id==='copywriting.detect-terms') {
+        throw invalid('Revision instructions apply to copywriting generation tasks');
+      }
+      if (!request.body.instructions.trim()) throw invalid('Supply nonblank revision instructions');
+      parameters={...parameters,instructions:request.body.instructions};
+    }
     const result = await submit(db, providers, shops, request.context, {
       ...previous.input, capabilityId: previous.capability_id, projectId: previous.project_id,
-      idempotencyKey: request.body.idempotencyKey,
+      parameters,idempotencyKey: request.body.idempotencyKey,
     }, previous.id);
     reply.code(result.created ? 202 : 200);
     return result.task;

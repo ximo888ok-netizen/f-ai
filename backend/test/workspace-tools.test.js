@@ -10,6 +10,7 @@ import { provisionCredits } from '../src/wallet.js';
 import { workOnce } from '../src/worker.js';
 import { createExaSearch } from '../src/web-search.js';
 import { ProviderError } from '../src/model-http.js';
+import { probe } from '../src/ops-probe.js';
 
 const db = process.env.FAI_TEST_DATABASE_URL ? postgres(process.env.FAI_TEST_DATABASE_URL) : new PGlite();
 const providers = createProviders();
@@ -194,6 +195,30 @@ test('queue diagnostics separate runnable, delayed and expired work and require 
   assert.deepEqual(counts,{queued:2,runnable:1,running:2,expiredLeases:1,dueSchedules:1});
   assert.ok(oldestRunnableSeconds>=120 && oldestRunnableSeconds<180);
   assert.deepEqual(await request('GET',endpoint,200,visitor),empty);
+  await db.query("UPDATE tasks SET provider_job_id='fixture-poll',lease_id=NULL,lease_until=now()-interval '1 second' WHERE id=$1",[expired.id]);
+  assert.equal((await request('GET',endpoint,200,account)).expiredLeases,0);
+  const alerts='/v1/diagnostics/alerts';
+  await request('GET',alerts,403,member);
+  assert.deepEqual((await request('GET',alerts,200,account)).alerts,['QUEUE_DELAY','SCHEDULE_DELAY']);
+  await db.query("UPDATE tasks SET lease_until=now()-interval '5 minutes' WHERE id=$1",[expired.id]);
+  const url=await app.listen({host:'127.0.0.1',port:0});
+  assert.equal((await probe({FAI_PROBE_ORIGIN:url})).ok,true);
+  const sample=await probe({FAI_PROBE_ORIGIN:url,FAI_PROBE_WORKSPACE_ID:account.workspace,FAI_PROBE_SESSION:account.token});
+  assert.deepEqual(sample.issues,['QUEUE_DELAY','PROVIDER_POLL_DELAY','SCHEDULE_DELAY']);
+  assert.equal(sample.ok,false);
+  assert.deepEqual((await request('GET',alerts,200,visitor)).alerts,[]);
+  assert.deepEqual((await probe({FAI_PROBE_ORIGIN:url,FAI_PROBE_WORKSPACE_ID:account.workspace,FAI_PROBE_SESSION:'expired'})).issues,['WORKSPACE_PROBE_FAILED']);
+  await assert.rejects(probe({FAI_PROBE_ORIGIN:'http://example.test'}));
+  for (let i=0;i<6;i++) {
+    await db.query(`INSERT INTO tasks(id,workspace_id,account_id,capability_id,provider_id,plugin_id,input,
+      request_hash,idempotency_key,state,cost,updated_at) VALUES($1,$2,$3,'copywriting.detect-terms','local','copywriting','{}',
+      'fixture',$4,$5,1,now()-($6::integer * interval '1 hour'))`,
+      [randomUUID(),account.workspace,account.account.id,randomUUID(),i<4?'succeeded':'failed',i===5?2:0]);
+  }
+  const degraded=await request('GET',alerts,200,account);
+  assert.equal(degraded.finished,5);
+  assert.equal(degraded.failed,1);
+  assert.ok(degraded.alerts.includes('TASK_FAILURE_RATE'));
 });
 
 test('member notifications track actual role transitions and respect their own preference', async () => {

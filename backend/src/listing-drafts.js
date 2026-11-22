@@ -1,4 +1,5 @@
 import { row, rows } from './db.js';
+import { lockPlugin } from './plugin-policy.js';
 import { ApiError, array, choice, integer, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 
 const root = '/v1/studio/pinduoduo-drafts';
@@ -103,6 +104,7 @@ export function registerListingDrafts(app, db) {
     const args = [...key, values.title, values.category, values.description, values.specification, values.sku, values.priceMinor, values.stock];
     const expected = request.body.revision;
     return db.transaction(async tx => {
+      await lockPlugin(tx,key[0],'operations');
       const inserted = expected === 0 && await row(tx, `INSERT INTO listing_drafts
         (workspace_id,account_id,id,title,category,description,specification,sku,price_minor,stock)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO NOTHING RETURNING id`, args);

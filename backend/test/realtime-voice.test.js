@@ -118,6 +118,19 @@ test('WebRTC negotiation is private, idempotent, priced and scoped to the exact 
   assert.deepEqual(await f.wallet(),{available:17,balance:17,reserved:0});
 });
 
+test('disabling model tools refuses new paid calls, allows recovery and preserves hangup',async t=>{
+  const f=await fixture(t);
+  await f.put(201);
+  await api('PUT','/v1/plugins/models/state',200,f.headers,{enabled:false});
+  assert.deepEqual(await api('GET',options,200,f.headers),{available:false});
+  assert.equal((await f.put(200)).state,'active');
+  await api('DELETE',f.url,200,f.headers);
+  const refused=await api('PUT',sessions+randomUUID(),409,f.headers,{offerSdp:offer});
+  assert.equal(refused.error.code,'PLUGIN_DISABLED');
+  assert.equal(f.mock.sent.length,1);
+  assert.equal((await f.wallet()).reserved,0);
+});
+
 test('hanging up during negotiation releases the reservation and closes the late upstream call', async t => {
   const f=await fixture(t);
   const gate=Promise.withResolvers(); f.mock.gate=gate.promise; f.mock.release=gate.resolve;

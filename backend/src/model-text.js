@@ -11,7 +11,13 @@ export const textCapabilities = Object.keys(instructions);
 
 export function textPrompt(payload) {
   if (payload.capabilityId === 'model.chat') return JSON.stringify(payload.parameters.messages);
-  return instructions[payload.capabilityId] + '遵循输入中的平台、语言、文案类型和修订要求。仅使用给定商品事实。\n' + JSON.stringify(payload.parameters);
+  const {templateVersion=1,...parameters}=payload.parameters;
+  const introduction=instructions[payload.capabilityId];
+  if (templateVersion===1) return introduction+'遵循输入中的平台、语言、文案类型和修订要求。仅使用给定商品事实。\n'+JSON.stringify(parameters);
+  if (templateVersion!==2) throw new ProviderError('COPY_TEMPLATE_UNAVAILABLE');
+  const comparison=payload.capabilityId==='copywriting.selling-points'
+    ? '提炼三条商品卖点。有竞品事实时，根据双方已给事实写一段对比话术，缺少依据时说明所缺信息。' : '';
+  return introduction+comparison+'language 指定输出语言，inputLanguage 指定原文语言。遵循平台、所选文案栏目和修订要求，保留给定商品属性。\n'+JSON.stringify(parameters);
 }
 
 export function textRequest({ protocol, model }, messages) {

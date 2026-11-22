@@ -71,7 +71,7 @@ export function registerAuth(app, db) {
     auth: false, tags, config: authLimit, summary: 'Register an account and create its initial workspace',
     body: object({
       email: emailSchema, password: passwordSchema, displayName: text(100),
-      type: choice('personal', 'enterprise'), workspaceName: text(100),
+      type: choice('personal', 'enterprise','agent'), workspaceName: text(100),
     }, ['email', 'password', 'displayName', 'type']),
   }, async (request, reply) => {
     const { displayName, type, password, workspaceName } = request.body;

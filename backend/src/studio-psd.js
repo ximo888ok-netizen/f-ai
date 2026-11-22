@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads';
+import { lockPlugin } from './plugin-policy.js';
 import { row, rows } from './db.js';
 import { ApiError, array, choice, integer, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 import { generatedAsset } from './ai-export-mark.js';
@@ -78,6 +79,7 @@ export function registerStudioPsd(app, db, videoDelivery) {
     const {workspaceId,accountId}=request.context;
     const {id}=request.params;
     const {title,layout,subjectAssetId,backgroundAssetId,revision}=request.body;
+    await lockPlugin(tx,workspaceId,'image');
     if (!title.trim()) throw invalid('Design title cannot be blank');
     verify(layout);
     const ids=[...new Set([subjectAssetId,backgroundAssetId].filter(Boolean).map(v=>v.toLowerCase()))];

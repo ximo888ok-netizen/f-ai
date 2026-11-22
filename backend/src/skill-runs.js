@@ -1,19 +1,10 @@
-import { detectTerms } from './catalog.js';
+import { reviewCopy } from './catalog.js';
 import { row } from './db.js';
 import { integer, invalid, object, route, text, uuid } from './http.js';
 import { readDraft, variantCheck } from './listing-drafts.js';
 import { modelIdSchema } from './models.js';
 import { submitInTransaction } from './tasks.js';
 import { executableSkill } from './workspace-library.js';
-
-function reviewCopy(content) {
-  const {matches,offsetUnit}=detectTerms({content});
-  let preview=content;
-  for (const {start,end,suggestion} of [...matches].reverse()) {
-    preview=preview.slice(0,start)+suggestion+preview.slice(end);
-  }
-  return {matches,offsetUnit,preview};
-}
 
 async function reviewSkus(db,context,id) {
   const draft=await readDraft(db,[context.workspaceId,context.accountId,id]);

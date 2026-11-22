@@ -24,6 +24,9 @@ const mediaParameters = object({
 const copyParameters = object({
   product: text(4000), platform: platforms, language: choice('zh', 'en'),
   format: choice('main-image', 'detail-page', 'sku'), instructions: text(2000),
+  inputLanguage: choice('zh','en'), competitorFacts: text(2000),
+  templateVersion: integer(1,2),
+  sections: { ...array(choice('title','subtitle','selling-points','description','comparison'),5,1), uniqueItems:true },
 }, ['product']);
 const shopParameters = object({
   shopId: uuid, platform: platforms, startDate: { type: 'string', format: 'date' },
@@ -138,4 +141,16 @@ export function detectTerms({ content }) {
     term, start: index, end: index + term.length, suggestion: replacements[term],
   }));
   return { matches, offsetUnit: 'utf16' };
+}
+
+export function reviewCopy(content) {
+  const {matches,offsetUnit}=detectTerms({content});
+  const parts=[];
+  let cursor=0;
+  for (const {start,end,suggestion} of matches) {
+    parts.push(content.slice(cursor,start),suggestion);
+    cursor=end;
+  }
+  parts.push(content.slice(cursor));
+  return {matches,offsetUnit,preview:parts.join('')};
 }

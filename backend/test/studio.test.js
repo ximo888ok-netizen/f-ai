@@ -176,6 +176,47 @@ test('Studio draft variants remain ordered, private and compatible with single-S
   data(await send('DELETE', '/v1/assets/' + variantImage, owner), 204);
 });
 
+test('period reports and CSV share calendar boundaries, weighted conversion, missing values and traffic sources',async ()=>{
+  const root='/v1/studio/pinduoduo/books';
+  const book=data(await send('POST',root,owner,{name:'Report QA'}),200);
+  const base=root+'/'+book.id;
+  const save=async (kind,reference,details,status=200)=>data(await send('PUT',base+'/records/'+kind,owner,{reference,details,revision:0}),status);
+  await save('performance','A',{title:'A',sku:'A',day:'2026-01-31',views:10,visitors:10,buyers:1,salesMinor:100});
+  await save('performance','B',{title:'B',sku:'B',day:'2026-02-01',views:2,visitors:2,buyers:2,salesMinor:500});
+  await save('performance','C',{title:'C',sku:'C',day:'2026-02-02',views:0,visitors:0,buyers:0,salesMinor:0});
+  await save('orders','Q1',{title:'sample',day:'2026-02-01',status:'已完成',units:2,paidMinor:0});
+  await save('orders','Q2',{title:'sample',day:'2026-02-01',status:'已取消',units:8,paidMinor:250});
+  await save('traffic','search',{day:'2026-02-01',channel:'搜索',views:5});
+  await save('traffic','duplicate',{day:'2026-02-01',channel:'搜索',views:5},409);
+  await save('traffic','other',{day:'2026-02-01',channel:'其他',views:0});
+  const url=base+'/report';
+  const range='?from=2026-01-31&to=2026-02-02&period=';
+  const read=async period=>data(await send('GET',url+range+period,owner),200);
+  const weekly=await read('week');
+  assert.equal(weekly.source,'local-ledger');
+  assert.deepEqual(weekly.items.map(i=>i.start),['2026-01-26','2026-02-02']);
+  const [week,empty]=weekly.items;
+  assert.equal(week.conversionPercent,25);
+  assert.equal(week.units,'2');
+  assert.equal(week.paidMinor,'0');
+  assert.equal(week.salesMinor,'600');
+  assert.deepEqual(week.traffic,{'搜索':'5','推荐':null,'活动':null,'其他':'0'});
+  assert.equal(empty.orders,null);
+  assert.equal(empty.conversionPercent,null);
+  assert.deepEqual((await read('month')).items.map(i=>i.start),['2026-01-01','2026-02-01']);
+  assert.equal((await read('day')).items.length,3);
+  const csv=await send('GET',url+'/export'+range+'week',owner);
+  assert.equal(csv.statusCode,200,csv.body);
+  assert.match(csv.headers['content-type'],/text\/csv/);
+  assert.match(csv.body,/2026-01-26,1,2,1,0,12,12,3,600,25,5,,,0,/);
+  data(await send('GET',url+range+'week',other),404);
+  data(await send('GET',url+'?from=2025-01-01&to=2026-02-01&period=week',owner),400);
+  data(await send('PUT','/v1/plugins/operations/state',owner,{enabled:false}),200);
+  await save('traffic','blocked',{day:'2026-02-01',channel:'推荐',views:4},409);
+  assert.equal((await read('week')).items[0].traffic['推荐'],null);
+  data(await send('PUT','/v1/plugins/operations/state',owner,{enabled:true}),200);
+});
+
 test('shop ledgers isolate business records and compute local backlog and sales from committed data', async () => {
   const root = '/v1/studio/pinduoduo';
   const book = data(await send('POST', root+'/books', owner, {name:'QA Ledger'}),200);

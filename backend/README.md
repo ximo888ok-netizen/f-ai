@@ -45,7 +45,7 @@ npm start
 | 商品档案与收益测算 | 商品、分类、复用、导入导出和操作历史持久化；服务端按输入成本计算广告回报 |
 | 账户、积分、通知和设置 | 钱包和流水、企业分配、消息已读、任务通知开关、主题持久化和数据库诊断 |
 
-模型能力和店铺操作的可用性以运行环境中的配置为准。通用任务接口可以展示实际返回的文件、文本和服务结果。「分层设计」支持工作台自行组合素材并导出 PSD。模型直接生成 PSD、视频编辑与数字人需要对应的处理服务。订阅支付和代理佣金仍待接入。自有 WebDAV 和飞书可在部署方授权配置后使用。Windows 工作台的安装方式见[桌面安装说明](../desktop/windows/README.md)。
+模型能力和店铺操作的可用性以运行环境中的配置为准。通用任务接口可以展示实际返回的文件、文本和服务结果。「分层设计」支持工作台自行组合素材并导出 PSD。模型直接生成 PSD、视频编辑与数字人需要对应的处理服务。企业可以登记已核实的回款并计算代理佣金，订阅支付和自动回款对账仍待接入。自有 WebDAV 和飞书可在部署方授权配置后使用。Windows 工作台的安装方式见[桌面安装说明](../desktop/windows/README.md)。
 
 ## 本机试用
 
@@ -154,6 +154,28 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 
 运营总览、待办和订单日报分别读取 `/summary`、`/insights`、`/analytics`（均位于指定台账下）。订单日报以订单日期汇总，排除已取消订单，金额缺失的订单单独计数。库存预警比较同一 SKU 的盘点数量和预警线。回复草稿、发货登记和营销计划都只写入台账。
 
+使用 `GET /v1/studio/pinduoduo/books/{book}/report` 按 `from`、`to` 和 `period=day|week|month` 查询台账，`/report/export` 下载同口径 CSV。日期采用上海当地业务日，首尾均计入，一次最多 366 天。周一为一周起点，首尾不足一周或一月时只计查询范围内的记录。订单件数排除取消订单，实付合计只包含已填金额的订单。转化率按 SKU 日记录的支付买家人次之和除以访客人次之和计算，同一访客跨 SKU、跨日可能重复。访客为零时转化率返回 `null`。`records/traffic` 可按日登记搜索、推荐、活动、其他渠道浏览次数，缺失渠道返回 `null`，实际登记零浏览时返回 `"0"`。
+
+## 文案与视频接口
+
+文案任务支持 `inputLanguage`、目标 `language`、`competitorFacts` 和 `sections`。新建文案默认使用模板 2，任务结果中可查 `templateVersion`。旧任务沿用模板 1。调用 `POST /v1/tasks/{id}/regenerate` 时可传 `instructions` 和新的幂等键，生成记录保留原任务 ID。
+
+`PUT /v1/copywriting/drafts/{id}` 接受标题、正文和 `revision`，新建传 0。新建时也可传 `sourceTaskId` 载入本人已完成的文案结果。`GET /v1/copywriting/drafts` 可列出自己的草稿，`GET /v1/copywriting/drafts/{id}/export?revision=2` 下载指定当前版本的 UTF-8 正文。`POST /v1/copywriting/review` 的 `previewReplacements: true` 返回替换预览及按同版规则复检的结果。命中位置按原字段的 UTF-16 下标计数，结束下标不含在命中区间内。
+
+视频换装与商品替换以素材列表中的首个 MP4 为源视频。`PUT /v1/media/videos/{assetId}/preflight` 首次传 `revision: 0`，并填写人工看片得到的 `shotCount`、`personCount`、`maxFacingAngle`。服务端用 FFprobe 读取时长和画面尺寸，要求 1–10 秒、短边 720–1080 像素、单镜头、单人物、朝向夹角至多 60 度。`GET` 同路径返回测量值、人工观察和逐项原因。提交和发送供应商前均复核素材授权和预检结果。
+
+## 企业代理账务
+
+`agent` 类型可注册登录。企业管理员先邀请成员，再通过 `PUT /v1/agency/partners/{accountId}` 批准代理关系。`parentId` 为 `null` 表示一级，二级须指定本企业已批准的一级代理。`PUT /v1/agency/rates` 按版本保存直佣及管理佣金比例，单位为基点，100 基点等于 1%。管理员负责核对原始回款和退款凭证。
+
+`PUT /v1/agency/receipts/{reference}` 登记已核实的人民币实收金额、会计日期、成交代理及费率版本。系统将比例和直接上级记在该笔回款上，只给直接成交者计直佣，二级成交时给其一级上级计管理佣金。`PUT /v1/agency/receipts/{reference}/reversals/{event}` 登记退款、退货或拒付。按同一笔回款的会计日期顺序录入调整，重复凭证可安全重试。佣金按分舍去小数，分次冲减取各次调整前后的应计差额，全额冲减后累计为零。
+
+`GET /v1/agency/statements?month=YYYY-MM` 和 `GET /v1/agency/statements/export?month=YYYY-MM` 返回月度应计额、冲减和净额。普通代理仅看本人，企业管理员可查看全企业。实际收付款、平台回款凭证自动核验及打款由后续支付接入承担。
+
+## 插件联调
+
+`backend/sdk/workspace-v1.mjs` 导出 `workspaceV1(request)`，适用于桌面宿主和 Web 工作台。宿主提供 `request(method,path,payload)`，用当前成员会话及工作区调用 API，并将服务端错误传回调用方。`plugins` 读取可用能力，`submit` 提交任务，`task`、`events`、`cancel`、`regenerate` 读取或操作本人任务。请求重试复用同一幂等键。具体请求和响应可查看服务的 `/openapi.json`。
+
 ## 专家、技能与工作区支持接口
 
 | 功能 | 接口及行为 |
@@ -213,6 +235,6 @@ GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维
 
 ## 交付范围与验证
 
-当前分支交付可运行的后端首版。图片和视频模型已有原生协议适配，独立数据库路由与分层 PSD 已完成测试环境验证。实际模型生成质量、第三方店铺授权和平台回执仍需实测。购物平台 OAuth、支付与订阅、代理计佣仍待实现或接入。WebDAV 与飞书私聊已通过模拟服务测试，真实部署需配置对应连接。专家和技能库、任务额度、事件日志及工作区支持接口已可用于前端联调。客服默认提供带来源的多轮知识检索回复，也支持部署方显式配置的本机对话模型。42 项是能力目录，第三方能力是否可调用以配置及实际联调为准。
+图片和视频模型已有原生协议适配，独立数据库路由与分层 PSD 已完成测试环境验证。三平台店铺 OAuth、支付订阅及自动核验渠道回款仍待接入。实店发布与对账、供应商实际生成质量、真实飞书和 WebDAV 渠道、独立生产部署及七天观察需在相应环境验收。客服默认提供带来源的多轮知识检索回复，也支持部署方显式配置的本机对话模型。42 项能力的实际可用性可通过当前工作区的插件目录和模型配置查看。
 
 运行 npm test 会使用内存 PostgreSQL（PGlite）执行 API 集成测试。也可把 FAI_TEST_DATABASE_URL 指向空的专用 PostgreSQL 测试库再运行。测试会应用迁移并写入固定测试账号和样例，使用完后可丢弃该测试库。

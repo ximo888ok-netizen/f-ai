@@ -28,7 +28,7 @@ const asset = shape({
 const task = shape({
   id: uuid, capabilityId: string, pluginId: string, modelId: nullable(string), projectId: nullable(uuid), parentId: nullable(uuid),
   state: enumOf('queued', 'running', 'succeeded', 'failed', 'cancelled'), cost: count, attempts: count, streamed: bool,
-  result: nullable(anyObject), errorCode: nullable(string), createdAt: date, updatedAt: date,
+  result: nullable(anyObject), errorCode: nullable(string), createdAt: date, updatedAt: date, templateVersion:nullable(count),
 });
 const pluginCapability = shape({
   id: string, name: string, pluginId: string, available: bool, cost: count, modes: items(string),

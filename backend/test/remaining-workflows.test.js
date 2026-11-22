@@ -11,6 +11,7 @@ import { installModels } from '../src/models.js';
 import { createProviders } from '../src/providers.js';
 import { provisionCredits } from '../src/wallet.js';
 import { workOnce } from '../src/worker.js';
+import { workspaceV1 } from '../sdk/workspace-v1.mjs';
 
 const newDb=()=>process.env.FAI_TEST_DATABASE_URL?postgres(process.env.FAI_TEST_DATABASE_URL):new PGlite();
 const base='/v1/customer-service/conversations';
@@ -68,7 +69,7 @@ async function fixture(t,{withModel=false}={}) {
     });
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
     t.after(async()=>{release();await new Promise(resolve=>server.close(resolve));});
-    installModels(providers,[{id:'scenario',protocol:'chat-completions',model:'test',capabilities:['model.chat'],
+    installModels(providers,[{id:'scenario',protocol:'chat-completions',model:'test',capabilities:['model.chat','copywriting.selling-points'],
       baseUrl:'http://127.0.0.1:'+server.address().port}]);
   }
   const app=await buildApp({db,providers,shops,customerAnswer:createCustomerAnswer(providers,withModel?'scenario':undefined)});
@@ -162,6 +163,122 @@ test('copywriting checks each platform with versioned rules isolated by workspac
   assert.deepEqual(review.issues.map(issue=>issue.code),['TOO_LONG','REVIEW_TERM','FORBIDDEN_PHRASE']);
   await call(app,owner,'PUT',rules,200,{...input,revision:created.revision,titleLimit:20,forbiddenPhrases:[]});
   await call(app,writer,'POST','/v1/copywriting/review',409,draft);
+});
+
+test('SDK submits and revises copy, saves only owned results and exports the exact reviewed revision',async t=>{
+  const {app,db,providers,shops,seen}=await fixture(t,{withModel:true});
+  const owner=await member(app,'copy-pipeline-owner',true);
+  const colleague=await join(app,owner,await member(app,'copy-pipeline-colleague'));
+  const headers={authorization:'Bearer '+owner.token,'x-workspace-id':owner.workspace};
+  const sdk=workspaceV1(async (method,url,payload)=>{
+    const response=await app.inject({method,url,payload,headers});
+    assert.ok(response.statusCode<300,response.body);
+    return response.json();
+  });
+  await provisionCredits(db,owner.workspace,owner.account.id,20,'copy-pipeline');
+  const parameters={product:'Fixture 250 g',inputLanguage:'en',language:'zh',competitorFacts:'Fixture B 200 g',sections:['selling-points','comparison']};
+  const task=await sdk.submit({mode:'workflow',capabilityId:'copywriting.selling-points',modelId:'scenario',parameters,idempotencyKey:randomUUID()});
+  await workOnce({db,providers,shops});
+  const newInput={idempotencyKey:randomUUID(),instructions:'按重量比较'};
+  const next=await sdk.regenerate(task.id,newInput);
+  assert.equal(next.parentId,task.id);
+  assert.equal(next.templateVersion,2);
+  assert.match(seen[0].messages[0].content,/三条商品卖点/);
+  assert.equal((await sdk.regenerate(task.id,newInput)).id,next.id);
+  await workOnce({db,providers,shops});
+  assert.match(seen.at(-1).messages[0].content,/按重量比较/);
+  assert.match(seen.at(-1).messages[0].content,/Fixture B 200 g/);
+  assert.equal((await sdk.events(next.id)).items[0].event,'succeeded');
+  const root='/v1/copywriting/drafts';
+  const draft=root+'/'+randomUUID();
+  const create={title:'Sample',revision:0,sourceTaskId:next.id};
+  await call(app,colleague,'PUT',draft,404,create);
+  const original=await call(app,owner,'PUT',draft,200,create);
+  assert.equal(original.content,(await sdk.task(next.id)).result.text);
+  assert.equal((await call(app,owner,'PUT',draft,200,create)).revision,1);
+  await call(app,colleague,'GET',draft,404);
+  await call(app,colleague,'GET',draft+'/export?revision=1',404);
+  const input={revision:1,title:'Sample',content:'🧪 第一款，100%合成样稿'};
+  const revised=await call(app,owner,'PUT',draft,200,input);
+  assert.equal((await call(app,owner,'PUT',draft,200,input)).revision,2);
+  assert.equal(revised.sourceTaskId,next.id);
+  await call(app,owner,'PUT',draft,409,{...input,content:'Stale'});
+  await call(app,owner,'GET',draft+'/export?revision=1',409);
+  const exported=await app.inject({method:'GET',url:draft+'/export?revision=2',headers});
+  assert.equal(exported.body,input.content);
+  assert.match(exported.headers['content-disposition'],/-r2\.txt/);
+  assert.equal((await call(app,owner,'GET',root,200)).items.length,1);
+  await call(app,owner,'PUT','/v1/copywriting/rules/pinduoduo',200,{revision:0,titleLimit:30,sellingPointLimit:20,forbiddenPhrases:['A.B']});
+  const reviewed=await call(app,owner,'POST','/v1/copywriting/review',200,{
+    platform:'pinduoduo',revision:1,title:' 🧪 第一款',sellingPoints:['100% a.B'],previewReplacements:true});
+  assert.deepEqual(reviewed.issues.map(({start,end})=>[start,end]),[[4,6],[0,4],[5,8]]);
+  assert.equal(reviewed.preview.title,' 🧪 表现突出款');
+  assert.deepEqual(reviewed.preview.issues.map(issue=>issue.code),['FORBIDDEN_PHRASE']);
+  await call(app,owner,'PUT','/v1/plugins/copywriting/state',200,{enabled:false});
+  assert.ok((await sdk.plugins()).items.find(p=>p.id==='copywriting').capabilities.every(c=>!c.available));
+  await call(app,owner,'PUT',draft,409,{...input,revision:2});
+  await call(app,owner,'GET',draft,200);
+  await call(app,owner,'POST','/v1/schedules',409,{mode:'chat',capabilityId:'copywriting.detect-terms',parameters:{content:'sample'},
+    idempotencyKey:randomUUID(),runAt:new Date(Date.now()+60000).toISOString()});
+});
+
+test('enterprise agency book applies historic rates, exact partial reversals, two tiers and private monthly exports',async t=>{
+  const {app,db}=await fixture(t);
+  const owner=await member(app,'agency-ledger-owner',true);
+  const parent=await join(app,owner,await member(app,'agency-parent'));
+  const agentSession=await call(app,null,'POST','/v1/auth/register',201,{
+    type:'agent',email:'agency-direct@example.test',displayName:'Direct QA agent',password:'synthetic-agency-password'});
+  const personal={...agentSession,workspace:agentSession.workspaces[0].id};
+  const login=await call(app,null,'POST','/v1/auth/login',200,{email:agentSession.account.email,password:'synthetic-agency-password'});
+  assert.equal(login.account.type,'agent');
+  const agent=await join(app,owner,personal);
+  const third=await join(app,owner,await member(app,'agency-third'));
+  const base='/v1/agency';
+  const rates=base+'/rates';
+  const receipt=base+'/receipts/RECEIVED-001';
+  const statements=base+'/statements?month=';
+  await call(app,personal,'GET',statements+'2026-02',403);
+  await call(app,third,'GET',statements+'2026-02',403);
+  const enroll=async (member,parentId,status=200)=>call(app,owner,'PUT',base+'/partners/'+member.account.id,status,{parentId});
+  await enroll(parent,null);
+  await enroll(agent,parent.account.id);
+  assert.equal((await call(app,agent,'GET',base+'/me',200)).partner.tier,2);
+  await enroll(third,agent.account.id,409);
+  await assert.rejects(db.transaction(tx=>tx.query('INSERT INTO agency_partners(workspace_id,account_id,parent_id,tier) VALUES($1,$2,$3,2)',
+    [owner.workspace,third.account.id,agent.account.id])),e=>e.code==='23503');
+  await call(app,agent,'PUT',rates,403,{revision:0,directBps:1500,managementBps:500});
+  await call(app,owner,'PUT',rates,400,{revision:0,directBps:9000,managementBps:2000});
+  await call(app,owner,'PUT',rates,200,{revision:0,directBps:1500,managementBps:500});
+  const paid={agentId:agent.account.id,bookedOn:'2026-01-31',paidMinor:101,rateRevision:1};
+  await call(app,agent,'PUT',receipt,403,paid);
+  await Promise.all([1,2].map(()=>call(app,owner,'PUT',receipt,200,paid)));
+  await call(app,owner,'PUT',receipt,409,{...paid,paidMinor:100});
+  await call(app,owner,'PUT',rates,200,{revision:1,directBps:900,managementBps:100});
+  assert.equal((await call(app,owner,'PUT',receipt,200,paid)).directBps,1500);
+  const items=async (who,month)=>(await call(app,who,'GET',statements+month,200)).items;
+  const january=await items(owner,'2026-01');
+  assert.equal(january.length,2);
+  assert.equal(january.find(i=>i.accountId===agent.account.id).directMinor,'15');
+  assert.equal(january.find(i=>i.accountId===parent.account.id).managementMinor,'5');
+  const adjust=(id,amountMinor,reason,status=200)=>call(app,owner,'PUT',receipt+'/reversals/'+id,status,{reason,bookedOn:'2026-02-01',amountMinor});
+  await Promise.all([1,2].map(()=>adjust('refund',11,'refund')));
+  await adjust('refund',12,'refund',409);
+  await adjust('return',30,'return');
+  await adjust('chargeback',60,'chargeback');
+  await adjust('extra',1,'refund',409);
+  assert.equal((await call(app,owner,'GET',receipt,200)).reversedMinor,101);
+  assert.equal((await call(app,owner,'GET',receipt+'/reversals',200)).items.length,3);
+  assert.equal((await call(app,owner,'GET',base+'/receipts',200)).items[0].reference,'RECEIVED-001');
+  assert.equal((await items(agent,'2026-02'))[0].netMinor,'-15');
+  assert.deepEqual((await items(parent,'2026-02')).map(i=>i.netMinor),['-5']);
+  const csv=await app.inject({method:'GET',url:base+'/statements/export?month=2026-02',
+    headers:{authorization:'Bearer '+agent.token,'x-workspace-id':agent.workspace}});
+  assert.equal(csv.statusCode,200);
+  assert.ok(csv.body.includes(agent.account.id+',0,0,-15,-15'));
+  assert.ok(!csv.body.includes(parent.account.id));
+  const other=await member(app,'agency-second-company',true);
+  await call(app,other,'GET',receipt,404);
+  await call(app,other,'PUT',base+'/partners/'+agent.account.id,404,{parentId:null});
 });
 
 test('rights notices relay privately, restrict actual downloads, and restore only when all holds end',async t=>{

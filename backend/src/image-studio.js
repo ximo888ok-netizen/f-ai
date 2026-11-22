@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { lockPlugin, requirePlugin } from './plugin-policy.js';
 import { Worker } from 'node:worker_threads';
 import { generatedAsset } from './ai-export-mark.js';
 import { row, rows } from './db.js';
@@ -88,6 +89,7 @@ export function registerImageStudio(app,db) {
     const hash=createHash('sha256').update(stableJson(JSON.parse(JSON.stringify(jobs)))).digest('hex');
     const prior=await existing(db,key,hash);
     if (prior) return prior;
+    await requirePlugin(db,workspaceId,'image');
     if (active>=2) throw busy();
     active++;
     try {
@@ -103,6 +105,7 @@ export function registerImageStudio(app,db) {
       const byId=new Map(assets.map(asset=>[asset.id,asset]));
       const outputs=await render(jobs.map(job=>({job,sources:job.inputs.map(id=>byId.get(id))})));
       const saved=await db.transaction(async tx=>{
+        await lockPlugin(tx,workspaceId,'image');
         const created=await row(tx,`INSERT INTO studio_image_batches(workspace_id,account_id,id,request_hash,result)
           VALUES($1,$2,$3,$4,'{}'::jsonb) ON CONFLICT DO NOTHING RETURNING id`,[...key,hash]);
         if (!created) return {result:await existing(tx,key,hash),created:false};

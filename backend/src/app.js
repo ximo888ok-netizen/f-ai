@@ -5,6 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import { registerAssets } from './assets.js';
 import { registerAuth } from './auth.js';
+import { registerAgency } from './agency.js';
 import { contracts, errorContracts } from './contracts.js';
 import { registerCustomerService } from './customer.js';
 import { checkMigrations, migrationFiles } from './db.js';
@@ -34,6 +35,7 @@ import { registerSkillRuns } from './skill-runs.js';
 import { registerImageStudio } from './image-studio.js';
 import { registerStoryboards } from './video-storyboards.js';
 import { registerCopywritingReview } from './copywriting-review.js';
+import { registerCopywritingDrafts } from './copywriting-drafts.js';
 
 export async function buildApp({
   db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(),
@@ -92,6 +94,11 @@ export async function buildApp({
     error: { code: 'NOT_FOUND', message: 'Route not found', requestId: request.id },
   }));
 
+  app.addHook('onResponse',async (request,reply)=>{
+    request.log.info({method:request.method,route:request.routeOptions.url ?? 'unmatched',
+      status:reply.statusCode,durationMs:Math.round(reply.elapsedTime)},'HTTP request');
+  });
+
   const requiredMigrations = await migrationFiles();
   const databaseRouter = workspaceDatabaseRouter(db, dedicatedDatabases, requiredMigrations);
   const workspaceDb = databaseRouter.db;
@@ -121,6 +128,7 @@ export async function buildApp({
   registerListingDrafts(app, workspaceDb);
   registerShopOperations(app, workspaceDb);
   registerWallet(app, workspaceDb);
+  registerAgency(app,workspaceDb);
   registerWorkspace(app, workspaceDb);
   registerWorkspaceLibrary(app, workspaceDb);
   registerSkillRuns(app,workspaceDb,providers,shops);
@@ -130,6 +138,7 @@ export async function buildApp({
   registerAssets(app, workspaceDb);
   registerImageStudio(app,workspaceDb);
   registerCopywritingReview(app,workspaceDb);
+  registerCopywritingDrafts(app,workspaceDb);
   registerCloudAssets(app,workspaceDb,cloudAssets);
   registerFeishuChannel(app,workspaceDb,feishu);
   registerSupport(app, workspaceDb);

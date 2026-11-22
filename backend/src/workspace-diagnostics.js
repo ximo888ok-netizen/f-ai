@@ -47,10 +47,33 @@ export function registerWorkspaceDiagnostics(app, db, migrations) {
         count(*) FILTER (WHERE state='queued')::integer AS queued,
         count(*) FILTER (WHERE state='queued' AND available_at<=now())::integer AS runnable,
         count(*) FILTER (WHERE state='running')::integer AS running,
-        count(*) FILTER (WHERE state='running' AND lease_until<=now())::integer AS "expiredLeases",
+        count(*) FILTER (WHERE state='running' AND lease_id IS NOT NULL AND lease_until<=now())::integer AS "expiredLeases",
         floor(extract(epoch FROM now()-(min(available_at) FILTER (WHERE state='queued' AND available_at<=now()))))::integer AS "oldestRunnableSeconds",
         (SELECT count(*)::integer FROM schedules WHERE workspace_id=$1 AND state='pending' AND run_at<=now()) AS "dueSchedules"
       FROM tasks WHERE workspace_id=$1 AND state IN ('queued','running')`, [request.context.workspaceId]));
+
+  route(app,'GET','/v1/diagnostics/alerts',{tags,manager:true,summary:'Evaluate workspace queue, polling and final failure thresholds',
+    response:{200:object({observedAt:{type:'string',format:'date-time'},windowMinutes:{const:60},finished:count,failed:count,
+      alerts:array(choice('QUEUE_DELAY','LEASE_EXPIRED','PROVIDER_POLL_DELAY','SCHEDULE_DELAY','TASK_FAILURE_RATE'),5)})}},
+    async request=>{
+      const sample=await row(db,`SELECT now() AS "observedAt",
+        count(*) FILTER (WHERE state IN ('succeeded','failed'))::integer AS finished,
+        count(*) FILTER (WHERE state='failed')::integer AS failed,
+        coalesce(bool_or(state='queued' AND available_at<=now()-interval '2 minutes'),false) AS backlog,
+        coalesce(bool_or(state='running' AND lease_id IS NOT NULL AND lease_until<=now()),false) AS expired,
+        coalesce(bool_or(state='running' AND provider_job_id IS NOT NULL AND lease_id IS NULL AND lease_until<=now()-interval '2 minutes'),false) AS poll,
+        EXISTS(SELECT 1 FROM schedules WHERE workspace_id=$1 AND state='pending' AND run_at<=now()-interval '2 minutes') AS scheduled
+        FROM tasks WHERE workspace_id=$1 AND (state IN ('queued','running') OR
+          (state IN ('succeeded','failed') AND updated_at>=now()-interval '1 hour'))`,[request.context.workspaceId]);
+      const {observedAt,finished,failed}=sample;
+      const alerts=[];
+      if (sample.backlog) alerts.push('QUEUE_DELAY');
+      if (sample.expired) alerts.push('LEASE_EXPIRED');
+      if (sample.poll) alerts.push('PROVIDER_POLL_DELAY');
+      if (sample.scheduled) alerts.push('SCHEDULE_DELAY');
+      if (finished>=5 && failed/finished>=0.2) alerts.push('TASK_FAILURE_RATE');
+      return {observedAt,windowMinutes:60,finished,failed,alerts};
+    });
 
   route(app, 'GET', feedback, { tags, summary:'List feedback submitted by this workspace member', querystring:page,
     response: {200: object({items:array(feedbackRecord,100)})} }, async request => ({

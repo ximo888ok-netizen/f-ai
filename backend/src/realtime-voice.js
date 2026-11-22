@@ -3,6 +3,7 @@ import { row, rows } from './db.js';
 import { ApiError, bool, choice, integer, invalid, notFound, object, route, text, uuid } from './http.js';
 import { isVoiceSdp, maxSdpBytes } from './realtime-provider.js';
 import { finishCredits, reserveCredits } from './wallet.js';
+import { lockPlugin, pluginEnabled } from './plugin-policy.js';
 
 const root = '/v1/voice/realtime';
 const collection = root + '/sessions/:id';
@@ -38,6 +39,7 @@ async function reserve(db,key,offerHash,binding) {
       if (existing.offer_hash !== offerHash) throw new ApiError(409,'VOICE_OFFER_CHANGED','Use the original offer for this session ID');
       return {record:existing,created:false};
     }
+    await lockPlugin(tx,key[0],'models');
     if (!binding) throw new ApiError(422,'REALTIME_VOICE_UNAVAILABLE','Realtime voice is unavailable for this workspace');
     const busy = await row(tx,`SELECT 1 FROM realtime_voice_sessions WHERE workspace_id=$1 AND account_id=$2
       AND state IN ('opening','active','closing') LIMIT 1`,key.slice(0,2));
@@ -121,7 +123,7 @@ export function registerRealtimeVoice(app,db,bindings) {
   route(app,'GET',root + '/options',{tags,summary:'Read WebRTC availability and the configured session price',
     response:{200:object({available:bool,...options},['available'])}}, async request => {
     const binding = bindings.get(request.context.workspaceId.toLowerCase());
-    if (!binding) return {available:false};
+    if (!binding || !(await pluginEnabled(db,request.context.workspaceId,'models'))) return {available:false};
     const {model,voice,credits,durationSeconds} = binding;
     return {available:true,model,voice,credits,durationSeconds};
   });
