@@ -1,5 +1,13 @@
 # 后端部署与恢复验收
 
+## 本机独立部署验收
+
+从包含 Git 历史的后端分支运行 `npm run accept:deployment`。命令以当前提交为候选，在新的临时目录离线安装生产依赖，创建回环 PostgreSQL 集群并启动 HTTP 服务。测试账号、素材、积分及数据库均由脚本生成。验收输出候选提交、锁文件摘要、抽测资料编号、归档摘要和结果。
+
+准备 Node.js 24 及 npm、Git、PostgreSQL 服务端及客户端工具。设置 `FAI_QA_PG_BIN` 为包含 `postgres`、`initdb` 和 `pg_ctl` 的完整 PostgreSQL 安装的 bin 目录。如客户端另装，将 `FAI_QA_PG_CLIENT_BIN` 指向包含 `psql`、`pg_dump` 及 `pg_restore` 的目录。设置 `FAI_QA_NPM_CACHE` 为包含当前锁文件生产依赖的 npm 缓存绝对路径。需要预热缓存时，可在单独的新检出目录执行 `npm ci --omit=dev --cache <缓存路径>`。在 Unix 上以可运行 `initdb` 的普通用户执行。
+
+服务通过实际 HTTP 验证登录、成员和项目、企业切库、素材、分层 PSD、客服、任务结算和监控。停写后备份控制库和企业库，将备份恢复到两个新空库，再核对原账号、文件和余额。部署方可将标准输出保存到本机用于对照。[开发计划验收对照](ACCEPTANCE.md)
+
 ## 发布前
 
 使用指定的 Git 提交建立干净的发布目录。安装 Node.js 24，使用 `npm ci --omit=dev` 安装后端依赖。保留 `backend` 和工作台前端目录的相对位置。将数据库连接和可选供应商配置通过部署环境注入。视频处理需要 FFmpeg、FFprobe 和所选编码器。

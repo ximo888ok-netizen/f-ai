@@ -13,6 +13,7 @@
     "migrate": "node src/admin.js migrate",
     "ops:probe": "node src/ops-probe.js",
     "release:inventory": "node src/package-inventory.js",
+    "accept:deployment": "node acceptance/deployment.mjs",
     "db:backup": "node src/admin.js backup",
     "db:restore": "node src/admin.js restore-backup",
     "credits": "node src/admin.js credits",

@@ -306,7 +306,12 @@ test('rights notices relay privately, restrict actual downloads, and restore onl
   assert.equal((await call(app,affected,'GET',path,200)).notice.affectsMyAsset,true);
   const second=await call(app,reporter,'POST',rights,201,{...data,id:randomUUID()});
   const secondPath=rights+'/'+second.id;
+  await call(app,affected,'PATCH','/v1/settings',200,{rightsNotifications:false});
   await act(manager,'forward',1,200,secondPath);
+  assert.equal((await call(app,affected,'GET',secondPath,200)).notice.state,'forwarded');
+  const forwards=(await call(app,affected,'GET','/v1/notifications',200)).items.filter(item=>item.type==='rights.forward');
+  assert.deepEqual(forwards.map(item=>item.data.noticeId),[data.id]);
+  await call(app,affected,'PATCH','/v1/settings',200,{rightsNotifications:true});
   await act(manager,'restrict',2,200,secondPath);
   assert.equal((await act(manager,'restrict',2)).state,'restricted');
   await call(app,affected,'GET','/v1/assets/'+asset.id+'/content',404);

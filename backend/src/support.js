@@ -15,7 +15,7 @@ const preferenceSchema = object({
   favoriteCapabilities: { ...array(capabilityId, capabilityId.enum.length), uniqueItems: true },
   locale: choice('zh-CN', 'en-US'),
   onboardingStep: integer(0, 6),
-  doNotDisturb: bool, taskNotifications: bool, memberNotifications: bool, rememberConversations: bool,
+  doNotDisturb: bool, taskNotifications: bool, memberNotifications: bool, rightsNotifications: bool, rememberConversations: bool,
 }, []);
 
 export function registerSupport(app, db) {

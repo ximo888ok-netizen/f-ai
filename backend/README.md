@@ -186,7 +186,7 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 | 成员任务额度 | 企业所有者和管理员使用 `GET/PUT /v1/credits/members/{id}/limit`，成员通过 `GET /v1/credits/limit` 查看自身额度。额度按该工作区历史已消费积分与在途预占累计，`null` 表示不限额。设低额度不会撤销在途任务；取消或失败会释放预占。 |
 | 素材校验 | `GET /v1/assets/{id}` 返回本人素材元数据和 SHA-256，原文件下载响应的 `X-Content-SHA256` 与元数据一致。 |
 | 任务事件 | `GET /v1/tasks/{id}/events` 分页读取本人任务的状态事件，可按 `level`、`from`、`to` 筛选，事件只有状态、级别、尝试次数、时间和错误码。升级前的任务从下一次状态变化开始记录。 |
-| 工作区消息 | 加入工作区与角色实际变更会通知受影响成员。`PATCH /v1/settings` 可用 `memberNotifications` 单独关闭；任务消息沿用 `taskNotifications`。 |
+| 工作区消息 | `PATCH /v1/settings` 通过 `memberNotifications`、`taskNotifications`、`rightsNotifications` 分别设置成员、任务和权利案件提醒。案件进度仍可在权利通知中查阅。 |
 | 引导与反馈 | `PATCH /v1/settings` 保存 `onboardingStep`，取值 0–6。`POST /v1/feedback` 接受客户端 UUID、类型和描述。相同 UUID、相同内容可重试；`GET /v1/feedback` 读取本人记录。 |
 | 诊断 | `GET /v1/diagnostics` 向管理员返回数据库迁移状态、服务进程目录磁盘状态、Node.js 版本、进程运行时长、内存和累计 CPU 时间。 |
 | 网页搜索 | `GET /v1/search/web` 返回是否启用。`POST /v1/search/web` 接受 `query` 和可选的 `limit`，返回标题、原链接及摘要摘录。部署端设置 `EXA_API_KEY` 启用。搜索只向 Exa 转交本次输入的查询词与搜索参数，服务响应按数量和大小限制。 |
