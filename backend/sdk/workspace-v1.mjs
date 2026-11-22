@@ -8,6 +8,88 @@ function page({limit=30,offset=0}={}) {
   if (!Number.isInteger(limit) || limit<1 || limit>100 || !Number.isInteger(offset) || offset<0 || offset>1000000) throw new RangeError('Invalid page');
   return new URLSearchParams({limit,offset});
 }
+
+export class WorkspaceHttpError extends Error {
+  constructor(statusCode, code, message, requestId) {
+    super(message);
+    this.name = 'WorkspaceHttpError';
+    this.statusCode = statusCode;
+    this.code = code;
+    this.requestId = requestId;
+  }
+}
+
+// Configure and keep this request function in the trusted host.
+export function createWorkspaceHttpRequest({ origin, workspaceId, getToken }) {
+  const base = new URL(origin);
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname);
+  if (!(base.protocol === 'https:' || (base.protocol === 'http:' && loopback)) ||
+      base.username || base.password || base.pathname !== '/' || base.search || base.hash) {
+    throw new TypeError('Expected a workspace API origin using HTTPS or loopback HTTP');
+  }
+  const apiOrigin = base.origin;
+  const workspace = id(workspaceId);
+  if (typeof getToken !== 'function') throw new TypeError('Expected a session token getter');
+  const fetchFromHost = globalThis.fetch.bind(globalThis);
+
+  return async (method, path, payload) => {
+    if (typeof path !== 'string' || !path.startsWith('/v1/') || path.includes('\\')) {
+      throw new TypeError('Expected a relative workspace API path');
+    }
+    const url = new URL(path, apiOrigin);
+    if (url.origin !== apiOrigin || !url.pathname.startsWith('/v1/') || url.hash) {
+      throw new TypeError('Expected a relative workspace API path');
+    }
+
+    let token;
+    try {
+      token = await getToken();
+    } catch {
+      throw new WorkspaceHttpError(401, 'UNAUTHENTICATED', 'A valid session is required');
+    }
+    if (typeof token !== 'string' || !/^[A-Za-z0-9._~+/-]+=*$/.test(token)) {
+      throw new WorkspaceHttpError(401, 'UNAUTHENTICATED', 'A valid session is required');
+    }
+
+    const headers = { authorization: 'Bearer ' + token, 'x-workspace-id': workspace };
+    const body = payload === undefined ? undefined : JSON.stringify(payload);
+    if (body !== undefined) headers['content-type'] = 'application/json';
+    let response;
+    try {
+      response = await fetchFromHost(url, {
+        method, headers, body, redirect: 'error', credentials: 'omit',
+        cache: 'no-store', referrerPolicy: 'no-referrer',
+      });
+    } catch {
+      throw new WorkspaceHttpError(undefined, 'TRANSPORT_ERROR', 'Workspace API request failed');
+    }
+
+    const mediaType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase() ?? '';
+    const json = mediaType === 'application/json' || mediaType.endsWith('+json');
+    if (!response.ok) {
+      const detail = json ? (await response.json().catch(() => undefined))?.error : undefined;
+      if (!json) await response.body?.cancel().catch(() => {});
+      throw new WorkspaceHttpError(response.status,
+        typeof detail?.code === 'string' ? detail.code : 'HTTP_ERROR',
+        typeof detail?.message === 'string' ? detail.message : 'Workspace API returned an error',
+        typeof detail?.requestId === 'string' ? detail.requestId : undefined);
+    }
+    if (response.status === 204 || response.status === 205) return undefined;
+
+    try {
+      if (json) return await response.json();
+      if (/^(image|audio|video)\//.test(mediaType) ||
+          ['application/octet-stream', 'application/vnd.adobe.photoshop'].includes(mediaType)) {
+        return new Uint8Array(await response.arrayBuffer());
+      }
+      await response.body?.cancel();
+    } catch {
+      // Report a decoding or interrupted response without exposing the underlying request.
+    }
+    throw new WorkspaceHttpError(response.status, 'INVALID_RESPONSE', 'Workspace API returned an invalid response');
+  };
+}
+
 export function workspaceV1(request) {
   const taskPath=value=>'/v1/tasks/'+id(value);
   return Object.freeze({

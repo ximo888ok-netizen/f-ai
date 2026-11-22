@@ -8,10 +8,12 @@ import { createServer } from 'node:net';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { client, exerciseCustomer, exerciseFilesAndWorker, exerciseImagePreflight, exercisePsd, exerciseWorkspace, verifyAsset } from './fixtures.mjs';
 import { rotationFixture } from './credential-rotation.mjs';
+import { publishFixtureTemplates, verifyPlatformExports } from './image-templates.mjs';
+import { verifyOfflineRelease, sha256File } from '../src/verify-offline-release.js';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 let pgBin = process.env.FAI_QA_PG_BIN;
@@ -95,16 +97,12 @@ try {
     for await (const chunk of createReadStream(archive)) digest.update(chunk);
     assert.equal(digest.digest('hex'),process.env.FAI_QA_OFFLINE_SHA256,'Offline archive integrity');
     run('tar',['-xf',archive,'-C',work]);
-    const release=JSON.parse(await readFile(join(work,'release.json'),'utf8'));
-    assert.equal(release.revision,revision);
+    // The verified archive digest also pins its manifest for legacy invocations with only an archive hash.
+    const manifestSha256=process.env.FAI_QA_OFFLINE_MANIFEST_SHA256 ?? await sha256File(join(work,'release.json'));
+    const verified=await verifyOfflineRelease(work,{revision,manifestSha256});
     pgBin=join(work,'runtime','postgres','bin');
     pgClient=pgBin;
     node=join(work,'runtime','node.exe');
-    for (const tool of release.tools) {
-      const hash=createHash('sha256');
-      for await (const part of createReadStream(join(work,'runtime',tool.path))) hash.update(part);
-      assert.equal(hash.digest('hex'),tool.sha256);
-    }
     const media=join(work,'runtime','media');
     const sample=join(work,'synthetic.mp4');
     run(executable(media,'ffmpeg'),['-v','error','-f','lavfi','-i','color=size=96x64:rate=10','-t','0.3',
@@ -112,14 +110,22 @@ try {
     const info=JSON.parse(run(executable(media,'ffprobe'),['-v','error','-select_streams','v:0','-show_entries',
       'stream=codec_name,width,height','-of','json',sample]));
     assert.deepEqual(info.streams.map(({codec_name,width,height})=>[codec_name,width,height]),[['h264',96,64]]);
-    console.log(JSON.stringify({offlineArchiveVerified:true,runtimes:release.tools.length}));
+    console.log(JSON.stringify({offlineArchiveVerified:true,...verified}));
   } else {
     run('git', ['--git-dir=' + gitDir, '--work-tree=' + work, '-c', 'core.autocrlf=false',
     'restore', '--source=' + revision, '--worktree', '--', 'backend/package.json', 'backend/package-lock.json',
-    'backend/src', 'backend/migrations', web + '打开设计稿.html', ':(glob)' + web + '*.js', ':(glob)' + web + '*.css',
+    'backend/src', 'backend/migrations', 'backend/sdk', web + '打开设计稿.html', ':(glob)' + web + '*.js', ':(glob)' + web + '*.css',
     web + 'assets/aurora.webp', web + 'assets/optic-wave.webp'], indexEnv);
-  run(node, [npm, 'ci', '--offline', '--omit=dev', '--no-audit', '--no-fund', '--cache', cache], osEnv, application);
+    run(node, [npm, 'ci', '--offline', '--omit=dev', '--no-audit', '--no-fund', '--cache', cache], osEnv, application);
   }
+  const preflight = spawnSync(node, ['src/deployment-capacity.js', work], {
+    cwd: application, env: osEnv, encoding: 'utf8', windowsHide: true, timeout: 30000,
+  });
+  if (preflight.error) throw preflight.error;
+  const capacity = JSON.parse(preflight.stdout);
+  assert.ok(['meets','below','unknown'].includes(capacity.eligibility));
+  assert.equal(preflight.status, {meets:0, below:1, unknown:2}[capacity.eligibility]);
+  console.log(JSON.stringify({deploymentVolumeAssessment:capacity}));
   sqlTool=executable(pgClient,'psql');
   const inventory = JSON.parse(run(node, ['src/package-inventory.js'], osEnv, application));
   console.log(JSON.stringify({ revision, node: process.version, postgres: run(serverTool('postgres'), ['--version']),
@@ -158,6 +164,7 @@ try {
   const registered = await anonymous('POST', '/v1/auth/register', 201, { ...login, displayName: 'QA', type: 'enterprise', workspaceName: 'Deployment QA' });
   const workspace = registered.workspaces[0].id;
   const initial=client(origin,registered);
+  await publishFixtureTemplates(initial);
   const memory=await initial('POST','/v1/memory',201,{scope:'enterprise',content:'Initial QA note'});
   await initial('PUT','/v1/memory/'+memory.id+'/changes/'+workspace,200,{revision:0,action:'update',content:'QA update'});
   await client(origin, registered)('POST', '/v1/studio/products', 201, { sku: 'QA-CUTOVER', name: 'Synthetic product' });
@@ -173,6 +180,11 @@ try {
   assert.deepEqual(await api('GET', '/v1/workspace/database', 200), { mode: 'dedicated', state: 'ready' });
   await exerciseWorkspace(origin, session);
   const { asset, taskId } = await exerciseFilesAndWorker(api);
+  const {createWorkspaceHttpRequest,bindPluginV1}=await import(pathToFileURL(join(application,'sdk','workspace-v1.mjs')));
+  const sdk=bindPluginV1(createWorkspaceHttpRequest({origin,workspaceId:workspace,getToken:()=>session.token}),
+    {sdkVersion:1,permissions:['assets.read','tasks.read']},()=>true);
+  assert.equal((await sdk.task(taskId)).state,'succeeded');
+  assert.equal(createHash('sha256').update(await sdk.assetContent(asset.id)).digest('hex'),asset.sha256);
   const changes=await api('GET','/v1/memory/'+memory.id+'/changes',200);
   assert.equal(changes.items[0].revision,1);
   const logDir=join(work,'task-logs');
@@ -184,9 +196,14 @@ try {
   const observed=JSON.parse(run(node,['src/ops-observation.js','once',join(work,'observations.sqlite')],
     {...databaseEnv,FAI_PROBE_ORIGIN:origin,FAI_PROBE_SESSION:session.token,FAI_PROBE_WORKSPACE_ID:workspace},application));
   assert.equal(observed.samples,1);assert.equal(observed.failures,0);assert.equal(observed.qualified,false);
+  const report=JSON.parse(run(node,['src/ops-observation.js','report',join(work,'observations.sqlite')],
+    {...osEnv,FAI_RELEASE_REVISION:revision,FAI_PROBE_ORIGIN:origin,FAI_PROBE_WORKSPACE_ID:workspace},application));
+  assert.deepEqual(report.blockers,['INSUFFICIENT_CONTINUOUS_TIME']);
+  assert.equal(report.samples,1);assert.equal(report.qualified,false);
   const { readPsd } = createRequire(join(application, 'package.json'))('ag-psd');
   await exercisePsd(api, asset, readPsd);
   await exerciseImagePreflight(api);
+  const platformExports=await verifyPlatformExports(api,createRequire(join(application,'package.json'))('@napi-rs/canvas'));
   const sample = await exerciseCustomer(api);
   const probe = JSON.parse(run(node, ['src/ops-probe.js'], { ...osEnv, FAI_PROBE_ORIGIN: origin,
     FAI_PROBE_SESSION: session.token, FAI_PROBE_WORKSPACE_ID: workspace }, application));
@@ -195,7 +212,7 @@ try {
   console.log(JSON.stringify({ migrations: migrations.length, cutover: 'passed', platformAssetBytes: 10485760,
     fileSha256: asset.sha256, queuedTask: 'settled once', productDocuments: 20, faqDocuments: 20, questions: sample,
     followUps: 5, handoff: 'passed', workspaceProbe: 'healthy', projectGrants: 'passed', pluginToggles: 5, psdLayers: 3,
-    sameNameProductVolumesMl:[350,750], imageSubmissionsRejected:6, rejectedImageLedgerDelta:0 }));
+    sameNameProductVolumesMl:[350,750], imageSubmissionsRejected:6, rejectedImageLedgerDelta:0, platformExports }));
 
   await stopService();
   await rotation.exercise({ session, stop: stopService, start: version => {
@@ -211,6 +228,7 @@ try {
   const restoredSession = await client(restored)('POST', '/v1/auth/login', 200, login);
   const restoredApi = client(restored, restoredSession);
   assert.equal(restoredSession.workspaces[0].id, workspace);
+  assert.deepEqual((await restoredApi('GET','/v1/media/images/platform-templates',200)).items.map(t=>t.revision),[1,1,2]);
   await verifyAsset(restoredApi, asset);
   assert.equal((await restoredApi('GET', '/v1/tasks/' + taskId, 200)).state, 'succeeded');
   assert.deepEqual(await restoredApi('GET', '/v1/credits/wallet', 200), { balance: 4, reserved: 0, available: 4 });

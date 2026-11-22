@@ -14,6 +14,7 @@ import { migrate,postgres } from '../src/db.js';
 import { createVideoDelivery } from '../src/video-delivery.js';
 import { createProviders } from '../src/providers.js';
 import { reviewPicture } from '../acceptance/fixtures.mjs';
+import { publishFixtureTemplates, verifyPlatformExports } from '../acceptance/image-templates.mjs';
 import { provisionCredits } from '../src/wallet.js';
 import { workOnce } from '../src/worker.js';
 
@@ -65,6 +66,14 @@ async function gen(db,owner,assetId) {
     request_hash,idempotency_key,state,cost,result) VALUES($1,$2,$3,'image.main-image','model:fixture','image',
     '{}','fixture',$4,'succeeded',1,$5)`,[randomUUID(),owner.workspace,owner.account,randomUUID(),JSON.stringify({assetId})]);
 }
+
+test('three workspace specifications produce six decodable exports with the expected subject geometry and colors',async t=>{
+  const {user}=await fixture(t);
+  const {request}=await user('platform-template-artifacts');
+  const api=(method,url,status,body)=>request(method,url,status,body,url.endsWith('/content'));
+  await publishFixtureTemplates(api);
+  assert.deepEqual(await verifyPlatformExports(api,{createCanvas,loadImage}),{platforms:3,sourceFixtures:5,decodedExports:6,updatedCoverExports:1});
+});
 
 test('image review boundaries reject ineligible try-on and replacement without tasks, reservations or debits',async t=>{
   const providers=createProviders();

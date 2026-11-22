@@ -267,6 +267,12 @@ GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维
 图片和视频模型已有原生协议适配，独立数据库路由与分层 PSD 已完成测试环境验证。三平台店铺 OAuth、支付订阅及自动核验渠道回款仍待接入。实店发布与对账、供应商实际生成质量、真实飞书和 WebDAV 渠道、独立生产部署及七天观察需在相应环境验收。客服默认提供带来源的多轮知识检索回复，也支持部署方显式配置的本机对话模型。42 项能力的实际可用性可通过当前工作区的插件目录和模型配置查看。
 
 运行 npm test 会使用内存 PostgreSQL（PGlite）执行 API 集成测试。也可把 FAI_TEST_DATABASE_URL 指向空的专用 PostgreSQL 测试库再运行。测试会应用迁移并写入固定测试账号和样例，使用完后可丢弃该测试库。
+## 工作区图片规格
+
+工作区所有者或管理员可以用 `PUT /v1/media/images/platform-templates/{platform}` 确认淘宝（`taobao`）、拼多多（`pinduoduo`）和抖店（`douyin`）的导出规格。首次传 `{"revision":0,"width":800,"height":800,"fit":"contain","format":"png"}`，以后传要更新的版本号。尺寸和格式由工作区按目标商品与类目确认。成员从 `GET /v1/media/images/platform-templates` 读取已发布的最新规格。
+
+在图片批次的条目中加入 `"platformTemplate":{"platform":"pinduoduo","revision":1}` 即按该版本生成。画布宽高、适配方式和文件格式取自模板；返回的条目携带所用版本。另发新版本后，已有批次可以按原请求重试，仍可下载原结果。继续使用通用比例或自定义尺寸的客户端保留现有调用方式。
+
 ## 后端插件、消息渠道与记忆接口
 
 受信任的宿主以当前成员会话和工作区构造 `workspaceV1(request)`。给插件使用 `bindPluginV1(request, manifest, isGranted)`，由宿主在每次调用时检查该插件当前是否启用、权限是否仍获准；后端继续验证成员、工作区、业务开关与资源归属。V1 新增素材列表、元数据、二进制下载、上传，以及本人通知列表和标为已读。运输层遇到非 2xx 应抛出 API 错误，下载应返回字节。兼容已有的 V1 任务与事件方法。未知 SDK 主版本或权限在绑定时拒绝。支持的权限以及可运行的只读示例见 [SDK](sdk/workspace-v1.mjs) 和[样例插件](sdk/examples/asset-inbox.mjs)。

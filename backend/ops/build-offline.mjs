@@ -1,10 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
 import { copyFile,cp,mkdir,mkdtemp,readdir,rename,rm,writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename,dirname,isAbsolute,join,relative,resolve } from 'node:path';
+import { basename,dirname,isAbsolute,join,resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  OFFLINE_FORMAT, OFFLINE_PLATFORM, OFFLINE_TOOLS, RUNTIME_LICENSES, nativeFileInventory, sha256File,
+} from '../src/verify-offline-release.js';
 
 // Assemble from a Git revision, a lockfile install and distribution directories only.
 const repo=fileURLToPath(new URL('../../',import.meta.url));
@@ -20,11 +21,6 @@ const run=(file,args,cwd=repo,childEnv=env)=>{
   const result=spawnSync(file,args,{cwd,env:childEnv,encoding:'utf8',timeout:600000,windowsHide:true});
   if (result.status!==0) throw new Error(basename(file)+' failed: '+(result.stderr || '').slice(-600));
   return result.stdout.trim();
-};
-const hash=async file=>{
-  const digest=createHash('sha256');
-  for await (const chunk of createReadStream(file)) digest.update(chunk);
-  return digest.digest('hex');
 };
 const temp=await mkdtemp(join(tmpdir(),'fai-offline-'));
 try {
@@ -52,42 +48,32 @@ try {
   for (const part of ['lib','share','server_license.txt','commandlinetools_3rd_party_licenses.txt']) await cp(join(temp,'pgsql',part),join(pg,part),{recursive:true});
   async function copyTools(from,to,executables) {
     for (const name of await readdir(from)) {
-      if (name.endsWith('.dll') || executables.includes(name)) await copyFile(join(from,name),join(to,name));
+      if (/\.dll$/i.test(name) || executables.includes(name)) await copyFile(join(from,name),join(to,name));
     }
   }
   await copyTools(join(temp,'pgsql','bin'),join(pg,'bin'),['postgres.exe','initdb.exe','pg_ctl.exe','psql.exe','pg_dump.exe','pg_restore.exe']);
   await copyTools(dirname(ffmpeg),media,['ffmpeg.exe','ffprobe.exe']);
   await copyFile(join(dirname(dirname(ffmpeg)),'LICENSE.txt'),join(media,'LICENSE.txt'));
   const dependencies=JSON.parse(run(node,['src/package-inventory.js'],backend));
-  const binaries=[
-    ['node','node.exe',['--version'],'https://nodejs.org/dist/'],
-    ...['postgres','initdb','pg_ctl','psql','pg_dump','pg_restore'].map(name=>
-      [name,'postgres/bin/'+name+'.exe',['--version'],'https://www.enterprisedb.com/download-postgresql-binaries']),
-    ['ffmpeg','media/ffmpeg.exe',['-version'],'https://github.com/FFmpeg-Builds/FFmpeg-Builds'],
-    ['ffprobe','media/ffprobe.exe',['-version'],'https://github.com/FFmpeg-Builds/FFmpeg-Builds'],
-  ];
   const tools=[];
-  for (const [name,path,args,source] of binaries) {
+  for (const [name,path,args,distribution] of OFFLINE_TOOLS) {
     const file=join(runtime,path);
-    tools.push({name,path,source,version:run(file,args).split(/\r?\n/)[0],sha256:await hash(file)});
+    const source=path.startsWith('media/') ? env.FAI_FFMPEG_SOURCE || distribution : distribution;
+    tools.push({name,path,source,version:run(file,args).split(/\r?\n/)[0],sha256:await sha256File(file)});
   }
-  const nativeFiles=[];
-  async function inventory(directory) {
-    for (const entry of await readdir(directory,{withFileTypes:true})) {
-      const path=join(directory,entry.name);
-      if (entry.isDirectory()) await inventory(path);
-      else if (/\.(exe|dll|node)$/i.test(entry.name)) nativeFiles.push({path:relative(root,path).replaceAll('\\','/'),sha256:await hash(path)});
-    }
-  }
-  await inventory(runtime);await inventory(join(backend,'node_modules'));
-  nativeFiles.sort((a,b)=>a.path.localeCompare(b.path,'en'));
-  const manifest={format:1,platform:'win32-x64',revision,dependencies,tools,nativeFiles};
-  await writeFile(join(root,'release.json'),JSON.stringify(manifest,null,2)+'\n');
+  const licenses=await Promise.all(RUNTIME_LICENSES.map(async ([path,source])=>({path,source,sha256:await sha256File(join(root,path))})));
+  const nativeFiles=await nativeFileInventory(root);
+  const manifest={format:OFFLINE_FORMAT,platform:OFFLINE_PLATFORM,revision,dependencies,tools,licenses,nativeFiles};
+  const manifestFile=join(root,'release.json');
+  await writeFile(manifestFile,JSON.stringify(manifest,null,2)+'\n');
   await writeFile(join(backend,'release-revision.txt'),revision+'\n');
+  const manifestSha256=await sha256File(manifestFile);
+  run(node,['src/verify-offline-release.js',root,revision,manifestSha256],backend);
   await mkdir(resolve(output)); // Require a new delivery directory.
   const archive=join(output,'f-ai-backend-win-x64.tar.gz');
   run('tar',['-czf',archive,'-C',root,'.']);
-  const sha256=await hash(archive);
+  const sha256=await sha256File(archive);
   await writeFile(archive+'.sha256',sha256+'  '+basename(archive)+'\n',{flag:'wx'});
-  console.log(JSON.stringify({revision,archive,sha256}));
+  await writeFile(join(output,'release.json.sha256'),manifestSha256+'  release.json\n',{flag:'wx'});
+  console.log(JSON.stringify({revision,archive,sha256,manifestSha256}));
 } finally {await rm(temp,{recursive:true,force:true,maxRetries:4,retryDelay:250});}

@@ -10,6 +10,12 @@
 
 ## 发布前
 
+### 目标机容量预检
+
+在目标机后端目录执行 `npm run --silent ops:capacity -- <部署卷上已有的目录>`。离线包可直接运行 `../runtime/node.exe src/deployment-capacity.js <目录>`。命令读取操作系统可见的物理核心、逻辑线程、内存和所选卷的总容量，并单独报告剩余空间。计划门槛为 8 个核心、16 个线程、16 GB 内存、500 GB 卷总容量，每 GB 按十亿字节计。
+
+四项达标返回 0，任一指标低于门槛返回 1，缺少必要测量且无已知短板时返回 2。把 JSON 随版本和部署记录保存。虚拟机和容器的结果适用于当前可见拓扑；目标业务负载及连续稳定性需在相应环境单独测量。
+
 ### Windows x64 后端离线包
 
 在联网准备机预热本锁文件的 npm 缓存后，从后端目录运行 `npm run release:offline -- <全新交付目录绝对路径>`。构建读取当前 Git 提交中的后端、SDK 和工作台公开运行文件。设置 `FAI_NODE_DIST` 为 Node.js 24 Windows x64 发行目录、`FAI_PG_DIST_ARCHIVE` 为含 pgsql 目录的 EDB Windows x64 二进制 ZIP、`VIDEO_FFMPEG_PATH` 为 LGPL 共享版 ffmpeg.exe 的绝对路径、`FAI_QA_NPM_CACHE` 为 npm 缓存。构建使用锁文件离线安装生产依赖，输出压缩包与 SHA-256。包内 release.json 记录源码提交、依赖版本和许可、运行工具来源、版本及每个原生文件的摘要。
@@ -18,6 +24,10 @@
 
 构建机可用独立验收脚本复验完整包。设置 `FAI_QA_OFFLINE_ARCHIVE` 和可信的 `FAI_QA_OFFLINE_SHA256`，运行 `npm run accept:deployment`。脚本在空目录验证摘要和候选提交，用包内运行时初始化临时 PostgreSQL、启动 HTTP 并恢复两库。正式目标机另按相同流程记录验收。
 
+### 离线包复核
+
+**解包后、启动前的复核。** 构建输出中的 `sha256` 对应压缩包，`manifestSha256` 对应包内 `release.json`。归档这两个摘要和完整 Git 提交编号。从独立可信的发布记录取值，用可信 Node 和同版验收脚本运行 `node backend/src/verify-offline-release.js <解包目录> <完整提交号> <清单SHA-256>`。工具复核实际原生文件集合、九项运行工具、依赖锁文件和四份运行时许可文件。整包 SHA-256 覆盖其余源码和静态资源。在 `accept:deployment` 中可用 `FAI_QA_OFFLINE_MANIFEST_SHA256` 指定额外的清单摘要；仅提供可信整包摘要的调用会使用已验证包内的清单。
+
 ### 任务日志与候选版本观察
 
 工作区管理者使用 `GET /v1/diagnostics/task-events` 跨任务检索，组合可选的 `taskId`、`level`、`from`、`to` 和分页参数。普通成员使用自己的任务事件接口。
@@ -25,6 +35,10 @@
 在后端目录运行 `npm run ops:logs -- <工作区UUID> <私有绝对目录> --watch`。部署服务管理器可持续运行该命令；省略 `--watch` 会导出一次。导出器按绑定读取当前企业库，按 UTC 日期生成工作区专属 JSONL。当日重复导出会刷新已提交事件。文件只含时间、级别、事件、任务 ID、事件 ID 和错误码。默认保留七个日历日，可通过 `FAI_LOG_KEEP_DAYS` 设为 1–90 天。业务接口按本人任务、级别和时间检索 `GET /v1/tasks/{id}/events?level=warn&from=...&to=...`。本地目录权限由部署账号管理。
 
 将 `FAI_RELEASE_REVISION` 设置为候选的完整 Git 提交编号，配置 `FAI_PROBE_ORIGIN` 及测试工作区和会话后，运行 `npm run ops:observe -- watch <证据库绝对路径>`。每分钟检查就绪状态、候选版本和已配置的工作区探测。SQLite 证据按候选、来源和工作区隔离，保留实际时间及错误码。`once` 执行一次，`report` 读取记录。失败、时钟倒退或超过两分钟的缺口会重新起算。满七天且最近样本仍新鲜时报告 `qualified: true`。账户、机器配置、核心业务的抽测分母和质量复核随外部验收单记录。
+
+生成只读报告时，使用采集时的提交编号、来源和工作区，运行 `npm run --silent ops:observe -- report <现有证据库绝对路径>`。报告返回范围、当前连续窗口起止、最后心跳、失败原因计数，以及最近 50 条中断记录。读取记录无需会话或网络。观察达到七日时归档当时的报告；后续需要持续观测可定时运行 `once`。
+
+### 从源码部署
 
 使用指定的 Git 提交建立干净的发布目录。安装 Node.js 24，使用 `npm ci --omit=dev` 安装后端依赖。保留 `backend` 和工作台前端目录的相对位置。将数据库连接和可选供应商配置通过部署环境注入。视频处理需要 FFmpeg、FFprobe 和所选编码器。
 

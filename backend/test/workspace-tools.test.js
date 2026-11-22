@@ -100,6 +100,29 @@ test('confirmed memory evolution is versioned, reversible and scoped to each mem
   }
 });
 
+test('workspace image templates require manager grants, keep immutable revisions and isolate batch rendering',async()=>{
+  const root='/v1/media/images/platform-templates', target=root+'/taobao';
+  const initial={revision:0,width:240,height:320,fit:'contain',format:'png'};
+  await request('PUT',target,403,member,initial);
+  const first=await request('PUT',target,200,owner,initial);
+  assert.equal(first.revision,1);
+  assert.deepEqual(await request('PUT',target,200,owner,initial),first);
+  await request('PUT',target,409,owner,{...initial,width:300});
+  assert.deepEqual((await request('GET',root,200,member)).items,[first]);
+  assert.deepEqual((await request('GET',root,200,visitor)).items,[]);
+  const revisions=await Promise.all([360,480].map((width,index)=>app.inject({method:'PUT',url:target,
+    headers:{authorization:'Bearer '+owner.token,'x-workspace-id':index?owner.workspace.toUpperCase():owner.workspace},payload:{...initial,width,revision:1}})));
+  assert.deepEqual(revisions.map(r=>r.statusCode).sort(),[200,409]);
+  const input={id:randomUUID(),items:[{key:'preview',assetIds:[randomUUID()],platformTemplate:{platform:'taobao',revision:1}}]};
+  const batch='/v1/media/images/batches';
+  await request('POST',batch,404,visitor,input);
+  await request('POST',batch,400,owner,{...input,items:[{...input.items[0],width:800,height:800}]});
+  assert.equal((await request('POST',batch,201,owner,input)).items[0].error,'SOURCE_UNAVAILABLE');
+  await request('PUT','/v1/plugins/image/state',200,owner,{enabled:false});
+  try {await request('PUT',target,409,owner,{...initial,revision:2});}
+  finally {await request('PUT','/v1/plugins/image/state',200,owner,{enabled:true});}
+});
+
 test('versioned sample plugin uses authenticated asset and notification routes and honors revocation', async () => {
   let allowed=true;
   const transport=async (method,url,input)=>request(method,url,method==='POST'?201:200,owner,input);
