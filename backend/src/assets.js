@@ -1,6 +1,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { row, rows } from './db.js';
+import { checkImageInputs, needsImageReview } from './image-preflight.js';
 import { ApiError, choice, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 
 const tags = ['Assets'];
@@ -23,7 +24,11 @@ export async function taskAssets(db, context, identifiers, capability) {
   const ids = [...new Set(identifiers.map(id=>id.toLowerCase()))];
   if (ids.length < capability.minAssets) throw invalid('This capability requires ' + capability.minAssets + ' distinct assets');
   if (!ids.length) return [];
-  const assets = await rows(db, "SELECT id, media_type, consent_reference, consent_expires_at, video_source_review->>'eligible' AS video_eligible, octet_length(data) AS size FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = ANY($3::uuid[]) AND NOT rights_restricted", [context.workspaceId, context.accountId, ids]);
+  const reviewImages=needsImageReview(capability);
+  const assets = await rows(db, `SELECT id, media_type, consent_reference, consent_expires_at, image_source_review,
+    video_source_review->>'eligible' AS video_eligible, octet_length(data) AS size FROM assets
+    WHERE workspace_id=$1 AND account_id=$2 AND id=ANY($3::uuid[]) AND NOT rights_restricted
+    ORDER BY id ${reviewImages?'FOR SHARE':''}`, [context.workspaceId, context.accountId, ids]);
   if (assets.length !== ids.length) throw notFound('Asset');
   if (capability.requiresConsent && assets.some(asset => !asset.consent_reference || !asset.consent_expires_at || new Date(asset.consent_expires_at).getTime() <= Date.now())) {
     throw new ApiError(422, 'CONSENT_REQUIRED', 'A valid asset authorization and expiry are required');
@@ -32,6 +37,7 @@ export async function taskAssets(db, context, identifiers, capability) {
     const clip=ids.map(id=>assets.find(asset=>asset.id===id)).find(asset=>asset?.media_type==='video/mp4');
     if (clip?.video_eligible!=='true') throw new ApiError(422,'VIDEO_PREFLIGHT_REQUIRED','Complete the source MP4 review before submitting this task');
   }
+  if (reviewImages) checkImageInputs(capability,ids.map(id=>assets.find(asset=>asset.id===id)));
   if (assets.reduce((total, asset) => total + asset.size, 0) > 2 * maxBytes) {
     throw new ApiError(413, 'ASSET_LIMIT', 'Combined task assets exceed 20 MiB');
   }

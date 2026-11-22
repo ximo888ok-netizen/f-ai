@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { digest } from './auth.js';
 import { taskAssets } from './assets.js';
+import { needsImageReview } from './image-preflight.js';
 import { capabilityId, capabilityRules, catalog, plugins } from './catalog.js';
 import { row, rows } from './db.js';
 import { ApiError, bool, choice, freeObject, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
@@ -75,6 +76,11 @@ export async function submitInTransaction(connection, providers, shops, context,
     return { task, created: false };
   }
 
+  const assetIds=parameters.assetIds ?? parameters.listing?.assetIds ?? [];
+  const reviewImages=needsImageReview(capability);
+  await lockPlugin(connection,workspaceId,capability.pluginId);
+  // Return actionable source errors even on a deployment without an image model.
+  if (reviewImages) await taskAssets(connection,context,assetIds,capability);
   const providerId = providerFor(providers,capability,input.modelId,id==='model.chat' && parameters.stream===true);
   const provider = taskProvider(providers,providerId);
   if (capability.pluginId==='copywriting' && capability.execution==='gateway') {
@@ -89,7 +95,6 @@ export async function submitInTransaction(connection, providers, shops, context,
     storedInput.modelSignature = provider.signature;
     storedInput.modelId = provider.info.id;
   }
-  await lockPlugin(connection, workspaceId, capability.pluginId);
   await accessibleProject(connection, context, projectId, true);
   if (capability.pluginId === 'operations' && context.role === 'member') {
     throw new ApiError(403, 'FORBIDDEN', 'Workspace owner or administrator required for shop operations');
@@ -97,7 +102,7 @@ export async function submitInTransaction(connection, providers, shops, context,
   const shop = bindingFor(shops, context, capability, parameters);
   const binding = shop ? shopFingerprint(shop) : null;
   if (binding) storedInput.shopFingerprint = binding;
-  await taskAssets(connection, context, parameters.assetIds ?? parameters.listing?.assetIds ?? [], capability);
+  if (!reviewImages) await taskAssets(connection,context,assetIds,capability);
   if (capability.requiresConfirmation) {
     const preview = confirmationId && await row(connection, 'SELECT parameters, shop_fingerprint FROM shop_previews WHERE id = $1 AND workspace_id = $2 AND account_id = $3 AND capability_id = $4 AND used_at IS NULL AND expires_at > now() FOR UPDATE', [confirmationId, workspaceId, accountId, id]);
     if (!preview || preview.shop_fingerprint !== binding || stableJson(preview.parameters) !== stableJson(parameters)) {

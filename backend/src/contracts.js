@@ -20,7 +20,12 @@ const wallet = shape({ balance: count, reserved: count, available: count });
 const member = shape({ id: uuid, email: string, displayName: string, role: string });
 const project = shape({ id: uuid, name: string, archivedAt: nullable(date), createdAt: date });
 const base = shape({ id: uuid, name: string, createdAt: date });
-const document = shape({ id: uuid, name: string, category: string, createdAt: date });
+export const customerScope = { anyOf: [
+  { ...shape({ productId: uuid }), additionalProperties: false },
+  { ...shape({ general: { const: true } }), additionalProperties: false },
+  { type: 'null' },
+] };
+const document = shape({ id: uuid, name: string, category: string, customerScope, createdAt: date });
 const asset = shape({
   id: uuid, name: string, mediaType: string, source: string, purpose: string,
   consentReference: nullable(string), consentExpiresAt: nullable(date), sizeBytes: count, createdAt: date,
@@ -61,11 +66,12 @@ const conversationState = enumOf('assistant', 'human');
 const conversation = shape({
   id: uuid, accountId: uuid, operatorId: nullable(uuid), subject: string,
   knowledgeBaseIds: items(uuid), state: conversationState, lastSearch: nullable(string),
-  productReference: nullable(string), orderReference: nullable(string), createdAt: date, updatedAt: date,
+  productId: nullable(uuid), productReference: nullable(string), orderReference: nullable(string), createdAt: date, updatedAt: date,
 });
 const message = shape({
   id: string, sender: enumOf('customer', 'assistant', 'operator'), content: string, replyTo: nullable(string), createdAt: date,
-  sources: items(shape({ baseId: uuid, baseName: string, documentId: uuid, documentName: string, ordinal: count, snippet: string })),
+  sources: items({ ...shape({ baseId: uuid, baseName: string, documentId: uuid, documentName: string, ordinal: count, snippet: string, customerScope }),
+    required:['baseId','baseName','documentId','documentName','ordinal','snippet'] }),
 });
 const schedule = shape({
   id: uuid, runAt: date, request: anyObject, state: enumOf('pending', 'submitted', 'failed', 'cancelled'),

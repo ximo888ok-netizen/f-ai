@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { GeneratedFile } from './model-file.js';
 import { PendingModelJob } from './model-http.js';
 import { taskAssets } from './assets.js';
+import { checkImageInputs, needsImageReview } from './image-preflight.js';
 import { catalog } from './catalog.js';
 import { row, rows } from './db.js';
 import { ApiError } from './http.js';
@@ -72,9 +73,11 @@ async function providerPayload(db, identityDb, task, capability, shops) {
     shopReference = shop.gatewayReference;
   }
   const ids = await taskAssets(db, context, assetIds ?? listing?.assetIds ?? [], capability);
-  const assets = ids.length ? await rows(db, 'SELECT id, media_type, data, consent_expires_at FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = ANY($3::uuid[]) AND NOT rights_restricted', [task.workspace_id, task.account_id, ids]) : [];
+  const assets = ids.length ? await rows(db, 'SELECT id, media_type, data, consent_expires_at, image_source_review FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = ANY($3::uuid[]) AND NOT rights_restricted', [task.workspace_id, task.account_id, ids]) : [];
   const assetsById = new Map(assets.map(asset => [asset.id, asset]));
   if (assets.length !== ids.length) throw new ProviderError('ASSET_REMOVED');
+  const orderedAssets=ids.map(id=>assetsById.get(id));
+  if (needsImageReview(capability)) checkImageInputs(capability,orderedAssets);
   if (capability.requiresConsent && assets.some(asset => new Date(asset.consent_expires_at).getTime() <= Date.now())) {
     throw new ProviderError('CONSENT_REQUIRED');
   }
@@ -85,10 +88,7 @@ async function providerPayload(db, identityDb, task, capability, shops) {
   return {
     capabilityId: capability.id, mode, parameters: providerParameters,
     ...(shopReference ? { shopReference } : {}),
-    assets: ids.map(id => {
-      const asset = assetsById.get(id);
-      return { mediaType: asset.media_type, dataBase64: Buffer.from(asset.data).toString('base64') };
-    }),
+    assets: orderedAssets.map(asset=>({mediaType:asset.media_type,dataBase64:Buffer.from(asset.data).toString('base64')})),
   };
 }
 

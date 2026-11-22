@@ -209,6 +209,22 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 
 使用 `POST /v1/rights/notices/{id}/actions` 提交 `eventId`、案件 `revision`、`action` 和 `explanation`。管理者可转送通知（`forward`）、限制访问（`restrict`）或驳回通知（`dismiss`）。素材所有者可在限制期提交反通知（`counter`），管理者用 `forward-counter` 转给提交者，再维持限制（`uphold`）或恢复访问（`restore`）。事件按版本保存并通过站内消息转送。限制期间，工作台停用对应素材的下载、备份恢复和新处理请求，保留原始字节。若同一素材还有其他有效限制，解除单个案件不会恢复素材访问。已经导出或保存在第三方的副本由实际持有人处理。
 
+## 换装和产品替换的源图预检
+
+上传 PNG 或 JPEG 后，对每张素材调用 `PUT /v1/media/images/{assetId}/preflight`。首次提交例如 `{"revision":0,"personCount":1,"occlusionPercent":5}`。后端解码文件并测量宽高，审核人填写画面人数和服饰遮挡面积百分比。纯商品图填 0 人、0% 遮挡。后续修改传上次返回的版本，版本冲突返回 409，可用同路径的 `GET` 重读。
+
+所有输入图的短边至少为 1024 像素。有人物的图限一人，服饰遮挡最多 5%。`image.try-on` 的 `parameters.assetIds[0]` 是人物图，后续是参考素材。`image.replace-product` 支持两张纯商品图。两个任务均要求至少两张不同的、授权仍有效的素材。某张纯商品图的 `eligible:true` 表示它符合素材条件，用作换装首图时还需满足人物要求。
+
+预检结果含 `width`、`height`、`revision`、`eligible` 和 `reasons`。尺寸过小、人物过多和遮挡超限分别为 `SHORT_SIDE`、`PERSON_COUNT`、`OCCLUSION`。提交任务时，422 错误会指出需补审核、未通过的输入位置与原因，或提示换装首图需有人物。后台派发前复核当前审核结果与授权。可按错误码提示用户修改素材或重做审核。
+
+## 客服知识的商品归属
+
+知识文档创建或编辑时可传 `customerScope`。商品专属资料用 `{"productId":"商品 UUID"}`，通用 FAQ 用 `{"general":true}`。`PATCH` 省略此字段保留归属，显式传 `null` 可撤销客服使用。既有未分配资料仍可通过原知识库接口查阅。要用于自动回答，先由有管理权限的成员确认归属。
+
+创建 `POST /v1/customer-service/conversations` 时传 `productId` 和已授权的 `knowledgeBaseIds`。已有客户端可继续使用 `productReference`，新会话会按当前工作区的完整 SKU 精确匹配并保存商品 ID。以后变更或复用 SKU，已有会话仍绑定原商品。升级时只回填能确认在会话建立前已存在且此后未改动的 SKU。其余未绑定会话只能引用明确标记的通用 FAQ。
+
+客户消息端点返回 `assistant.sources`，新引用含文档、片段和 `customerScope`。没有适用资料时 `assistant` 为 `null`。管理员修改文档归属后，后续检索、模型回复落库和请求重放都会重新检查。已保存的聊天记录可按原权限回看。
+
 ## 本地图片与视频处理
 
 工作台的「图片与视频处理」提供图片批次、视频导出与分镜编辑。素材库可将所选图片或 MP4 带入对应工具。图片批次可逐项预览和下载，视频分镜的提示词和导出文件取自已保存版本。

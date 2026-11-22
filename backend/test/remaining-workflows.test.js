@@ -60,7 +60,7 @@ async function fixture(t,{withModel=false}={}) {
       for await (const chunk of req) chunks.push(chunk);
       const body=JSON.parse(Buffer.concat(chunks));
       seen.push(body);
-      if (body.messages.at(-1).content.includes('等待接管')) {
+      if (body.messages.at(-1).content.includes('等待')) {
         signalWaiting();
         await wait;
       }
@@ -78,6 +78,83 @@ async function fixture(t,{withModel=false}={}) {
   return {app,db,providers,shops,seen,started,release};
 }
 
+test('same-name products isolate answers, citations, follow-ups and replays by stable catalog identity',async t=>{
+  const {app}=await fixture(t);
+  const owner=await member(app,'product-scope-owner',true);
+  const other=await member(app,'product-scope-other',true);
+  const req=(method,path,status,body)=>call(app,owner,method,path,status,body);
+  const make=(user,sku)=>call(app,user,'POST','/v1/studio/products',201,{name:'测试保温杯',sku});
+  const small=await make(owner,'QA-CUP-350'),large=await make(owner,'QA-CUP-750'),foreign=await make(other,'QA-CUP-350');
+  const library=await req('POST','/v1/knowledge/bases',201,{name:'保温杯客服'});
+  const docs='/v1/knowledge/bases/'+library.id+'/documents';
+  const add=(content,customerScope)=>req('POST',docs,201,{name:'测试保温杯',content,customerScope});
+  const a=await add('测试保温杯容量为350毫升。',{productId:small.id});
+  const b=await add('测试保温杯容量为750毫升。',{productId:large.id});
+  const faq=await add('通用清洁步骤：用清水清洗。',{general:true});
+  const legacy=await add('测试保温杯容量为未知，旧资料尚未分类。');
+  assert.equal(legacy.customerScope,null);
+  await req('POST',docs,404,{name:'foreign',content:'private',customerScope:{productId:foreign.id}});
+  const start=(selection,status=201)=>req('POST',base,status,{subject:'测试保温杯',knowledgeBaseIds:[library.id],...selection});
+  await start({productId:foreign.id},404);
+  await start({productId:small.id,productReference:large.sku},400);
+  const first=await start({productId:small.id}),second=await start({productReference:large.sku});
+  assert.equal(second.productId,large.id);
+  const ask=(session,body,status=201)=>req('POST',base+'/'+session.id+'/messages',status,body);
+  const question={content:'测试保温杯的容量是多少？',clientId:randomUUID()};
+  for (const [session,doc,answer] of [[first,a,'350'],[second,b,'750']]) {
+    for (const body of [question,{content:'再说一次？'}]) {
+      const turn=await ask(session,body);
+      assert.equal(turn.assistant.content,'测试保温杯容量为'+answer+'毫升。');
+      assert.deepEqual(turn.assistant.sources.map(item=>item.documentId),[doc.id]);
+      assert.equal(turn.assistant.sources[0].customerScope.productId,session.productId);
+    }
+    assert.deepEqual((await ask(session,{content:'清洁步骤'})).assistant.sources.map(s=>s.documentId),[faq.id]);
+  }
+  for (const selection of [{},{productReference:'UNKNOWN'}]) {
+    const general=await start(selection);
+    assert.equal((await ask(general,question)).assistant,null);
+    assert.equal((await ask(general,{content:'清洁步骤'})).assistant.sources[0].documentId,faq.id);
+  }
+  assert.equal((await ask(first,question,200)).assistant.sources[0].documentId,a.id);
+  await req('PATCH',docs+'/'+a.id,200,{customerScope:null});
+  assert.equal((await ask(first,question,200)).assistant,null);
+  assert.equal((await ask(first,{content:'容量',search:'容量'})).assistant,null);
+  await req('PATCH',docs+'/'+a.id,200,{customerScope:{productId:small.id}});
+  await req('PUT','/v1/studio/products/'+large.id,200,{sku:'QA-CUP-750-R2',name:'测试保温杯'});
+  await make(owner,large.sku);
+  const reused=await start({productReference:large.sku});
+  assert.notEqual(reused.productId,second.productId);
+  assert.equal((await ask(reused,question)).assistant,null);
+  assert.equal((await ask(second,{content:'容量'})).assistant.sources[0].documentId,b.id);
+});
+
+test('model context and in-flight replies honor changes to document product scope',async t=>{
+  const {app,seen,started,release}=await fixture(t,{withModel:true});
+  const owner=await member(app,'model-product-scope',true);
+  const api=(method,path,status,body)=>call(app,owner,method,path,status,body);
+  const products=[];
+  for (const sku of ['MODEL-S','MODEL-L']) products.push(await api('POST','/v1/studio/products',201,{sku,name:'Model fixture'}));
+  const library=await api('POST','/v1/knowledge/bases',201,{name:'Service'});
+  const docs='/v1/knowledge/bases/'+library.id+'/documents';
+  const add=(content,scope)=>api('POST',docs,201,{name:'容量',content,customerScope:scope});
+  const small=await add('容量=SMALL_ONLY',{productId:products[0].id});
+  await add('容量=LARGE_ONLY',{productId:products[1].id});
+  await add('CARE_GUIDE',{general:true});
+  const session=await api('POST',base,201,{subject:'咨询',knowledgeBaseIds:[library.id],productId:products[0].id});
+  const messages=base+'/'+session.id+'/messages';
+  await api('POST',messages,201,{content:'OLD_QUESTION_MARKER',search:'容量'});
+  assert.match(JSON.stringify(seen.at(-1).messages),/SMALL_ONLY/);
+  assert.doesNotMatch(JSON.stringify(seen.at(-1).messages),/LARGE_ONLY/);
+  const pending=api('POST',messages,201,{content:'等待资料核对',search:'容量'});
+  try {
+    await Promise.race([started,pending.then(()=>{throw new Error('Expected a pending model request');})]);
+    await api('PATCH',docs+'/'+small.id,200,{customerScope:{productId:products[1].id}});
+  } finally {release();}
+  assert.equal((await pending).assistant,null);
+  await api('POST',messages,201,{content:'CARE_GUIDE'});
+  assert.doesNotMatch(JSON.stringify(seen.at(-1).messages),/SMALL_ONLY|LARGE_ONLY|OLD_QUESTION_MARKER/);
+});
+
 test('customer conversation uses scoped multi-turn knowledge, redacts references and stops during handoff',async t=>{
   const {app,seen,started,release}=await fixture(t,{withModel:true});
   const owner=await member(app,'customer-context-owner',true);
@@ -87,7 +164,7 @@ test('customer conversation uses scoped multi-turn knowledge, redacts references
   const knowledge='/v1/knowledge/bases/'+knowledgeId;
   await call(app,owner,'PUT',knowledge+'/grants/'+customer.account.id,204);
   await call(app,owner,'POST',knowledge+'/documents',201,{
-    name:'Fixture return policy',content:'退货规则：测试商品需要保留原包装。联系 private-contact@example.test 也可以转人工。',
+    name:'Fixture return policy',customerScope:{general:true},content:'退货规则：测试商品需要保留原包装。联系 private-contact@example.test 也可以转人工。',
   });
   const state=await call(app,customer,'POST',base,201,{subject:'退货',knowledgeBaseIds:[knowledgeId],
     productReference:'PRODUCT-FIXTURE',orderReference:'ORDER-FIXTURE'});

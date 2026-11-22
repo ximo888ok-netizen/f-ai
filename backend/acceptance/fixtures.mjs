@@ -124,30 +124,107 @@ export async function exerciseFilesAndWorker(api) {
   return { asset, taskId: task.id };
 }
 
+// Each shirt occupies 100 x 100 pixels, so one covered pixel is 0.01 percent.
+export function reviewPicture(width,people,covered=0) {
+  const height=1080;
+  const stride=width+1; // One filter byte followed by grayscale pixels.
+  const pixels=Buffer.alloc(stride*height);
+  function rectangle(x,y,w,h,gray) {
+    for (let line=y;line<y+h;line++) {
+      const start=stride*line+1+x;
+      pixels.fill(gray,start,start+w);
+    }
+  }
+  rectangle(10,50,100,100,180);
+  for (let i=0;i<people;i++) {
+    const x=200+i*200;
+    rectangle(x+25,180,50,50,220);
+    rectangle(x,230,100,100,160);
+    rectangle(x,230,100,Math.floor(covered/100),80);
+    rectangle(x,230+Math.floor(covered/100),covered%100,1,80);
+  }
+  const header=Buffer.alloc(13);
+  header.writeUInt32BE(width);
+  header.writeUInt32BE(height,4);
+  header[8]=8;
+  return Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'),pngChunk('IHDR',header),
+    pngChunk('IDAT',deflateSync(pixels)),pngChunk('IEND',Buffer.alloc(0))]);
+}
+
+export async function exerciseImagePreflight(api) {
+  const counts=async()=>({
+    tasks:(await api('GET','/v1/tasks',200)).items.map(task=>task.id),
+    ledger:(await api('GET','/v1/credits/ledger',200)).items,
+    wallet:await api('GET','/v1/credits/wallet',200),
+  });
+  const before=await counts();
+  async function review(width,people,pixels) {
+    const asset=await api('POST','/v1/assets',201,{name:'synthetic.png',mediaType:'image/png',source:'synthetic',
+      purpose:'source acceptance',consentReference:'qa-drawing',consentExpiresAt:new Date(Date.now()+86400000).toISOString(),
+      dataBase64:reviewPicture(width,people,pixels).toString('base64')});
+    const result=await api('PUT','/v1/media/images/'+asset.id+'/preflight',200,
+      {revision:0,personCount:people,occlusionPercent:pixels/100});
+    assert.equal(result.width,width);
+    return {asset,result};
+  }
+  const product=await review(1024,0,0);
+  assert.ok(product.result.eligible);
+  assert.ok((await review(1024,1,500)).result.eligible);
+  for (const [width,people,pixels,reason] of [[1023,1,500,'SHORT_SIDE'],[1024,1,501,'OCCLUSION'],[1024,2,0,'PERSON_COUNT']]) {
+    const {asset,result}=await review(width,people,pixels);
+    assert.deepEqual(result.reasons,[reason]);
+    for (const capabilityId of ['image.try-on','image.replace-product']) {
+      const reply=await api('POST','/v1/tasks',422,{capabilityId,mode:'workflow',idempotencyKey:randomUUID(),
+        parameters:{assetIds:[asset.id,product.asset.id]}});
+      assert.equal(reply.error.code,'IMAGE_PREFLIGHT_FAILED');
+      assert.ok(reply.error.message.includes(reason));
+    }
+  }
+  assert.deepEqual(await counts(),before);
+}
+
 export async function exerciseCustomer(api) {
   const base = await api('POST', '/v1/knowledge/bases', 201, { name: 'Synthetic product and FAQ collection' });
+  const products = [];
+  for (const volume of [350,750]) {
+    const product=await api('POST','/v1/studio/products',201,{sku:'QA-CUP-'+volume,name:'测试保温杯',description:volume+'毫升'});
+    products.push(product);
+  }
   const documents = [];
   for (const kind of ['商品', '问答']) {
     for (let i = 0; i < 20; i++) {
       const keyword = 'QA' + (kind === '商品' ? 'P' : 'F') + String(i).padStart(3, '0');
-      const content = kind === '商品' ? keyword + ' 的包装数量为 ' + (i + 2) + ' 件。'
+      const productIndex=i%2;
+      let content = kind === '商品' ? keyword + ' 的包装数量为 ' + (i + 2) + ' 件。'
         : keyword + ' 的保养周期为 ' + (i + 1) + ' 天。';
-      const document = await api('POST', '/v1/knowledge/bases/' + base.id + '/documents', 201, { name: keyword, content });
-      documents.push({ keyword, content, id: document.id });
+      if (kind==='商品' && i<2) content+=' 杯身净容量为'+products[productIndex].description+'。';
+      const customerScope = kind==='商品' ? {productId:products[productIndex].id} : {general:true};
+      const document = await api('POST', '/v1/knowledge/bases/' + base.id + '/documents', 201, { name: keyword, content, customerScope });
+      documents.push({ keyword, content, id: document.id, productIndex });
     }
   }
   const root = '/v1/customer-service/conversations';
-  const create = () => api('POST', root, 201, { subject: '测试咨询', knowledgeBaseIds: [base.id] });
-  const conversation = await create();
-  const messages = root + '/' + conversation.id + '/messages';
+  const create = productId => api('POST', root, 201, { subject: '测试咨询', knowledgeBaseIds: [base.id], productId });
+  const conversations=[];
+  for (const [index,product] of products.entries()) {
+    const conversation=await create(product.id);
+    const messages=root+'/'+conversation.id+'/messages';
+    const capacity=await api('POST',messages,201,{content:'杯身净容量'});
+    assert.equal(capacity.assistant.content,documents[index].content);
+    assert.deepEqual(capacity.assistant.sources.map(source=>source.documentId),[documents[index].id]);
+    conversations.push({conversation,messages});
+  }
   const sample = [];
+  let active;
   for (let i = 0; i < 10; i++) {
     const [doc] = documents.splice(randomInt(documents.length), 1);
-    const turn = await api('POST', messages, 201, { content: '请查一下 ' + doc.keyword + ' 的资料。' });
+    active=conversations[doc.productIndex];
+    const turn = await api('POST', active.messages, 201, { content: '请查一下 ' + doc.keyword + ' 的资料。' });
     assert.equal(turn.assistant?.sources[0].documentId, doc.id, doc.keyword);
     assert.equal(turn.assistant.content, doc.content);
     sample.push(doc);
   }
+  const {conversation,messages}=active;
   for (let i = 0; i < 5; i++) {
     const turn = await api('POST', messages, 201, { content: '请再说一遍？' });
     assert.equal(turn.assistant?.sources[0].documentId, sample.at(-1).id);

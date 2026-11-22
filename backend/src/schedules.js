@@ -9,6 +9,8 @@ import { providerFor } from './providers.js';
 import { keySchema, stableJson, submitInTransaction } from './tasks.js';
 import { accessibleProject } from './workspace.js';
 import { lockPlugin } from './plugin-policy.js';
+import { taskAssets } from './assets.js';
+import { needsImageReview } from './image-preflight.js';
 
 const tags = ['Schedules'];
 const schedulable = [...catalog.values()].filter(capability => !capability.requiresConfirmation && ['local', 'gateway'].includes(capability.execution));
@@ -43,11 +45,12 @@ export function registerSchedules(app, db, providers) {
       throw invalid('runAt must be in the next 366 days');
     }
     const capability = byId.get(input.capabilityId);
-    const providerId = providerFor(providers, capability, input.modelId);
-    providers.get(providerId).validate?.(capability, input.parameters);
     await accessibleProject(db, request.context, input.projectId, true);
     const schedule = await db.transaction(async tx=>{
       await lockPlugin(tx,request.context.workspaceId,capability.pluginId);
+      if (needsImageReview(capability)) await taskAssets(tx,request.context,input.parameters.assetIds ?? [],capability);
+      const providerId=providerFor(providers,capability,input.modelId);
+      providers.get(providerId).validate?.(capability,input.parameters);
       return row(tx, [
         'INSERT INTO schedules (id, workspace_id, account_id, idempotency_key, run_at, request, request_hash, state)',
         "VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')",

@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { client, exerciseCustomer, exerciseFilesAndWorker, exercisePsd, exerciseWorkspace, verifyAsset } from './fixtures.mjs';
+import { client, exerciseCustomer, exerciseFilesAndWorker, exerciseImagePreflight, exercisePsd, exerciseWorkspace, verifyAsset } from './fixtures.mjs';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const pgBin = process.env.FAI_QA_PG_BIN;
@@ -135,6 +135,7 @@ try {
   const { asset, taskId } = await exerciseFilesAndWorker(api);
   const { readPsd } = createRequire(join(application, 'package.json'))('ag-psd');
   await exercisePsd(api, asset, readPsd);
+  await exerciseImagePreflight(api);
   const sample = await exerciseCustomer(api);
   const probe = JSON.parse(run(node, ['src/ops-probe.js'], { ...osEnv, FAI_PROBE_ORIGIN: origin,
     FAI_PROBE_SESSION: session.token, FAI_PROBE_WORKSPACE_ID: workspace }, application));
@@ -142,7 +143,8 @@ try {
   assert.equal(probe.ok, true);
   console.log(JSON.stringify({ migrations: migrations.length, cutover: 'passed', platformAssetBytes: 10485760,
     fileSha256: asset.sha256, queuedTask: 'settled once', productDocuments: 20, faqDocuments: 20, questions: sample,
-    followUps: 5, handoff: 'passed', workspaceProbe: 'healthy', projectGrants: 'passed', pluginToggles: 5, psdLayers: 3 }));
+    followUps: 5, handoff: 'passed', workspaceProbe: 'healthy', projectGrants: 'passed', pluginToggles: 5, psdLayers: 3,
+    sameNameProductVolumesMl:[350,750], imageSubmissionsRejected:6, rejectedImageLedgerDelta:0 }));
 
   await stopService();
   const manifest = JSON.parse(admin('backup', backup));

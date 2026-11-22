@@ -13,6 +13,7 @@ import { buildApp } from '../src/app.js';
 import { migrate,postgres } from '../src/db.js';
 import { createVideoDelivery } from '../src/video-delivery.js';
 import { createProviders } from '../src/providers.js';
+import { reviewPicture } from '../acceptance/fixtures.mjs';
 import { provisionCredits } from '../src/wallet.js';
 import { workOnce } from '../src/worker.js';
 
@@ -64,6 +65,83 @@ async function gen(db,owner,assetId) {
     request_hash,idempotency_key,state,cost,result) VALUES($1,$2,$3,'image.main-image','model:fixture','image',
     '{}','fixture',$4,'succeeded',1,$5)`,[randomUUID(),owner.workspace,owner.account,randomUUID(),JSON.stringify({assetId})]);
 }
+
+test('image review boundaries reject ineligible try-on and replacement without tasks, reservations or debits',async t=>{
+  const providers=createProviders();
+  const sent=[];
+  providers.set('gateway',{supports:c=>['image.try-on','image.replace-product'].includes(c.id),
+    run:async (_task,payload)=>{sent.push(payload.capabilityId);return {text:'accepted synthetic inputs'};}});
+  const {db,user}=await fixture(t,null,providers);
+  const owner=await user('image-source-owner'),outsider=await user('image-source-other');
+  await provisionCredits(db,owner.workspace,owner.account,30,'image-review-budget');
+  const consent={consentReference:'synthetic-drawing',consentExpiresAt:new Date(Date.now()+86400000).toISOString()};
+  const draw=(width,people,covered=0,authorization=consent)=>
+    owner.upload(reviewPicture(width,people,covered),'image/png',authorization);
+  const path=id=>'/v1/media/images/'+id+'/preflight';
+  const inspect=(asset,personCount,occlusionPercent,revision=0,status=200)=>owner.request('PUT',path(asset.id),status,
+    {revision,personCount,occlusionPercent});
+  const wallet=()=>owner.request('GET','/v1/credits/wallet',200);
+  async function state() {
+    const {rows:[counts]}=await db.query(`SELECT (SELECT count(*)::int FROM tasks WHERE workspace_id=$1) AS tasks,
+      (SELECT count(*)::int FROM schedules WHERE workspace_id=$1) AS schedules,
+      (SELECT count(*)::int FROM ledger WHERE workspace_id=$1) AS ledger`,[owner.workspace]);
+    return {...counts,wallet:await wallet()};
+  }
+  const input=(capabilityId,assets)=>({capabilityId,mode:'workflow',parameters:{assetIds:assets.map(a=>a.id)},idempotencyKey:randomUUID()});
+  const submit=(id,assets,status)=>owner.request('POST','/v1/tasks',status,input(id,assets));
+  const person=await draw(1024,1,500),product=await draw(1024,0);
+  const replacement=await owner.upload(createCanvas(1025,1080).toBuffer('image/jpeg'),'image/jpeg',consent);
+  const baseline=await state();
+  assert.deepEqual(baseline,{tasks:0,schedules:0,ledger:1,wallet:{balance:30,reserved:0,available:30}});
+  const pass=await inspect(person,1,5);
+  assert.deepEqual([pass.width,pass.height,pass.eligible,pass.reasons],[1024,1080,true,[]]);
+  assert.equal((await inspect(person,1,5)).revision,1);
+  await inspect(person,1,5.01,0,409);
+  await outsider.request('GET',path(person.id),404);
+  await outsider.request('PUT',path(person.id),404,{revision:1,personCount:0,occlusionPercent:0});
+  assert.equal((await submit('image.try-on',[person,product],422)).error.code,'IMAGE_PREFLIGHT_REQUIRED');
+  await inspect(product,0,0);
+  await inspect(replacement,0,0);
+  const audio=await owner.upload(Buffer.from('ID3-test-fixture'),'audio/mpeg',consent);
+  assert.equal((await submit('image.replace-product',[product,audio],422)).error.code,'IMAGE_TYPE_REQUIRED');
+  await inspect(product,0,1,1,400);
+  assert.equal((await submit('image.try-on',[product,person],422)).error.code,'IMAGE_MODEL_REQUIRED');
+  let shortImage;
+  for (const [width,people,pixels,reason] of [[1023,1,500,'SHORT_SIDE'],[1024,1,501,'OCCLUSION'],[1024,2,0,'PERSON_COUNT']]) {
+    const bad=await draw(width,people,pixels);
+    const result=await inspect(bad,people,pixels/100);
+    assert.equal(result.width,width);
+    assert.deepEqual(result.reasons,[reason]);
+    for (const [id,images] of [['image.try-on',[bad,product]],['image.replace-product',[product,bad]],['image.try-on',[person,product,bad]]]) {
+      const {error}=await submit(id,images,422);
+      assert.equal(error.code,'IMAGE_PREFLIGHT_FAILED');
+      assert.ok(error.message.includes(reason));
+    }
+    if (reason==='SHORT_SIDE') shortImage=bad;
+  }
+  const corrupt=await owner.upload(Buffer.from('89504e470d0a1a0a','hex'),'image/png',consent);
+  assert.equal((await inspect(corrupt,0,0,0,422)).error.code,'IMAGE_DECODE_FAILED');
+  assert.equal((await submit('image.replace-product',[product,corrupt],422)).error.code,'IMAGE_PREFLIGHT_REQUIRED');
+  const expired=await draw(1024,0,0,{...consent,consentExpiresAt:'2020-01-01T00:00:00Z'});
+  await inspect(expired,0,0);
+  assert.equal((await submit('image.replace-product',[product,expired],422)).error.code,'CONSENT_REQUIRED');
+  await owner.request('POST','/v1/schedules',422,{...input('image.try-on',[shortImage,product]),runAt:new Date(Date.now()+60000).toISOString()});
+  assert.deepEqual(await state(),baseline);
+  assert.deepEqual(sent,[]);
+  for (const [id,images] of [['image.try-on',[person,product]],['image.replace-product',[product,replacement]]]) {
+    const task=await submit(id,images,202);
+    await workOnce({db,providers,shops:new Map()});
+    assert.equal((await owner.request('GET','/v1/tasks/'+task.id,200)).state,'succeeded');
+  }
+  assert.deepEqual(sent,['image.try-on','image.replace-product']);
+  const beforeChange=await wallet();
+  const queued=await submit('image.try-on',[person,product],202);
+  await inspect(person,1,5.01,1);
+  await workOnce({db,providers,shops:new Map()});
+  assert.equal((await owner.request('GET','/v1/tasks/'+queued.id,200)).errorCode,'IMAGE_PREFLIGHT_FAILED');
+  assert.deepEqual(await wallet(),beforeChange);
+  assert.equal(sent.length,2);
+});
 
 test('actual video measurements and reviewed scene limits gate try-on and replacement before debit and dispatch',
   {skip:!(ffmpeg && ffprobe)},async t=>{

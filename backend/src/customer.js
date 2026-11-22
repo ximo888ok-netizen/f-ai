@@ -9,7 +9,7 @@ const idParams = object({ id: uuid });
 const conversationFields = [
   'id', 'account_id AS "accountId"', 'operator_id AS "operatorId"', 'subject', 'state',
   'knowledge_base_ids AS "knowledgeBaseIds"', 'last_search AS "lastSearch"',
-  'product_reference AS "productReference"', 'order_reference AS "orderReference"',
+  'product_id AS "productId"', 'product_reference AS "productReference"', 'order_reference AS "orderReference"',
   'created_at AS "createdAt"', 'updated_at AS "updatedAt"',
 ].join(', ');
 const messageFields = 'id::text, sender, content, sources, reply_to::text AS "replyTo", created_at AS "createdAt"';
@@ -43,21 +43,34 @@ async function message(db,workspaceId,conversationId,sender,content,{sources=[],
     [workspaceId,conversationId,sender,content,JSON.stringify(sources),clientId,hash,replyTo]);
 }
 
+const sourceScope=`d.workspace_id=$1 AND d.base_id=ANY($3::uuid[])
+  AND (d.customer_scope='{"general":true}'::jsonb OR d.customer_scope->>'productId'=$4::text)
+  AND EXISTS (SELECT 1 FROM memberships m WHERE m.workspace_id=d.workspace_id AND m.account_id=$2
+    AND (m.role<>'member' OR EXISTS (SELECT 1 FROM knowledge_grants g WHERE g.base_id=d.base_id AND g.account_id=m.account_id)))`;
+
 async function snippets(db, context, current, search) {
   const {workspaceId,accountId}=context;
-  const {knowledgeBaseIds,productReference}=current;
+  const {knowledgeBaseIds,productId}=current;
   if (!knowledgeBaseIds.length || !search) return [];
   return rows(db, [
-    'SELECT d.base_id AS "baseId", b.name AS "baseName", d.id AS "documentId", d.name AS "documentName", c.ordinal, c.content AS snippet',
+    'SELECT d.base_id AS "baseId", b.name AS "baseName", d.id AS "documentId", d.name AS "documentName", d.customer_scope AS "customerScope", c.ordinal, c.content AS snippet',
     'FROM document_chunks c JOIN documents d ON d.id = c.document_id JOIN knowledge_bases b ON b.id = d.base_id',
-    'JOIN memberships m ON m.workspace_id = d.workspace_id AND m.account_id = $2',
-    'WHERE d.workspace_id = $1 AND d.base_id = ANY($3::uuid[])',
-    "AND (m.role <> 'member' OR EXISTS (SELECT 1 FROM knowledge_grants g WHERE g.base_id = d.base_id AND g.account_id = $2))",
-    'AND (strpos(lower(c.content), lower($4)) > 0 OR EXISTS(SELECT 1 FROM unnest($5::text[]) AS token WHERE strpos(lower(c.content), token)>0))',
-    'ORDER BY (strpos(lower(c.content), lower($4))>0) DESC,',
-    '(SELECT count(*) FROM unnest($5::text[]) AS token WHERE strpos(lower(c.content), token)>0) DESC,',
-    '(CASE WHEN $6::text IS NULL THEN false ELSE strpos(lower(c.content),lower($6))>0 END) DESC, d.created_at DESC,d.id,c.ordinal LIMIT 3',
-  ].join(' '), [workspaceId,accountId,knowledgeBaseIds,search,searchTerms(search),productReference]);
+    'WHERE '+sourceScope,
+    'AND (strpos(lower(c.content), lower($5)) > 0 OR EXISTS(SELECT 1 FROM unnest($6::text[]) AS token WHERE strpos(lower(c.content), token)>0))',
+    'ORDER BY (strpos(lower(c.content), lower($5))>0) DESC,',
+    '(SELECT count(*) FROM unnest($6::text[]) AS token WHERE strpos(lower(c.content), token)>0) DESC,',
+    "(d.customer_scope ? 'productId') DESC, d.created_at DESC,d.id,c.ordinal LIMIT 3",
+  ].join(' '), [workspaceId,accountId,knowledgeBaseIds,productId,search,searchTerms(search)]);
+}
+
+async function replayAnswer(db,context,current,assistant) {
+  if (!assistant?.sources.length || assistant.sources.some(source=>!source.customerScope)) return null;
+  const {count}=await row(db,`SELECT count(*)::int AS count FROM jsonb_to_recordset($5::jsonb)
+    AS saved("documentId" uuid,ordinal integer,snippet text,"customerScope" jsonb)
+    JOIN documents d ON d.id=saved."documentId" AND d.customer_scope=saved."customerScope"
+    JOIN document_chunks c ON c.document_id=d.id AND c.ordinal=saved.ordinal AND c.content=saved.snippet
+    WHERE ${sourceScope}`,[context.workspaceId,context.accountId,current.knowledgeBaseIds,current.productId,JSON.stringify(assistant.sources)]);
+  return count===assistant.sources.length?assistant:null;
 }
 
 async function evidence(db,context,current,requestedSearch,content) {
@@ -87,7 +100,7 @@ async function sendMessage(db,context,id,body,answer) {
       if (request_hash!==hash) throw new ApiError(409,'IDEMPOTENCY_CONFLICT','The client ID belongs to another message');
       const assistant=await row(tx,`SELECT ${messageFields} FROM service_messages WHERE workspace_id=$1 AND conversation_id=$2 AND reply_to=$3`,
         [workspaceId,id,created.id]);
-      return {created,state:current.state,assistant:assistant ?? null,replay:true};
+      return {created,state:current.state,assistant:await replayAnswer(tx,context,current,assistant),replay:true};
     }
     const created=await message(tx,workspaceId,id,sender,content,{clientId:body.clientId,hash});
     const {sources,search}=sender==='customer' && current.state==='assistant'
@@ -99,9 +112,21 @@ async function sendMessage(db,context,id,body,answer) {
       const assistant=await message(tx,workspaceId,id,'assistant',sources[0].snippet,{sources,replyTo:created.id});
       return {created,state:current.state,assistant};
     }
-    const history=await rows(tx,`SELECT sender,content FROM service_messages WHERE workspace_id=$1 AND conversation_id=$2
+    const history=await rows(tx,`SELECT id::text AS "messageId",reply_to::text AS "replyTo",sender,content,sources FROM service_messages WHERE workspace_id=$1 AND conversation_id=$2
       AND sender IN ('customer','assistant') ORDER BY id DESC LIMIT 9`,[workspaceId,id]);
-    return {created,state:current.state,sources,search,history:history.reverse(),
+    // Reconstruct prior turns only when their citations are still among this answer's permitted evidence.
+    const earlierQuestions=new Map(history.filter(turn=>turn.sender==='customer').map(turn=>[turn.messageId,turn.content]));
+    const scopedHistory=[];
+    for (const turn of history.reverse()) {
+      if (turn.sender!=='assistant' || !earlierQuestions.has(turn.replyTo) || !turn.sources.length) continue;
+      const stillScoped=turn.sources.every(citation=>citation.customerScope && sources.some(source=>
+        citation.documentId===source.documentId && citation.ordinal===source.ordinal && citation.snippet===source.snippet &&
+        citation.customerScope.productId===source.customerScope.productId));
+      if (stillScoped) scopedHistory.push({sender:'customer',content:earlierQuestions.get(turn.replyTo)},
+        {sender:'assistant',content:turn.sources[0].snippet});
+    }
+    scopedHistory.push({sender:'customer',content});
+    return {created,state:current.state,sources,search,history:scopedHistory,
       productReference:current.productReference,orderReference:current.orderReference};
   });
   if (!turn.history) return turn;
@@ -137,7 +162,7 @@ export function registerCustomerService(app, db, answer=null) {
   route(app, 'POST', '/v1/customer-service/conversations', {
     tags, summary: 'Create a support conversation with an optional knowledge scope',
     body: object({ subject: text(160), knowledgeBaseIds: array(uuid, 20),
-      productReference: text(100), orderReference: text(100) }, ['subject']),
+      productId: uuid, productReference: text(100), orderReference: text(100) }, ['subject']),
   }, async (request, reply) => {
     const { workspaceId, accountId } = request.context;
     await enabled(db, workspaceId);
@@ -149,11 +174,18 @@ export function registerCustomerService(app, db, answer=null) {
       ].join(' '), [workspaceId, accountId, baseIds, request.context.role !== 'member']);
       if (allowed.length !== baseIds.length) throw notFound('Knowledge base');
     }
+    const {productId}=request.body;
+    const reference=request.body.productReference?.trim() || null;
+    const product=productId
+      ? await row(db,'SELECT id,sku FROM studio_products WHERE workspace_id=$1 AND id=$2',[workspaceId,productId])
+      : reference && await row(db,'SELECT id,sku FROM studio_products WHERE workspace_id=$1 AND sku=$2',[workspaceId,reference]);
+    if (productId && !product) throw notFound('Product');
+    if (productId && reference && reference!==product.sku) throw invalid('The supplied SKU does not match the product');
     const created = await row(db, [
-      'INSERT INTO service_conversations (id, workspace_id, account_id, subject, knowledge_base_ids, state, product_reference, order_reference)',
-      "VALUES ($1, $2, $3, $4, $5, 'assistant', $6, $7) RETURNING " + conversationFields,
+      'INSERT INTO service_conversations (id, workspace_id, account_id, subject, knowledge_base_ids, state, product_reference, order_reference, product_id)',
+      "VALUES ($1, $2, $3, $4, $5, 'assistant', $6, $7, $8) RETURNING " + conversationFields,
     ].join(' '), [randomUUID(), workspaceId, accountId, nonblank(request.body.subject), baseIds,
-      request.body.productReference?.trim() || null,request.body.orderReference?.trim() || null]);
+      product?.sku ?? reference,request.body.orderReference?.trim() || null,product?.id ?? null]);
     reply.code(201);
     return created;
   });

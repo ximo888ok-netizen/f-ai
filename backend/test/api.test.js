@@ -254,7 +254,7 @@ test('customer assistant uses scoped knowledge and respects human takeover', asy
   const base = response(await api('POST', '/v1/knowledge/bases', enterprise, { name: 'Support' }), 201);
   const index = '/v1/knowledge/bases/' + base.id;
   response(await api('POST', index + '/documents', enterprise, {
-    name: 'Return policy', content: '退货需要订单凭证。此文件用于联调。',
+    name: 'Return policy', content: '退货需要订单凭证。此文件用于联调。', customerScope:{general:true},
   }), 201);
   const create = { subject: '退货', knowledgeBaseIds: [base.id] };
   const conversations = '/v1/customer-service/conversations';
