@@ -105,6 +105,13 @@ try {
       for await (const part of createReadStream(join(work,'runtime',tool.path))) hash.update(part);
       assert.equal(hash.digest('hex'),tool.sha256);
     }
+    const media=join(work,'runtime','media');
+    const sample=join(work,'synthetic.mp4');
+    run(executable(media,'ffmpeg'),['-v','error','-f','lavfi','-i','color=size=96x64:rate=10','-t','0.3',
+      '-c:v','libopenh264','-threads','1','-pix_fmt','yuv420p',sample]);
+    const info=JSON.parse(run(executable(media,'ffprobe'),['-v','error','-select_streams','v:0','-show_entries',
+      'stream=codec_name,width,height','-of','json',sample]));
+    assert.deepEqual(info.streams.map(({codec_name,width,height})=>[codec_name,width,height]),[['h264',96,64]]);
     console.log(JSON.stringify({offlineArchiveVerified:true,runtimes:release.tools.length}));
   } else {
     run('git', ['--git-dir=' + gitDir, '--work-tree=' + work, '-c', 'core.autocrlf=false',
@@ -173,6 +180,7 @@ try {
   assert.ok(exported.events>=3);
   const logged=await readFile(join(logDir,workspace,'tasks-'+exported.lastDay+'.jsonl'),'utf8');
   assert.ok(logged.split('\n').some(line=>line && JSON.parse(line).taskId===taskId));
+  assert.ok((await api('GET','/v1/diagnostics/task-events?taskId='+taskId+'&level=info',200)).items.some(e=>e.event==='succeeded'));
   const observed=JSON.parse(run(node,['src/ops-observation.js','once',join(work,'observations.sqlite')],
     {...databaseEnv,FAI_PROBE_ORIGIN:origin,FAI_PROBE_SESSION:session.token,FAI_PROBE_WORKSPACE_ID:workspace},application));
   assert.equal(observed.samples,1);assert.equal(observed.failures,0);assert.equal(observed.qualified,false);

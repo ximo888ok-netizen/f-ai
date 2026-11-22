@@ -83,6 +83,9 @@ test('confirmed memory evolution is versioned, reversible and scoped to each mem
     await request('PUT',event,scope==='personal'?404:403,member,update);
     const results=await Promise.all([request('PUT',event,200,owner,update),request('PUT',event,200,owner,update)]);
     assert.deepEqual(results[0],results[1]);
+    const recall='/v1/memory?scope='+scope+'&q=Revised';
+    assert.ok((await request('GET',recall,200,owner)).items.some(i=>i.id===item.id));
+    assert.equal((await request('GET',recall,200,member)).items.some(i=>i.id===item.id),scope==='enterprise');
     await request('PUT',path+'/'+randomUUID(),409,owner,update);
     const undo=await request('PUT',path+'/'+randomUUID(),200,owner,{action:'undo',revision:1});
     assert.equal(undo.revision,2);
@@ -121,10 +124,18 @@ test('committed task logs rotate by UTC date, expire, and exclude business conte
   const task=await request('POST','/v1/tasks',202,owner,{capabilityId:'copywriting.detect-terms',mode:'workflow',
     parameters:{content:'DO-NOT-LOG-QA-SENTINEL'},idempotencyKey:randomUUID()});
   await request('POST','/v1/tasks/'+task.id+'/cancel',200,owner);
+  const query='/v1/diagnostics/task-events?taskId='+task.id+'&level=info&from=2020-01-01T00:00:00Z';
+  assert.deepEqual((await request('GET',query,200,owner)).items.map(e=>e.event),['cancelled','queued']);
+  await request('GET',query,403,member);
+  assert.deepEqual((await request('GET',query,200,visitor)).items,[]);
   const now=Date.now(), today=new Date(now).toISOString().slice(0,10);
   await exportTaskLogs(db,owner.workspace,root,2,now);
   const directory=join(root,owner.workspace);
   const file=join(directory,'tasks-'+today+'.jsonl');
+  const yesterday=new Date(now-86400000).toISOString().slice(0,10);
+  await db.query("UPDATE task_events SET created_at=$2 WHERE task_id=$1 AND event='cancelled'",[task.id,yesterday+'T12:00:00Z']);
+  await exportTaskLogs(db,owner.workspace,root,2,now);
+  assert.ok((await readFile(join(directory,'tasks-'+yesterday+'.jsonl'),'utf8')).includes(task.id));
   const content=await readFile(file,'utf8');
   assert.ok(!content.includes('DO-NOT-LOG') && !content.includes(owner.token));
   assert.equal(content.trim().split('\n').map(JSON.parse).filter(r=>r.taskId===task.id && r.level==='info' && r.event==='queued').length,1);

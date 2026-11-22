@@ -20,6 +20,8 @@
 
 ### 任务日志与候选版本观察
 
+工作区管理者使用 `GET /v1/diagnostics/task-events` 跨任务检索，组合可选的 `taskId`、`level`、`from`、`to` 和分页参数。普通成员使用自己的任务事件接口。
+
 在后端目录运行 `npm run ops:logs -- <工作区UUID> <私有绝对目录> --watch`。部署服务管理器可持续运行该命令；省略 `--watch` 会导出一次。导出器按绑定读取当前企业库，按 UTC 日期生成工作区专属 JSONL。当日重复导出会刷新已提交事件。文件只含时间、级别、事件、任务 ID、事件 ID 和错误码。默认保留七个日历日，可通过 `FAI_LOG_KEEP_DAYS` 设为 1–90 天。业务接口按本人任务、级别和时间检索 `GET /v1/tasks/{id}/events?level=warn&from=...&to=...`。本地目录权限由部署账号管理。
 
 将 `FAI_RELEASE_REVISION` 设置为候选的完整 Git 提交编号，配置 `FAI_PROBE_ORIGIN` 及测试工作区和会话后，运行 `npm run ops:observe -- watch <证据库绝对路径>`。每分钟检查就绪状态、候选版本和已配置的工作区探测。SQLite 证据按候选、来源和工作区隔离，保留实际时间及错误码。`once` 执行一次，`report` 读取记录。失败、时钟倒退或超过两分钟的缺口会重新起算。满七天且最近样本仍新鲜时报告 `qualified: true`。账户、机器配置、核心业务的抽测分母和质量复核随外部验收单记录。
