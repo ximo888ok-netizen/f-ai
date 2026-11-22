@@ -129,11 +129,14 @@ test('product image plans generate one main and three details, retry one failure
   for (let index=0; index<4; index++) assert.equal(await workOnce({db,providers,shops}),true);
 
   const partial = await json(owner,'GET',base,200);
-  assert.equal(partial.state,'partial');
+  assert.deepEqual(providerErrors,[], 'Loopback model received invalid requests');
+  assert.equal(partial.state,'partial',JSON.stringify({
+    calls:providerCalls,
+    results:partial.images.map(({title,state,errorCode})=>({title,state,errorCode})),
+  }));
   assert.deepEqual(partial.images.map(image=>image.state),['succeeded','succeeded','failed','succeeded']);
   assert.equal(partial.images[2].errorCode,'INVALID_PROVIDER_IMAGE');
   assert.deepEqual(await wallet(),{balance:13,reserved:0,available:13});
-  assert.deepEqual(providerErrors,[]);
 
   const draftUrl = '/v1/studio/pinduoduo-drafts/'+randomUUID();
   const draft = await json(owner,'PUT',draftUrl,200,{revision:0,title:'测试保温杯',sku:'QA-BLUE',stock:12,

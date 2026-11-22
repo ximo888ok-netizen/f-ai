@@ -68,6 +68,9 @@ jobs:
             echo "FAI_QA_PG_BIN=$pg_bin"
             echo 'FAI_TEST_SMS_REAL_BACKOFF=1'
           } >> "$GITHUB_ENV"
+      - name: Validate the product image plan workflow
+        if: startsWith(github.ref, 'refs/heads/ci/backend-')
+        run: node --test test/product-image-plans.test.js
       - name: Run every test and require zero skips
         run: |
           report="$RUNNER_TEMP/backend.tap"
