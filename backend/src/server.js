@@ -13,6 +13,7 @@ import { createCustomerAnswer } from './customer-answer.js';
 import { assertControlDatabase } from './workspace-database.js';
 import { createFeishuBindings } from './feishu.js';
 import { createWebdavBindings } from './webdav.js';
+import { createRealtimeBindings } from './realtime-provider.js';
 
 try {
   loadEnvFile();
@@ -27,7 +28,8 @@ const db = postgres(settings.databaseUrl);
 await assertControlDatabase(db);
 const dedicatedDatabases = new Map([...settings.dedicatedDatabases].map(([key,url])=>[key,postgres(url)]));
 const providers = installModels(createProviders(settings.gateway), settings.models);
-const dependencies = { db, providers, shops: settings.shops, feishu, videoArchive: createVideoArchive(settings.videoArchiveOrigins) };
+const dependencies = { db, providers, shops: settings.shops, feishu, realtimeVoice:createRealtimeBindings(),
+  videoArchive: createVideoArchive(settings.videoArchiveOrigins) };
 const app = await buildApp({ ...dependencies, dedicatedDatabases, cloudAssets, videoDelivery:createVideoDelivery(),
   customerAnswer:createCustomerAnswer(providers,process.env.CUSTOMER_ASSISTANT_LOCAL_MODEL_ID), origins: settings.origins, webSearch:createExaSearch(process.env.EXA_API_KEY), logger: true });
 await app.listen({ port: settings.port, host: settings.host });

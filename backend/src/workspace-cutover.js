@@ -5,7 +5,7 @@ import { syncWorkspaceIdentity } from './workspace-database.js';
 const byWorkspace = 'workspace_id=$1';
 const related = (column, parent) => column + ' IN (SELECT id FROM ' + parent + ' WHERE workspace_id=$1)';
 const segments = [
-  ['wallets'], ['ledger'], ['projects'], ['project_members'],
+  ['wallets'], ['ledger'], ['realtime_voice_sessions'], ['projects'], ['project_members'],
   ['knowledge_bases'], ['knowledge_grants'], ['knowledge_categories'], ['documents'], ['document_chunks',related('document_id','documents')],
   ['assets'], ['plugin_settings'], ['tasks'], ['task_events',related('task_id','tasks')], ['task_text_chunks',related('task_id','tasks')],
   ['notifications'], ['account_settings'], ['memory_items'], ['shop_previews'],

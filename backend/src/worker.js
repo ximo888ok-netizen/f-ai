@@ -12,6 +12,7 @@ import { finishTask, shopFingerprint } from './tasks.js';
 import { accessibleProject } from './workspace.js';
 import { logTask } from './task-events.js';
 import { dispatchFeishuReply } from './feishu-channel.js';
+import { maintainRealtimeVoice } from './realtime-voice.js';
 import { appendTaskText } from './task-stream.js';
 
 const maxAttempts = 3;
@@ -158,7 +159,7 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
   return true;
 }
 
-export function startWorker(dependencies, logger) {
+function pollDatabase(dependencies,logger,processDatabase,interval) {
   let stopping = false;
   let timer;
   let pending;
@@ -166,18 +167,10 @@ export function startWorker(dependencies, logger) {
     if (stopping) return;
     pending = Promise.resolve()
       .then(() => dependencies.resolveDatabase ? dependencies.resolveDatabase() : dependencies.db)
-      .then(async db => {
-        if (!db) return;
-        const scoped = { ...dependencies, db };
-        const tasks = dispatchSchedule(scoped).then(() => workOnce(scoped));
-        const results = await Promise.allSettled(scoped.feishu ? [tasks,dispatchFeishuReply(scoped)] : [tasks]);
-        for (const result of results) {
-          if (result.status==='rejected') logger.error('Background work could not be processed');
-        }
-      })
+      .then(db => db && processDatabase(db))
       .catch(() => logger.error('Background work could not be processed'))
       .finally(() => {
-        if (!stopping) timer = setTimeout(run, 500);
+        if (!stopping) timer = setTimeout(run, interval);
       });
   };
   run();
@@ -186,4 +179,19 @@ export function startWorker(dependencies, logger) {
     clearTimeout(timer);
     await pending;
   };
+}
+
+export function startWorker(dependencies, logger) {
+  const stopTasks = pollDatabase(dependencies,logger,async db => {
+    const scoped = {...dependencies,db};
+    const tasks = dispatchSchedule(scoped).then(() => workOnce(scoped));
+    const results = await Promise.allSettled(scoped.feishu ? [tasks,dispatchFeishuReply(scoped)] : [tasks]);
+    for (const result of results) {
+      if (result.status === 'rejected') logger.error('Background work could not be processed');
+    }
+  },500);
+  // Expiring a call must not wait for an unrelated long-running model task.
+  const stopVoice = dependencies.realtimeVoice && pollDatabase(dependencies,logger,
+    db => maintainRealtimeVoice(db,dependencies.realtimeVoice),1000);
+  return async () => { await Promise.all([stopTasks(),stopVoice?.()]); };
 }

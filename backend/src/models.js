@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { catalog, modelAlias } from './catalog.js';
 import { invalid, object, route as httpRoute, text } from './http.js';
-import { requestProviderStream, requestUpstream } from './model-http.js';
+import { modelBaseUrl, requestProviderStream, requestUpstream } from './model-http.js';
 import { supportsTextStream, streamText } from './model-stream.js';
 import { generateImage } from './model-image.js';
 import { pollMapped, runMapped, validateMappedMedia, validateMapping } from './model-mapping.js';
@@ -17,15 +17,6 @@ const protocols = {
 };
 const idPattern=modelAlias.pattern;
 export const modelIdSchema=modelAlias;
-
-function cleanBase(raw) {
-  const base = new URL(raw);
-  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname);
-  if ((base.protocol !== 'https:' && !(base.protocol === 'http:' && loopback)) ||
-    base.username || base.password || base.search || base.hash) throw new Error('Invalid model baseUrl');
-  if (!base.pathname.endsWith('/')) base.pathname += '/';
-  return { base, loopback };
-}
 
 function validateParameters(config, capability, params) {
   if (config.kind === 'rerank' && params.topN > params.documents.length) throw invalid('topN exceeds the document count');
@@ -89,7 +80,7 @@ export function installModels(providers, definitions, env = process.env) {
     else if (!Object.hasOwn(protocols, entry.protocol)) throw new Error('Unknown model protocol');
     if (entry.apiKeyHeader && (entry.protocol !== 'chat-completions' || entry.apiKeyHeader !== 'api-key')) throw new Error('Unsupported model key header');
     const kind = entry.protocol === 'json-http' ? entry.mapping.kind : protocols[entry.protocol];
-    const { base, loopback } = cleanBase(entry.baseUrl);
+    const { base, loopback } = modelBaseUrl(entry.baseUrl);
     if (entry.keyEnv !== undefined && (typeof entry.keyEnv !== 'string' || !/^[A-Z_][A-Z0-9_]*$/.test(entry.keyEnv))) throw new Error('Invalid model keyEnv');
     const key = entry.keyEnv && env[entry.keyEnv];
     if (!key && (!loopback || entry.keyEnv)) throw new Error('Missing credentials for model ' + entry.id);

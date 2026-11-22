@@ -76,7 +76,25 @@ Responses 请求沿用 `store: false`，成功时比对增量文本与最终回�
 
 工作台的「模型对话 → 语音问答」从服务端模型目录读取三个阶段的模型。麦克风录音需要浏览器权限及 HTTPS 或本机安全地址，可录最多 60 秒，也可选择本地音频文件。提交后原始录音存入当前账号和工作区的素材库。完成后，任务详情显示转写和回答，并通过授权素材接口加载可播放的 MP3。
 
-语音问答沿用异步任务队列和素材权限。阶段失败会释放预占，服务不会把已完成的前置阶段自动执行一遍。实时双工语音的传输和客户端交互另行联调。
+语音问答沿用异步任务队列和素材权限。阶段失败会释放预占，服务不会把已完成的前置阶段自动执行一遍。
+
+### 实时双工语音
+
+工作台后端通过 OpenAI Realtime 兼容的 WebRTC 呼叫接口交换 SDP，并管理会话归属、积分和挂断。浏览器与所配置的语音服务直接传输音频。服务端私钥始终留在后端。部署方可在 `REALTIME_VOICE_BINDINGS_JSON` 为指定工作区配置模型、音色、每次成功协商的积分数和到期挂断时间，字段示例见 `.env.example`。默认关闭。[WebRTC 接入指南](https://developers.openai.com/api/docs/guides/voice-webrtc) · [创建呼叫](https://developers.openai.com/api/reference/resources/realtime/subresources/calls/methods/create) · [挂断呼叫](https://developers.openai.com/api/reference/resources/realtime/subresources/calls/methods/hangup)
+
+所有请求使用工作台登录的 `Authorization: Bearer …` 和 `X-Workspace-Id`。以下路径以 `/v1/voice/realtime` 为前缀。
+
+| 请求 | 前端使用方式 |
+| --- | --- |
+| `GET /options` | `available: true` 时显示通话入口，向用户展示 `credits` 和 `durationSeconds`。模型和音色由当前工作区配置。 |
+| `PUT /sessions/{id}` | 用户发起通话时生成一个 UUID，添加麦克风音轨，可创建 `oai-events` 数据通道。创建 offer 并调用 `setLocalDescription` 后，将 SDP 放入 JSON 字段 `offerSdp`。成功返回 `state: "active"` 和 `answerSdp`，调用 `setRemoteDescription({type:"answer",sdp:answerSdp})`，在 `ontrack` 中把远端音轨交给音频播放器。服务端配置语音活动检测和说话打断。 |
+| `GET /sessions/{id}` | 查看状态和 `errorCode`。首次成功是 201，同时协商或等待挂断是 202。若首次响应丢失，使用同一 UUID 和完全相同的 SDP 重发 PUT，可取回有效应答。新建的浏览器连接需要自己的 offer。 |
+| `GET /sessions/current` | 页面重载后找回本人尚未结束的会话 ID，空闲时返回 `{"session":null}`。 |
+| `DELETE /sessions/{id}` | 停止本地麦克风、关闭浏览器连接，并请求后端挂断。重复调用安全。若返回 `closing`，可用 GET 查询最终状态。协商期间取消，后端会清理随后到达的上游呼叫。 |
+
+每位成员在一个工作区可保有一通待处理的通话。同一 UUID 更换 offer 返回 409 `VOICE_OFFER_CHANGED`，另一通尚未结束时返回 409 `VOICE_SESSION_BUSY`。积分在建立前预占，成功协商后按配置结算一次。协商失败或在协商完成前取消会释放预占。返回体中的 `failed` 和 `errorCode` 表示该次协商已失败，即使 HTTP 为 200。创建结果不明时，相同 UUID 不会再次呼叫供应商。
+
+后端保存 offer 摘要，在会话活跃期间临时保存 SDP 应答以供重取。进入关闭流程后清除应答。本平台的数据表只保留通话状态及结算所需的记录。保持后端 worker 运行，它在通话到期后请求挂断，重启后继续处理遗留协商和暂时失败的挂断。供应商最终断开时间取决于网络及其挂断响应。切换供应商地址前先结束现有呼叫。`VOICE_BINDING_CHANGED` 表示正在等待恢复原连接配置。
 
 ### 图片、视频和文件
 
@@ -101,6 +119,8 @@ Responses 请求沿用 `store: false`，成功时比对增量文本与最终回�
 旧版 GATEWAY_URL 继续接受 f-ai 的业务载荷。已有任务保留原来绑定的服务商，自定义多步骤业务仍可使用该网关。
 
 ## 验证
+
+实时语音测试包含会话归属、重复请求、取消、费用和到期挂断。要验证实际媒体传输，在装有 Chrome 的测试机将 `FAI_TEST_PLAYWRIGHT_PATH` 指向本机 Playwright 模块，执行 `node --test test/realtime-webrtc.test.js`。两端分别产生 440 Hz 和 880 Hz 的测试音，并检查对方收到的音频和数据通道消息。
 
 npm test 运行协议夹具、API 与数据库集成测试。用 FAI_TEST_DATABASE_URL 指向空的独立 PostgreSQL 测试库，可运行同一套回归。测试包含真实本机 HTTP 请求、受限素材下载、供应商限流、未知提交结果、重启后的轮询和积分结算。厂商账户可用性、实际模型输出和外部账单需要用获准的项目账号单独验证。
 

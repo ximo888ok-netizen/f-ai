@@ -17,6 +17,7 @@ import { registerShopOperations } from './shop-operations.js';
 import { registerStudioProducts } from './studio-products.js';
 import { registerSupport } from './support.js';
 import { registerModels } from './models.js';
+import { registerRealtimeVoice } from './realtime-voice.js';
 import { registerTasks } from './tasks.js';
 import { registerWallet } from './wallet.js';
 import { registerWorkspace } from './workspace.js';
@@ -36,7 +37,7 @@ import { registerCopywritingReview } from './copywriting-review.js';
 
 export async function buildApp({
   db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(),
-  cloudAssets = new Map(), feishu = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false,
+  cloudAssets = new Map(), feishu = new Map(), realtimeVoice = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false,
 }) {
   const app = Fastify({
     logger,
@@ -134,6 +135,7 @@ export async function buildApp({
   registerSupport(app, workspaceDb);
   registerCustomerService(app, workspaceDb, customerAnswer);
   registerModels(app, providers);
+  registerRealtimeVoice(app, workspaceDb, realtimeVoice);
   registerTasks(app, workspaceDb, providers, shops);
   registerSchedules(app, workspaceDb, providers);
   return app;
