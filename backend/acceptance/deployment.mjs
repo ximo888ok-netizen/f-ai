@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
+import { closeSync, openSync } from 'node:fs';
 import { mkdtemp, readdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { createRequire } from 'node:module';
@@ -10,6 +11,7 @@ import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { client, exerciseCustomer, exerciseFilesAndWorker, exerciseImagePreflight, exercisePsd, exerciseWorkspace, verifyAsset } from './fixtures.mjs';
+import { rotationFixture } from './credential-rotation.mjs';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const pgBin = process.env.FAI_QA_PG_BIN;
@@ -45,18 +47,26 @@ const application = join(work, 'backend');
 const cluster = join(work, 'cluster');
 const pgLog = join(work, 'postgres.log');
 const backup = join(work, 'archive');
+const appLog = join(work, 'service.log');
+const cliLogs = [];
 let clusterStarted = false;
 let service;
 let databaseEnv;
 
 function admin(...args) {
-  return run(node, ['src/admin.js', ...args], databaseEnv, application);
+  const result = spawnSync(node, ['src/admin.js', ...args], { env: databaseEnv, cwd: application, windowsHide: true, encoding: 'utf8', timeout: 180000 });
+  cliLogs.push(result.stdout || '', result.stderr || '');
+  assert.equal(result.status, 0, 'Deployment admin command failed: ' + args[0]);
+  return result.stdout.trim();
 }
 async function startService() {
   const port = await freePort();
   const origin = 'http://127.0.0.1:' + port;
-  service = spawn(node, ['src/server.js'], { cwd: application, windowsHide: true, stdio: 'ignore',
-    env: { ...databaseEnv, HOST: '127.0.0.1', PORT: String(port) } });
+  const fd = openSync(appLog, 'a', 0o600);
+  try {
+    service = spawn(node, ['src/server.js'], { cwd: application, windowsHide: true, stdio: ['ignore', fd, fd],
+      env: { ...databaseEnv, HOST: '127.0.0.1', PORT: String(port) } });
+  } finally { closeSync(fd); }
   await once(service, 'spawn');
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline && service.exitCode === null && service.signalCode === null) {
@@ -94,10 +104,6 @@ try {
   const sqlEnv = { ...osEnv, PGHOST: '127.0.0.1', PGPORT: String(port), PGUSER: 'fai_qa', PGPASSWORD: password };
   const sql = (db, statement) => run(sqlTool, ['-XAt', '-v', 'ON_ERROR_STOP=1', '-d', db, '-c', statement], sqlEnv);
   const url = name => 'postgresql://fai_qa:' + password + '@127.0.0.1:' + port + '/' + name;
-  const connect = (control, tenant) => ({
-    ...osEnv, DATABASE_URL: url(control), FAI_QA_TENANT_URL: url(tenant), FAI_PG_BIN: pgClient,
-    DEDICATED_DATABASES_JSON: JSON.stringify({ qa: 'FAI_QA_TENANT_URL' }),
-  });
   const pwfile = join(work, 'init-password');
   await writeFile(pwfile, password + '\n', { mode: 0o600 });
   try {
@@ -106,8 +112,13 @@ try {
   // The long-lived Windows postgres process must not inherit a captured child pipe.
   run(serverTool('pg_ctl'), ['-D', cluster, '-l', pgLog, '-o', '-h 127.0.0.1 -p ' + port, '-w', 'start'], osEnv, work, 'inherit');
   clusterStarted = true;
-  for (const db of ['control', 'tenant', 'restore_control', 'restore_tenant']) sql('postgres', 'CREATE DATABASE ' + db);
-  databaseEnv = connect('control', 'tenant');
+  sql('postgres', 'CREATE ROLE fai_tenant_qa LOGIN');
+  for (const db of ['control', 'restore_control']) sql('postgres', 'CREATE DATABASE ' + db);
+  for (const db of ['tenant', 'restore_tenant']) sql('postgres', 'CREATE DATABASE ' + db + ' OWNER fai_tenant_qa');
+  const { Client } = createRequire(join(application, 'package.json'))('pg');
+  const rotation = await rotationFixture({ work, application, env: osEnv, port, Client, controlUrl: url('control'), sql, cliLogs });
+  const connect = (control, version) => ({ ...osEnv, DATABASE_URL: url(control), FAI_PG_BIN: pgClient, ...rotation.connection(version) });
+  databaseEnv = connect('control', 1);
   admin('migrate');
   admin('migrate');
   const migrations = (await readdir(join(application, 'migrations'))).filter(file => file.endsWith('.sql')).sort();
@@ -147,10 +158,14 @@ try {
     sameNameProductVolumesMl:[350,750], imageSubmissionsRejected:6, rejectedImageLedgerDelta:0 }));
 
   await stopService();
+  await rotation.exercise({ session, stop: stopService, start: version => {
+    databaseEnv = connect('control', version);
+    return startService();
+  } });
   const manifest = JSON.parse(admin('backup', backup));
   assert.equal(manifest.archives.length, 2);
   for (const item of manifest.archives) assert.deepEqual(item.migrations, migrations);
-  databaseEnv = connect('restore_control', 'restore_tenant');
+  databaseEnv = connect('restore_control', 4);
   assert.deepEqual(JSON.parse(admin('restore-backup', backup, '--confirm-empty-targets')).restored, ['control', 'tenant:qa']);
   const restored = await startService();
   const restoredSession = await client(restored)('POST', '/v1/auth/login', 200, login);
@@ -161,6 +176,8 @@ try {
   assert.deepEqual(await restoredApi('GET', '/v1/credits/wallet', 200), { balance: 4, reserved: 0, available: 4 });
   assert.equal(sql('restore_control', marker), '0');
   assert.equal(sql('restore_tenant', marker), '1');
+  await stopService();
+  await rotation.checkLogs({ appLog, pgLog, controlPassword: password });
   console.log(JSON.stringify({ restored: manifest.archives.map(({ name, sha256 }) => ({ name, sha256 })), result: 'passed' }));
 } finally {
   try { await stopService(); } finally {

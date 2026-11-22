@@ -14,6 +14,14 @@
 
 对每个企业独立库使用与现有绑定一致的别名。发布前停止共享库和独立库的所有写入，包括应用实例、队列和定时任务。备份完成后运行 `npm run migrate`，再运行 `npm start`。用 `/health` 检查进程，用 `/ready` 检查版本和主数据库，用企业管理账号读取 `/v1/workspace/database` 验证独立库路由。环境使用自己的密钥，测试账号和测试物料留在隔离环境。
 
+## 企业独立库凭证
+
+1. 在代码和数据库备份目录以外准备两个位置。将 `DEDICATED_CREDENTIAL_DIR` 指向保存密文的绝对目录，目录所在文件系统需支持硬链接。将 `DEDICATED_CREDENTIAL_KEYS_FILE` 指向另一处由部署方管理的密钥文件。服务账号只需读取两处，运维账号负责写入。Unix 上将私有目录限为 0700、文件限为 0600，Windows 上用 NTFS ACL 限制访问。密钥应单独备份。
+2. 密钥文件是 UTF-8 JSON 对象，形如 `{"key-a":"<32 个随机字节的标准 Base64 编码>"}`。为每个新密钥编号独立生成 32 个密码学随机字节，由部署密钥工具写入文件。连接串由密钥工具通过管道传给 `npm run --silent db:credential -- seal company-db 1 key-a` 的标准输入。输入一行完整 PostgreSQL URL，其中用户名、密码里的特殊字符须按 URL 编码。命令行参数和 shell 历史只应包含别名、版本和密钥编号。
+3. 在服务和运维进程中设置 `DEDICATED_DATABASES_JSON={"company-db":{"credentialVersion":1}}`。每个版本单独保存，使用 AES-256-GCM 校验密文和所属别名、版本、密钥编号。重复写同一版本会失败。服务启动时读取指定版本，迁移、切库、备份和恢复也使用同一配置。原先使用环境变量引用的部署可以逐库迁移，验证新配置后移除旧连接串。
+4. **换数据库密码**时，先把新连接串封存到未使用的版本。安排维护窗口，停用持有旧连接池的服务、工作进程和其他客户端。在 PostgreSQL 管理会话中用 psql 的 `\password <企业角色>` 修改密码。确认旧密码新建连接被拒、新密码可用后，将配置指向新版本，重启全部实例。用管理员会话检查 `GET /v1/workspace/database` 为 `dedicated/ready`，写入测试商品并核对实际目标库。若轮换中断，保持路由绑定，使用与数据库当前密码匹配的版本恢复服务。[PostgreSQL 密码命令](https://www.postgresql.org/docs/18/app-psql.html)
+5. **换加密密钥**时，把新密钥加入密钥文件，运行 `npm run --silent db:credential -- rewrap company-db 2 3 key-b`，将第 2 版重新加密为第 3 版。切换所有受影响的服务和运维命令并验证后，再从在线密钥文件移除旧密钥。需要保留的历史密文与对应旧密钥分别离线保管。
+
 ## 依赖与网络连接清单
 
 发版时运行 `npm run --silent release:inventory` 导出锁文件摘要、生产依赖、版本、许可证和可选平台约束。FFmpeg、FFprobe、编码器、PostgreSQL、Node.js 运行时及 Windows 安装组件应按实际交付二进制另行登记版本、来源与许可证。

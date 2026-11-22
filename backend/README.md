@@ -60,7 +60,7 @@ npm start
 
 服务使用 `DATABASE_URL` 管理账号、登录、成员和路由目录。未配置独立路由的工作区使用共享数据库。独立路由生效后，该企业的商品、素材、文档、任务、积分、台账和设计只访问指定 PostgreSQL；独立库连接异常、版本落后或绑定不符时，业务接口返回 `WORKSPACE_DATABASE_UNAVAILABLE`。管理员可通过 `GET /v1/workspace/database` 查询模式和状态。
 
-1. 由部署方创建一套空的 PostgreSQL 目标数据库。通过部署密钥管理注入连接串，例如 `COMPANY_DATABASE_URL`，再设置 `DEDICATED_DATABASES_JSON={"company-db":"COMPANY_DATABASE_URL"}`。路由表只保存别名和绑定标识。
+1. 由部署方创建空的 PostgreSQL 目标库，为企业角色设置独立密码。按[凭证配置与轮换步骤](DEPLOYMENT.md#企业独立库凭证)加密完整连接串，再设置 `DEDICATED_DATABASES_JSON={"company-db":{"credentialVersion":1}}`。已有部署仍可使用环境变量名引用。路由表只保存别名和绑定标识。
 2. 备份两库，进入维护窗口并停止写入该共享库的应用实例及任务进程。执行 `npm run migrate`，把默认库和已配置目标库升级到同一版本。
 3. 执行 `npm run workspace:cutover -- <workspace-id> company-db --confirm`。命令复制并核对目标库记录数和内容摘要，在目标提交后才移除默认库中的该企业业务记录并激活路由。账号凭证和会话保留在默认库。中途中断时工作区处于 `preparing`，保持维护窗口，使用相同的工作区和目标库重新执行该命令。
 4. 启动服务后，检查工作区数据库状态为 `dedicated / ready`，用获准的测试记录验证目标库读写。后台任务和积分管理命令同样使用路由。

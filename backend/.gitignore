@@ -5,3 +5,6 @@ node_modules/
 model-providers.local.json
 coverage/
 data/
+*.dbcred
+*.dbcred.*.tmp
+*.dbkeys.json
