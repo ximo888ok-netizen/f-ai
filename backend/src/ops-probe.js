@@ -1,4 +1,7 @@
-const knownAlerts=new Set(['QUEUE_DELAY','LEASE_EXPIRED','PROVIDER_POLL_DELAY','SCHEDULE_DELAY','TASK_FAILURE_RATE']);
+import { diagnosticAlerts } from './diagnostic-alerts.js';
+import { alertSettings,notifyProbe } from './ops-notify.js';
+
+const knownAlerts=new Set(diagnosticAlerts);
 
 export async function probe(env=process.env) {
   const url=new URL(env.FAI_PROBE_ORIGIN);
@@ -29,13 +32,22 @@ export async function probe(env=process.env) {
   return {observedAt:new Date().toISOString(),scope:workspace?'workspace':'service',ok:issues.length===0,issues};
 }
 
+export async function runProbe(env=process.env) {
+  const startedAt=Date.now();
+  const sample=await probe(env);
+  const settings=alertSettings(env);
+  if (!settings) return sample;
+  try {return {...sample,notification:await notifyProbe(settings,sample,startedAt)};}
+  catch {return {...sample,notification:{error:'ALERT_STATE_UNAVAILABLE'}};}
+}
+
 if (import.meta.main) {
   try {
-    const sample=await probe();
+    const sample=await runProbe();
     console.log(JSON.stringify(sample));
-    process.exitCode=sample.ok?0:1;
+    process.exitCode=sample.ok && !sample.notification?.pending && !sample.notification?.error ? 0 : 1;
   } catch {
-    console.error('Invalid probe settings. Check FAI_PROBE_ORIGIN and the optional workspace/session pair.');
+    console.error('Invalid probe settings. Check FAI_PROBE_ORIGIN, the optional workspace/session pair and the alert configuration.');
     process.exitCode=2;
   }
 }

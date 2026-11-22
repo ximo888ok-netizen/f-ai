@@ -233,6 +233,19 @@ GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维
 
 飞书使用企业自建机器人和加密 HTTP 事件订阅。通过 `FEISHU_BINDINGS_JSON` 配置每个工作区的连接标识、应用 ID、租户标识和三项部署密钥变量名。事件回调使用 `POST /v1/channels/feishu/{connector}/events`。启用 `im.message.receive_v1` 和机器人接收私聊、发送文本的权限。服务验证签名、时间和应用租户，只接收加密的私聊文本，并对重复事件和消息去重。管理员在「客服工作台 → 飞书消息」查看并确认回复，后台显示排队、发送、失败或待核实。服务用同一飞书消息 UUID 重试，超过重试窗口后保留待核实状态。接入依据 [飞书事件加密文档](https://open.feishu.cn/document/server-docs/event-subscription-guide/event-subscription-configure-/encrypt-key-encryption-configuration-case) 和 [发送消息接口](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/message/create)。
 
+## 工作区短信通道
+
+服务使用腾讯云 `SendSms` 模板短信接口，按工作区加载 `SMS_BINDINGS_JSON`。每个绑定指定应用 ID、已审核签名、模板别名、供应商模板 ID、参数个数及两个密钥环境变量名。部署示例见 `.env.example`。号码使用 E.164 格式，每次请求一个号码。[腾讯云发送短信](https://cloud.tencent.com/document/api/382/55981) · [签名方法](https://cloud.tencent.com/document/product/382/52072)
+
+| 管理员接口 | 用途 |
+| --- | --- |
+| `GET /v1/channels/sms/options` | 查看本工作区配置的模板别名和参数个数 |
+| `PUT /v1/channels/sms/messages/{uuid}` | 提交 `recipient`、`template` 和有序字符串数组 `values`，返回 202 及队列状态。同一成员用相同 ID 和相同内容重试可取回原记录，内容冲突返回 409 |
+| `GET /v1/channels/sms/messages/{uuid}` | 查询受理状态、尝试次数、错误码和供应商流水号 |
+| `GET /v1/channels/sms/messages` | 分页查看本工作区的脱敏记录 |
+
+`accepted` 表示腾讯云已返回该号码的受理流水号，手机到达情况须以运营商回执为准。明确的短期限流或建立连接前的网络故障最多尝试三次，常规退避为 30 秒和 60 秒，并参考 HTTP 429 的 `Retry-After`。模板被拒或发送权限已撤销时结束为 `failed`。发出请求后断线、回执不匹配或进程在发送途中退出，记录转为 `uncertain`，应按请求 UUID 核对供应商日志。队列在终态清除待发号码及模板参数，查询界面仅返回号码尾四位。[腾讯云短信错误码](https://cloud.tencent.com/document/api/382/52075)
+
 ## 交付范围与验证
 
 图片和视频模型已有原生协议适配，独立数据库路由与分层 PSD 已完成测试环境验证。三平台店铺 OAuth、支付订阅及自动核验渠道回款仍待接入。实店发布与对账、供应商实际生成质量、真实飞书和 WebDAV 渠道、独立生产部署及七天观察需在相应环境验收。客服默认提供带来源的多轮知识检索回复，也支持部署方显式配置的本机对话模型。42 项能力的实际可用性可通过当前工作区的插件目录和模型配置查看。

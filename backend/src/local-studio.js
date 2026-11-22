@@ -7,6 +7,7 @@ import { createProviders } from './providers.js';
 import { startWorker } from './worker.js';
 import { createVideoDelivery } from './video-delivery.js';
 import { createRealtimeBindings } from './realtime-provider.js';
+import { createSmsBindings } from './tencent-sms.js';
 
 const port = Number(process.env.FAI_LOCAL_STUDIO_PORT ?? 8080);
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid FAI_LOCAL_STUDIO_PORT');
@@ -20,7 +21,7 @@ const db = new PGlite(stateDir ? join(stateDir,'database') : undefined);
 let app;
 try {
   await migrate(db);
-  const dependencies = { db, providers: createProviders(), shops: new Map(), realtimeVoice:createRealtimeBindings() };
+  const dependencies = { db, providers: createProviders(), shops: new Map(), realtimeVoice:createRealtimeBindings(),sms:createSmsBindings() };
   app = await buildApp({...dependencies,videoDelivery:createVideoDelivery(),loopbackOnly:Boolean(stateDir)});
   const location = await app.listen({ host: '127.0.0.1', port });
   const stopWorker = startWorker(dependencies, app.log);

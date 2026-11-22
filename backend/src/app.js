@@ -29,6 +29,7 @@ import { workspaceDatabaseRouter } from './workspace-database.js';
 import { registerStudioPsd } from './studio-psd.js';
 import { registerCloudAssets } from './cloud-assets.js';
 import { registerFeishuChannel } from './feishu-channel.js';
+import { registerSmsChannel } from './sms-channel.js';
 import { registerVideoDelivery } from './video-delivery.js';
 import { registerRightsNotices } from './rights-notices.js';
 import { registerSkillRuns } from './skill-runs.js';
@@ -39,7 +40,7 @@ import { registerCopywritingDrafts } from './copywriting-drafts.js';
 
 export async function buildApp({
   db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(),
-  cloudAssets = new Map(), feishu = new Map(), realtimeVoice = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false,
+  cloudAssets = new Map(), feishu = new Map(), sms = new Map(), realtimeVoice = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false,
 }) {
   const app = Fastify({
     logger,
@@ -141,6 +142,7 @@ export async function buildApp({
   registerCopywritingDrafts(app,workspaceDb);
   registerCloudAssets(app,workspaceDb,cloudAssets);
   registerFeishuChannel(app,workspaceDb,feishu);
+  registerSmsChannel(app,workspaceDb,sms);
   registerSupport(app, workspaceDb);
   registerCustomerService(app, workspaceDb, customerAnswer);
   registerModels(app, providers);

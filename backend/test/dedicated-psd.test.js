@@ -12,6 +12,7 @@ import { config } from '../src/config.js';
 import { workOnce } from '../src/worker.js';
 import { cutoverWorkspace } from '../src/workspace-cutover.js';
 import { provisionCredits } from '../src/wallet.js';
+import { dispatchSms } from '../src/sms-channel.js';
 
 initializeCanvas(() => { throw new Error('Tests use raw pixels'); },
   (width,height)=>({width,height,data:new Uint8ClampedArray(width*height*4)}));
@@ -132,13 +133,20 @@ test('enterprise cutover handles interruption, preserves business data and fails
   const databases=new Map([['dedicated',target]]);
   const providers=createProviders(), shops=new Map();
   const realtimeVoice=new Map();
-  const app=await buildApp({db:control,dedicatedDatabases:databases,providers,shops,realtimeVoice});
+  const sms=new Map();
+  const app=await buildApp({db:control,dedicatedDatabases:databases,providers,shops,realtimeVoice,sms});
   try {
     await migrate(control);
     await migrate(target);
     const enterprise=await register(app,'dedicated-owner@example.test');
     const member=await register(app,'dedicated-member@example.test','personal');
     const {workspace}=enterprise;
+    const smsPath='/v1/channels/sms/messages/'+randomUUID();
+    let smsCalls=0;
+    sms.set(workspace,new Map([['notice',{params:0,fingerprint:'test',send:async()=>{
+      smsCalls++;return {state:'accepted',reference:'fixture:cutover'};
+    }}]]));
+    await json(app,enterprise,'PUT',smsPath,202,{recipient:'+12025550123',template:'notice',values:[]});
     const copyPath='/v1/copywriting/drafts/'+randomUUID();
     await json(app,enterprise,'PUT',copyPath,200,{revision:0,title:'Synthetic copy',content:'Shared before cutover'});
     const agencyReceipt='/v1/agency/receipts/CUTOVER-01';
@@ -194,6 +202,10 @@ test('enterprise cutover handles interruption, preserves business data and fails
     assert.equal(staged.count,1);
     assert.equal((await cutoverWorkspace(control,target,workspace,'dedicated')).state,'active');
     assert.equal((await cutoverWorkspace(control,target,workspace,'dedicated')).alreadyActive,true);
+    assert.equal(await dispatchSms({db:control,sms}),false);
+    assert.equal(await dispatchSms({db:target,identityDb:control,sms}),true);
+    assert.equal((await json(app,enterprise,'GET',smsPath,200)).state,'accepted');
+    assert.equal(smsCalls,1);
     const statement=await json(app,enterprise,'GET','/v1/agency/statements?month=2026-01',200);
     assert.equal(statement.items[0].netMinor,'100');
     assert.equal((await json(app,enterprise,'GET',copyPath,200)).content,'Shared before cutover');

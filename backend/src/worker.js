@@ -12,6 +12,7 @@ import { finishTask, shopFingerprint } from './tasks.js';
 import { accessibleProject } from './workspace.js';
 import { logTask } from './task-events.js';
 import { dispatchFeishuReply } from './feishu-channel.js';
+import { dispatchSms } from './sms-channel.js';
 import { maintainRealtimeVoice } from './realtime-voice.js';
 import { appendTaskText } from './task-stream.js';
 
@@ -193,5 +194,7 @@ export function startWorker(dependencies, logger) {
   // Expiring a call must not wait for an unrelated long-running model task.
   const stopVoice = dependencies.realtimeVoice && pollDatabase(dependencies,logger,
     db => maintainRealtimeVoice(db,dependencies.realtimeVoice),1000);
-  return async () => { await Promise.all([stopTasks(),stopVoice?.()]); };
+  const stopSms = dependencies.sms && pollDatabase(dependencies,logger,
+    db => dispatchSms({...dependencies,db}),1000);
+  return async () => { await Promise.all([stopTasks(),stopVoice?.(),stopSms?.()]); };
 }

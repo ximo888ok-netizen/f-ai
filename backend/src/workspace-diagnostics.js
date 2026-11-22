@@ -1,4 +1,5 @@
 import { statfs } from 'node:fs/promises';
+import { diagnosticAlerts } from './diagnostic-alerts.js';
 import { checkMigrations, row, rows } from './db.js';
 import { ApiError, array, choice, integer, invalid, object, page, paginate, route, text, uuid } from './http.js';
 
@@ -54,7 +55,7 @@ export function registerWorkspaceDiagnostics(app, db, migrations) {
 
   route(app,'GET','/v1/diagnostics/alerts',{tags,manager:true,summary:'Evaluate workspace queue, polling and final failure thresholds',
     response:{200:object({observedAt:{type:'string',format:'date-time'},windowMinutes:{const:60},finished:count,failed:count,
-      alerts:array(choice('QUEUE_DELAY','LEASE_EXPIRED','PROVIDER_POLL_DELAY','SCHEDULE_DELAY','TASK_FAILURE_RATE'),5)})}},
+      alerts:array(choice(...diagnosticAlerts),diagnosticAlerts.length)})}},
     async request=>{
       const sample=await row(db,`SELECT now() AS "observedAt",
         count(*) FILTER (WHERE state IN ('succeeded','failed'))::integer AS finished,
@@ -62,7 +63,10 @@ export function registerWorkspaceDiagnostics(app, db, migrations) {
         coalesce(bool_or(state='queued' AND available_at<=now()-interval '2 minutes'),false) AS backlog,
         coalesce(bool_or(state='running' AND lease_id IS NOT NULL AND lease_until<=now()),false) AS expired,
         coalesce(bool_or(state='running' AND provider_job_id IS NOT NULL AND lease_id IS NULL AND lease_until<=now()-interval '2 minutes'),false) AS poll,
-        EXISTS(SELECT 1 FROM schedules WHERE workspace_id=$1 AND state='pending' AND run_at<=now()-interval '2 minutes') AS scheduled
+        EXISTS(SELECT 1 FROM schedules WHERE workspace_id=$1 AND state='pending' AND run_at<=now()-interval '2 minutes') AS scheduled,
+        EXISTS(SELECT 1 FROM sms_messages WHERE workspace_id=$1 AND ((state='queued' AND available_at<=now()-interval '2 minutes')
+          OR (state='sending' AND lease_until<=now()))) AS sms_delayed,
+        EXISTS(SELECT 1 FROM sms_messages WHERE workspace_id=$1 AND state IN ('failed','uncertain') AND updated_at>=now()-interval '1 hour') AS sms_failed
         FROM tasks WHERE workspace_id=$1 AND (state IN ('queued','running') OR
           (state IN ('succeeded','failed') AND updated_at>=now()-interval '1 hour'))`,[request.context.workspaceId]);
       const {observedAt,finished,failed}=sample;
@@ -72,6 +76,8 @@ export function registerWorkspaceDiagnostics(app, db, migrations) {
       if (sample.poll) alerts.push('PROVIDER_POLL_DELAY');
       if (sample.scheduled) alerts.push('SCHEDULE_DELAY');
       if (finished>=5 && failed/finished>=0.2) alerts.push('TASK_FAILURE_RATE');
+      if (sample.sms_delayed) alerts.push('SMS_QUEUE_DELAY');
+      if (sample.sms_failed) alerts.push('SMS_SEND_FAILED');
       return {observedAt,windowMinutes:60,finished,failed,alerts};
     });
 

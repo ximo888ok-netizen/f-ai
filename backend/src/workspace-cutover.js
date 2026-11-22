@@ -17,6 +17,7 @@ const segments = [
   ['asset_cloud_copies'], ['feishu_messages'], ['feishu_replies'], ['rights_notices'], ['rights_notice_events'], ['studio_image_batches'], ['studio_video_storyboards'],
   ['workspace_copywriting_rules'], ['copywriting_drafts'],
   ['agency_partners'], ['agency_rates'], ['agency_receipts'], ['agency_reversals'],
+  ['sms_messages'],
 ].map(([table, filter = byWorkspace]) => ({table,filter}));
 const identityTables = ['migrations','workspaces','accounts','memberships','sessions','invitations',
   'workspace_database_routes','workspace_identity_events','dedicated_database_identity'];
