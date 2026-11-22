@@ -91,3 +91,31 @@ jobs:
           if [[ -n "${FAI_QA_PG_BIN:-}" && -e "$RUNNER_TEMP/regression-pg/postmaster.pid" ]]; then
             "$FAI_QA_PG_BIN/pg_ctl" -D "$RUNNER_TEMP/regression-pg" -m fast -w stop
           fi
+
+  windows-offline:
+    name: Build and verify Windows x64 offline backend
+    needs: regression
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.16.0'
+      - name: Build from the tested commit and rehearse isolated deployment
+        shell: pwsh
+        working-directory: backend
+        run: ./ops/windows-ci-release.ps1
+      - name: Publish verified offline package and checksums
+        uses: actions/upload-artifact@v6
+        with:
+          name: f-ai-backend-win-x64-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/backend-delivery/f-ai-backend-win-x64.tar.gz
+            ${{ runner.temp }}/backend-delivery/f-ai-backend-win-x64.tar.gz.sha256
+            ${{ runner.temp }}/backend-delivery/release.json.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

@@ -6,6 +6,7 @@ import { row, rows } from './db.js';
 import { ApiError, array, choice, integer, invalid, notFound, object, route, text, uuid } from './http.js';
 import { stableJson } from './tasks.js';
 import { platformTemplateRef, registerPlatformTemplates, resolvePlatformTemplates } from './image-platform-templates.js';
+import { activeModelConsent, readSeriesPreset, registerSeriesPresets, seriesPresetRef } from './image-series-presets.js';
 
 const profiles={
   square:[800,800],portrait:[900,1200],story:[720,1280],wide:[1280,720],detail:[800,4800],
@@ -18,15 +19,21 @@ const editSchema={oneOf:[
 ]};
 const jobSchema=object({key:text(100),assetIds:array(uuid,6,1),profile:choice(...Object.keys(profiles)),platformTemplate:platformTemplateRef,
   width:integer(32,1920),height:integer(32,6144),scale:integer(2,4),fit:choice('contain','cover'),
-  background:{anyOf:[rgb,choice('transparent')]},backgroundAssetId:uuid,edit:editSchema,format:choice('png','jpeg')},
-  ['key','assetIds']);
+  background:{anyOf:[rgb,choice('transparent')]},backgroundAssetId:uuid,edit:editSchema,format:choice('png','jpeg'),caption:text(140)},
+  ['key']);
 const busy=()=>new ApiError(503,'IMAGE_RENDER_BUSY','The image renderer is busy. Retry in a moment');
 const failure=()=>new ApiError(503,'IMAGE_RENDER_FAILED','The image worker did not complete');
 const conflict=()=>new ApiError(409,'IDEMPOTENCY_CONFLICT','This batch ID belongs to a different image request');
 
-function normalize(jobs) {
+function normalize(jobs,preset) {
   const keys=new Set();
-  return jobs.map(({key,assetIds,profile,platformTemplate,width,height,scale,fit='contain',background,backgroundAssetId,edit,format='png'})=>{
+  return jobs.map(({key,assetIds,profile,platformTemplate,width,height,scale,fit='contain',background,backgroundAssetId,edit,format='png',caption})=>{
+    if (preset) {
+      if (assetIds || background || backgroundAssetId || edit || scale) throw invalid('The series preset supplies the subject, layout and background');
+      assetIds=[preset.configuration.productAssetId];
+      background=preset.configuration.background;
+      backgroundAssetId=preset.configuration.modelAssetId;
+    } else if (!assetIds || caption!==undefined) throw invalid('Supply assetIds or select a series preset for captions');
     const label=key.trim();
     if (!label || keys.has(label.toLowerCase())) throw invalid('Use distinct nonblank image job keys');
     keys.add(label.toLowerCase());
@@ -46,6 +53,7 @@ function normalize(jobs) {
     const replacement=edit?.replacementAssetId?.toLowerCase();
     const inputs=[...identifiers,...[backdrop,mask,replacement].filter(Boolean)];
     return {key:label,assetIds:identifiers,inputs,width,height,scale,fit,background,backdrop,platformTemplate,
+      series:preset && {id:preset.id,revision:preset.revision,...preset.configuration,caption},
       edit:edit && {...edit,maskAssetId:mask,replacementAssetId:replacement},mediaType:'image/'+format,format};
   });
 }
@@ -71,6 +79,7 @@ async function existing(db,key,hash) {
 
 export function registerImageStudio(app,db) {
   registerPlatformTemplates(app,db);
+  registerSeriesPresets(app,db);
   let active=0;
   route(app,'GET','/v1/media/images/batches/:id',{
     tags:['Image processing'],summary:'Read a completed owned image batch',params:object({id:uuid}),
@@ -82,11 +91,12 @@ export function registerImageStudio(app,db) {
   });
   route(app,'POST','/v1/media/images/batches',{
     tags:['Image processing'],summary:'Render and save owned images per SKU or as a stacked detail sheet',
-    body:object({id:uuid,items:array(jobSchema,8,1)}),
+    body:object({id:uuid,items:array(jobSchema,8,1),seriesPreset:seriesPresetRef},['id','items']),
   },async (request,reply)=>{
     const {workspaceId,accountId}=request.context;
     const {id}=request.body;
-    const jobs=normalize(await resolvePlatformTemplates(db,workspaceId,request.body.items));
+    const preset=request.body.seriesPreset && await readSeriesPreset(db,request.context,request.body.seriesPreset);
+    const jobs=normalize(await resolvePlatformTemplates(db,workspaceId,request.body.items),preset);
     const key=[workspaceId,accountId,id];
     const hash=createHash('sha256').update(stableJson(JSON.parse(JSON.stringify(jobs)))).digest('hex');
     const prior=await existing(db,key,hash);
@@ -97,7 +107,8 @@ export function registerImageStudio(app,db) {
     try {
       const ids=[...new Set(jobs.flatMap(job=>job.inputs))];
       const allowed=await rows(db,`SELECT id,octet_length(data) AS size FROM assets WHERE workspace_id=$1 AND account_id=$2
-        AND id=ANY($3::uuid[]) AND NOT rights_restricted AND media_type IN ('image/png','image/jpeg')`,[workspaceId,accountId,ids]);
+        AND id=ANY($3::uuid[]) AND NOT rights_restricted AND media_type IN ('image/png','image/jpeg')
+        AND (id IS DISTINCT FROM $4::uuid OR (${activeModelConsent}))`,[workspaceId,accountId,ids,preset?.configuration.modelAssetId ?? null]);
       if (allowed.reduce((sum,asset)=>sum+asset.size,0)>24*1024*1024) {
         throw new ApiError(413,'IMAGE_BATCH_LIMIT','Combined batch source size exceeds 24 MiB');
       }
@@ -112,8 +123,8 @@ export function registerImageStudio(app,db) {
           VALUES($1,$2,$3,$4,'{}'::jsonb) ON CONFLICT DO NOTHING RETURNING id`,[...key,hash]);
         if (!created) return {result:await existing(tx,key,hash),created:false};
         const allowedNow=new Set((await rows(tx,`SELECT id FROM assets WHERE workspace_id=$1 AND account_id=$2
-          AND id=ANY($3::uuid[]) AND NOT rights_restricted ORDER BY id FOR SHARE`,
-          [workspaceId,accountId,assets.map(asset=>asset.id)])).map(asset=>asset.id));
+          AND id=ANY($3::uuid[]) AND NOT rights_restricted AND (id IS DISTINCT FROM $4::uuid OR (${activeModelConsent})) ORDER BY id FOR SHARE`,
+          [workspaceId,accountId,assets.map(asset=>asset.id),preset?.configuration.modelAssetId ?? null])).map(asset=>asset.id));
         const items=[];
         for (const [index,job] of jobs.entries()) {
           const output=outputs[index];
@@ -128,6 +139,7 @@ export function registerImageStudio(app,db) {
           items.push({key:job.key,...ref,state:'succeeded',assetId,mediaType:job.mediaType,width:output.width,height:output.height,aiGenerated:output.aiGenerated});
         }
         const result={id:created.id,items};
+        if (preset) result.seriesPreset={id:preset.id,revision:preset.revision};
         await tx.query('UPDATE studio_image_batches SET result=$4::jsonb WHERE workspace_id=$1 AND account_id=$2 AND id=$3',[...key,JSON.stringify(result)]);
         return {result,created:true};
       });

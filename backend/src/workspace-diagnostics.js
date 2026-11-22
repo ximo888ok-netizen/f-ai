@@ -1,5 +1,6 @@
 import { statfs } from 'node:fs/promises';
 import { diagnosticAlerts } from './diagnostic-alerts.js';
+import { checkDirectories } from './directory-diagnostics.js';
 import { checkMigrations, row, rows } from './db.js';
 import { ApiError, array, choice, integer, invalid, object, page, paginate, route, text, uuid } from './http.js';
 
@@ -35,10 +36,11 @@ async function storageHealth() {
 export function registerWorkspaceDiagnostics(app, db, migrations) {
   route(app, 'GET', '/v1/diagnostics', { tags, manager:true, summary:'Check service database, runtime and local filesystem',
     response: {200: object({ database:resultState, filesystem:resultState, nodeVersion:text(40),
-      uptimeSeconds:integer(0,2147483647), memoryBytes:bytes, cpuMilliseconds:bytes })} }, async () => {
-    const [database, filesystem] = await Promise.all([databaseHealth(db,migrations),storageHealth()]);
+      uptimeSeconds:integer(0,2147483647), memoryBytes:bytes, cpuMilliseconds:bytes,
+      directories:array(object({id:text(30),read:text(24),write:text(24)}),5) })} }, async () => {
+    const [database, filesystem, directories] = await Promise.all([databaseHealth(db,migrations),storageHealth(),checkDirectories()]);
     const cpu = process.cpuUsage();
-    return { database, filesystem, nodeVersion:process.versions.node, uptimeSeconds:Math.floor(process.uptime()),
+    return { database, filesystem, directories, nodeVersion:process.versions.node, uptimeSeconds:Math.floor(process.uptime()),
       memoryBytes:String(process.memoryUsage.rss()), cpuMilliseconds:String(Math.floor((cpu.user+cpu.system)/1000)) };
   });
 

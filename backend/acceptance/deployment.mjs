@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { client, exerciseCustomer, exerciseFilesAndWorker, exerciseImagePreflight, exercisePsd, exerciseWorkspace, verifyAsset } from './fixtures.mjs';
+import { client, exerciseCustomer, exerciseFilesAndWorker, exerciseImagePreflight, exercisePsd, exerciseWorkspace, reviewPicture, verifyAsset } from './fixtures.mjs';
 import { rotationFixture } from './credential-rotation.mjs';
 import { publishFixtureTemplates } from './image-templates.mjs';
 import { verifyOfflineRelease, sha256File } from '../src/verify-offline-release.js';
@@ -54,6 +54,7 @@ const cliLogs = [];
 let clusterStarted = false;
 let service;
 let databaseEnv;
+let packagedMedia;
 
 function admin(...args) {
   const result = spawnSync(node, ['src/admin.js', ...args], { env: databaseEnv, cwd: application, windowsHide: true, encoding: 'utf8', timeout: 180000 });
@@ -105,11 +106,12 @@ try {
     node=join(work,'runtime','node.exe');
     const media=join(work,'runtime','media');
     const sample=join(work,'synthetic.mp4');
-    run(executable(media,'ffmpeg'),['-v','error','-f','lavfi','-i','color=size=96x64:rate=10','-t','0.3',
-      '-c:v','libopenh264','-threads','1','-pix_fmt','yuv420p',sample]);
+    packagedMedia={VIDEO_FFMPEG_PATH:executable(media,'ffmpeg'),VIDEO_FFPROBE_PATH:executable(media,'ffprobe'),VIDEO_EXPORT_ENCODER:'libopenh264'};
+    run(packagedMedia.VIDEO_FFMPEG_PATH,['-v','error','-f','lavfi','-i','color=size=320x240:rate=24',
+      '-f','lavfi','-i','sine=frequency=440','-t','2','-c:v','libopenh264','-threads','1','-c:a','aac','-pix_fmt','yuv420p',sample]);
     const info=JSON.parse(run(executable(media,'ffprobe'),['-v','error','-select_streams','v:0','-show_entries',
       'stream=codec_name,width,height','-of','json',sample]));
-    assert.deepEqual(info.streams.map(({codec_name,width,height})=>[codec_name,width,height]),[['h264',96,64]]);
+    assert.deepEqual(info.streams.map(({codec_name,width,height})=>[codec_name,width,height]),[['h264',320,240]]);
     console.log(JSON.stringify({offlineArchiveVerified:true,...verified}));
   } else {
     run('git', ['--git-dir=' + gitDir, '--work-tree=' + work, '-c', 'core.autocrlf=false',
@@ -149,7 +151,7 @@ try {
   for (const db of ['tenant', 'restore_tenant']) sql('postgres', 'CREATE DATABASE ' + db + ' OWNER fai_tenant_qa');
   const { Client } = createRequire(join(application, 'package.json'))('pg');
   const rotation = await rotationFixture({ work, application, node, env: osEnv, port, Client, controlUrl: url('control'), sql, cliLogs });
-  const connect = (control, version) => ({ ...osEnv, DATABASE_URL: url(control), FAI_RELEASE_REVISION:revision, FAI_PG_BIN: pgClient, ...rotation.connection(version) });
+  const connect = (control, version) => ({ ...osEnv, ...packagedMedia, DATABASE_URL: url(control), FAI_RELEASE_REVISION:revision, FAI_PG_BIN: pgClient, ...rotation.connection(version) });
   databaseEnv = connect('control', 1);
   admin('migrate');
   admin('migrate');
@@ -160,11 +162,22 @@ try {
   const anonymous = client(origin);
   assert.match((await anonymous('GET', '/', 200)).toString(), /live\.js/);
   assert.ok((await anonymous('GET', '/studio/live.js', 200)).length);
+  const help=await anonymous('GET','/v1/help',200);
+  assert.equal(help.revision,revision);
+  const guide=await anonymous('GET',help.url,200);
+  assert.equal(createHash('sha256').update(guide).digest('hex'),help.sha256);
+  assert.match(guide.toString(),/商品草稿与运营台账/);
   const login = { email: 'deployment@example.test', password: randomBytes(24).toString('hex') };
   const registered = await anonymous('POST', '/v1/auth/register', 201, { ...login, displayName: 'QA', type: 'enterprise', workspaceName: 'Deployment QA' });
   const workspace = registered.workspaces[0].id;
   const initial=client(origin,registered);
   await publishFixtureTemplates(initial);
+  const reference=await initial('POST','/v1/assets',201,{name:'QA series reference',source:'synthetic',purpose:'release acceptance',
+    mediaType:'image/png',dataBase64:reviewPicture(1024,0).toString('base64')});
+  const seriesUrl='/v1/media/images/series-presets/'+workspace;
+  const savedSeries=await initial('PUT',seriesUrl,200,{revision:0,name:'QA series',configuration:{
+    productAssetId:reference.id,modelAssetId:null,background:'#ffffff',font:'sans',textColor:'#345678',
+    subjectBox:{x:5,y:5,width:90,height:75}}});
   const memory=await initial('POST','/v1/memory',201,{scope:'enterprise',content:'Initial QA note'});
   await initial('PUT','/v1/memory/'+memory.id+'/changes/'+workspace,200,{revision:0,action:'update',content:'QA update'});
   await client(origin, registered)('POST', '/v1/studio/products', 201, { sku: 'QA-CUTOVER', name: 'Synthetic product' });
@@ -177,6 +190,31 @@ try {
   origin = await startService();
   const session = await client(origin)('POST', '/v1/auth/login', 200, login);
   const api = client(origin, session);
+  const directories=(await api('GET','/v1/diagnostics',200)).directories;
+  assert.ok(directories.some(d=>d.id==='credentials' && d.read==='ok'));
+  assert.ok(directories.some(d=>d.id==='temporary' && d.write==='ok'));
+  assert.ok(directories.every(d=>d.read==='ok' && ['ok','not-required'].includes(d.write)));
+  assert.deepEqual(await api('GET',seriesUrl+'?revision=1',200),savedSeries);
+  const seriesBatch=await api('POST','/v1/media/images/batches',201,{id:workspace,seriesPreset:{id:workspace,revision:1},
+    items:[{key:'QA',width:120,height:120,caption:'QA'}]});
+  assert.equal(seriesBatch.items[0].state,'succeeded');
+  if (packagedMedia) {
+    const sample=join(work,'synthetic.mp4'), delivery=join(work,'marked.mp4');
+    const asset=await api('POST','/v1/assets',201,{name:'QA video',source:'synthetic',purpose:'delivery test',
+      mediaType:'video/mp4',dataBase64:(await readFile(sample)).toString('base64')});
+    await writeFile(delivery,await api('POST','/v1/assets/'+asset.id+'/video-export',200,{aiGenerated:true}));
+    const audioHash=file=>run(packagedMedia.VIDEO_FFMPEG_PATH,['-v','error','-i',file,'-map','0:a:0','-c:a','copy','-f','hash','-hash','sha256','-']);
+    const before=audioHash(sample);
+    assert.match(before,/^SHA256=[0-9a-f]{64}$/i);
+    assert.equal(audioHash(delivery),before);
+    const probe=file=>JSON.parse(run(packagedMedia.VIDEO_FFPROBE_PATH,['-v','error','-show_entries',
+      'format=duration:format_tags=fai_ai_generated:stream=codec_name,nb_frames','-of','json',file]));
+    const output=probe(delivery);
+    assert.equal(output.format.duration,probe(sample).format.duration);
+    assert.equal(output.format.tags.fai_ai_generated,'true');
+    assert.equal(Number(output.streams[0].nb_frames),48);
+    console.log(JSON.stringify({packagedVideoExport:'passed',frames:48,aacPacketsPreserved:true}));
+  }
   assert.deepEqual(await api('GET', '/v1/workspace/database', 200), { mode: 'dedicated', state: 'ready' });
   await exerciseWorkspace(origin, session);
   const { asset, taskId } = await exerciseFilesAndWorker(api);
@@ -234,6 +272,9 @@ try {
   const restoredSession = await client(restored)('POST', '/v1/auth/login', 200, login);
   const restoredApi = client(restored, restoredSession);
   assert.equal(restoredSession.workspaces[0].id, workspace);
+  assert.deepEqual(await restoredApi('GET',seriesUrl+'?revision=1',200),savedSeries);
+  assert.deepEqual(await restoredApi('GET','/v1/media/images/batches/'+workspace,200),seriesBatch);
+  console.log(JSON.stringify({versionGuide:help.version,checkedDirectories:directories.length,seriesPresetRestored:true}));
   assert.deepEqual((await restoredApi('GET','/v1/media/images/platform-templates',200)).items.map(t=>t.revision),[1,1,2]);
   await verifyAsset(restoredApi, asset);
   assert.equal((await restoredApi('GET', '/v1/tasks/' + taskId, 200)).state, 'succeeded');

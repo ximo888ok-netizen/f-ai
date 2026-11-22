@@ -24,6 +24,7 @@ import { registerWallet } from './wallet.js';
 import { registerWorkspace } from './workspace.js';
 import { registerWorkspaceLibrary } from './workspace-library.js';
 import { registerWorkspaceDiagnostics } from './workspace-diagnostics.js';
+import { registerVersionHelp } from './version-help.js';
 import { registerWebSearch } from './web-search.js';
 import { workspaceDatabaseRouter } from './workspace-database.js';
 import { registerStudioPsd } from './studio-psd.js';
@@ -122,6 +123,7 @@ export async function buildApp({
   app.get('/openapi.json', { schema: { hide: true } }, async () => app.swagger());
 
   registerStudio(app,packagedStudio);
+  registerVersionHelp(app);
   registerAuth(app, db);
   route(app,'GET','/v1/workspace/database',{
     database:'identity', manager:true, tags:['Workspace support'], summary:'Read the current workspace database mode and connection state',

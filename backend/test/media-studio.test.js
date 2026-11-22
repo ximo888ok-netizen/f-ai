@@ -75,6 +75,60 @@ test('three workspace specifications produce six decodable exports with the expe
   assert.deepEqual(await verifyPlatformExports(api,{createCanvas,loadImage}),{platforms:3,sourceFixtures:5,decodedExports:6,updatedCoverExports:1});
 });
 
+test('versioned series presets render six images and recheck private model references',async t=>{
+  const {db,user}=await fixture(t);
+  const owner=await user('series-fixture-owner'), other=await user('series-fixture-other');
+  const product=await owner.upload(picture('#ff0000',64,64));
+  const model=await owner.upload(picture('#0000ff',64,64),'image/png',{
+    consentReference:'synthetic-model',consentExpiresAt:new Date(Date.now()+86400000).toISOString(),
+  });
+  const id=randomUUID(), list='/v1/media/images/series-presets', url=list+'/'+id;
+  const cfg={productAssetId:product.id,modelAssetId:model.id,background:'#ffffff',font:'sans',textColor:'#00ff00',
+    subjectBox:{x:25,y:25,width:50,height:50}};
+  const save={revision:0,name:'Studio set',configuration:cfg};
+  const v1=await owner.request('PUT',url,200,save);
+  assert.equal(v1.revision,1);
+  assert.deepEqual(await owner.request('PUT',url,200,save),v1);
+  assert.deepEqual((await owner.request('GET',list,200)).items,[v1]);
+  await other.request('GET',url+'?revision=1',404);
+  await other.request('PUT',url,400,save);
+  const items=Array.from({length:6},(_,index)=>({key:'SKU-'+index,width:120,height:120,caption:'F-'+index}));
+  const input={id:randomUUID(),seriesPreset:{id,revision:1},items};
+  const batches='/v1/media/images/batches';
+  await other.request('POST',batches,404,input);
+  await owner.request('POST',batches,400,{...input,items:[{...items[0],assetIds:[product.id]}]});
+  const result=await owner.request('POST',batches,201,input);
+  assert.deepEqual(result.seriesPreset,input.seriesPreset);
+  const hashes=new Set();
+  for (const item of result.items) {
+    assert.equal(item.state,'succeeded');
+    const bytes=await owner.request('GET','/v1/assets/'+item.assetId+'/content',200,undefined,true);
+    hashes.add(bytes.toString('base64'));
+    const ctx=createCanvas(120,120).getContext('2d');
+    ctx.drawImage(await loadImage(bytes),0,0);
+    assert.deepEqual([...ctx.getImageData(2,2,1,1).data],[0,0,255,255]);
+    assert.deepEqual([...ctx.getImageData(60,60,1,1).data],[255,0,0,255]);
+    const text=ctx.getImageData(0,95,60,25).data;
+    assert.ok(text.some((value,index)=>index%4===1 && value>80));
+  }
+  assert.equal(hashes.size,6);
+  const edit={...save,revision:1,configuration:{...cfg,modelAssetId:null,font:'chinese',fontSizePercent:12}};
+  const v2=await owner.request('PUT',url,200,edit);
+  assert.equal(v2.revision,2);
+  assert.deepEqual(await owner.request('GET',url+'?revision=1',200),v1);
+  await owner.request('PUT',url,409,{...save,name:'Stale update'});
+  assert.deepEqual(await owner.request('POST',batches,200,input),result);
+  await db.query('UPDATE assets SET consent_expires_at=now() WHERE id=$1',[model.id]);
+  const rejected=await owner.request('POST',batches,201,{...input,id:randomUUID(),items:[items[0]]});
+  assert.deepEqual(rejected.items,[{key:items[0].key,state:'failed',error:'SOURCE_UNAVAILABLE'}]);
+  const fresh=await owner.request('POST',batches,201,{
+    ...input,id:randomUUID(),seriesPreset:{id,revision:2},items:[items[0]],
+  });
+  const ctx=createCanvas(120,120).getContext('2d');
+  ctx.drawImage(await loadImage(await owner.request('GET','/v1/assets/'+fresh.items[0].assetId+'/content',200,undefined,true)),0,0);
+  assert.deepEqual([...ctx.getImageData(2,2,1,1).data],[255,255,255,255]);
+});
+
 test('image review boundaries reject ineligible try-on and replacement without tasks, reservations or debits',async t=>{
   const providers=createProviders();
   const sent=[];

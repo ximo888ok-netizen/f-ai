@@ -5,6 +5,30 @@
 
 生产发布、数据库备份和恢复演练见[部署与恢复验收](./DEPLOYMENT.md)。
 
+### 套图配置和版本帮助
+
+同一工作区的成员分别管理自己的套图。使用 `PUT /v1/media/images/series-presets/{UUID}` 保存，传入 `name`、`revision` 和 `configuration`。首次传 0，更新传已读版本。相同内容可重发，并发修改冲突返回 409。列表 `GET /v1/media/images/series-presets` 返回各配置的最新版本；要读取旧版本，调用 `GET /v1/media/images/series-presets/{UUID}?revision=1`。
+
+```json
+{
+  "revision": 0,
+  "name": "春季商品图",
+  "configuration": {
+    "productAssetId": "8da50bec-fd98-42e8-ac55-62eee1f93f8b",
+    "modelAssetId": null,
+    "background": "#ffffff",
+    "font": "chinese",
+    "fontSizePercent": 7,
+    "textColor": "#273044",
+    "subjectBox": {"x": 10, "y": 5, "width": 80, "height": 75}
+  }
+}
+```
+
+示例 UUID 需换成自己的商品素材。模特底图可传有有效授权的素材编号。字体可选 `sans` 或 `chinese`，字号按画布短边百分比计算，范围 2–20，默认 7。渲染时先绘制底色和可选模特底图，再将商品放入指定区域，最后绘制可选标题。批次接口 `POST /v1/media/images/batches` 接收 `{id,seriesPreset:{id,revision},items}`。每个条目提供 `key`、尺寸或平台规格、可选 `caption`。使用套图时素材引用、摆放和配色由配置统一供应。每批最多八张，失败条目保留原因。
+
+帮助入口 `GET /v1/help` 返回语言、文档版本、服务提交号、相对 URL 和 SHA-256。前端按 URL 请求 Markdown 正文。离线包附有同一份[工作台操作指南](src/help/workbench-v1.md)。
+
 ## 本地启动
 
 需要 Node.js 24、npm 和可访问的 PostgreSQL。为联调建一个独立数据库，然后在此目录执行。
