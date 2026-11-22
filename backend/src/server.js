@@ -25,10 +25,12 @@ try {
 }
 
 const settings = config();
+let packagedStudio=false;
 try {
   const revision=readFileSync(new URL('../release-revision.txt',import.meta.url),'utf8').trim();
   if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error('Invalid packaged release revision');
   process.env.FAI_RELEASE_REVISION=revision;
+  packagedStudio=true;
 } catch (error) {if (error.code!=='ENOENT') throw error;}
 const feishu=createFeishuBindings();
 const cloudAssets=createWebdavBindings();
@@ -38,7 +40,7 @@ const dedicatedDatabases = new Map([...settings.dedicatedDatabases].map(([key,ur
 const providers = installModels(createProviders(settings.gateway), settings.models);
 const dependencies = { db, providers, shops: settings.shops, feishu, wechat:createWechatBindings(), sms:createSmsBindings(), realtimeVoice:createRealtimeBindings(),
   videoArchive: createVideoArchive(settings.videoArchiveOrigins) };
-const app = await buildApp({ ...dependencies, dedicatedDatabases, cloudAssets, videoDelivery:createVideoDelivery(),
+const app = await buildApp({ ...dependencies, dedicatedDatabases, cloudAssets, packagedStudio, videoDelivery:createVideoDelivery(),
   customerAnswer:createCustomerAnswer(providers,process.env.CUSTOMER_ASSISTANT_LOCAL_MODEL_ID), origins: settings.origins, webSearch:createExaSearch(process.env.EXA_API_KEY), logger: true });
 await app.listen({ port: settings.port, host: settings.host });
 const workers = [startWorker(dependencies,app.log), ...[...dedicatedDatabases.keys()].map(key =>

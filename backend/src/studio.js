@@ -2,7 +2,6 @@
 import { readFile } from 'node:fs/promises';
 import { notFound } from './http.js';
 
-const directory = new URL('../../前端设计审查/', import.meta.url);
 const styles = ['studio.css', 'creation.css', 'commerce.css', 'glass.css', 'workspace.css', 'themes.css', 'components.css', 'live.css'];
 const scripts = ['themes.js', 'glass.js', 'live.js', 'live-workspace.js', 'live-tasks.js', 'live-customer.js', 'live-products.js', 'live-drafts.js', 'live-operations.js', 'operations-file.js', 'live-psd.js', 'live-connectors.js',
   'live-rights.js', 'live-skills.js', 'live-copy-review.js', 'live-files.js', 'live-media.js', 'live-media-controls.js',
@@ -13,10 +12,11 @@ const types = new Map([
 ]);
 const security = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 
-export function registerStudio(app) {
+export function registerStudio(app,packaged=false) {
+  const directory = new URL(packaged?'../public/':'../../前端设计审查/',import.meta.url);
   const schema = { hide: true };
   app.get('/', { schema }, async (_request, reply) => {
-    const page = await readFile(new URL('打开设计稿.html', directory));
+    const page = await readFile(new URL(packaged?'index.html':'打开设计稿.html', directory));
     return reply.header('content-security-policy', security).header('referrer-policy', 'no-referrer').type('text/html; charset=utf-8').send(page);
   });
   app.get('/studio/assets/:name', { schema }, async (request, reply) => {

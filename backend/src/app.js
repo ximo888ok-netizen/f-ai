@@ -41,7 +41,7 @@ import { registerCopywritingReview } from './copywriting-review.js';
 import { registerCopywritingDrafts } from './copywriting-drafts.js';
 
 export async function buildApp({
-  db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(),
+  db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(), packagedStudio = false,
   cloudAssets = new Map(), feishu = new Map(), wechat = new Map(), sms = new Map(), realtimeVoice = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false,
 }) {
   const app = Fastify({
@@ -121,7 +121,7 @@ export async function buildApp({
   });
   app.get('/openapi.json', { schema: { hide: true } }, async () => app.swagger());
 
-  registerStudio(app);
+  registerStudio(app,packagedStudio);
   registerAuth(app, db);
   route(app,'GET','/v1/workspace/database',{
     database:'identity', manager:true, tags:['Workspace support'], summary:'Read the current workspace database mode and connection state',
