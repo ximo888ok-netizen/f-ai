@@ -99,7 +99,7 @@ test('product image plans generate one main and three details, retry one failure
   }]);
   const shops = new Map();
   await migrate(db);
-  const app = await buildApp({db,providers,shops});
+  const app = await buildApp({db,providers,shops,origins:['http://localhost:5173']});
   t.after(()=>app.close());
   const call = (member,method,url,payload) => app.inject({method,url,payload,headers:member?.headers ?? {}});
   async function json(member, method, url, expected, payload) {
@@ -270,14 +270,23 @@ test('product image plans generate one main and three details, retry one failure
     assert.equal(task.imagePlan.aiGenerated,true);
     assert.equal(image.aiGenerated,true);
   }
-  const marked = await call(owner,'GET',main.deliveryUrl);
+  const marked = await app.inject({method:'GET',url:main.deliveryUrl,
+    headers:{...owner.headers,origin:'http://localhost:5173'}});
   assert.equal(marked.statusCode,200,marked.statusCode===200?'':marked.body);
   assert.equal(marked.headers['content-type'],'image/png');
   assert.match(marked.headers['content-disposition'],/^attachment; filename="delivery-/);
+  assert.ok(marked.headers['access-control-expose-headers'].toLowerCase().includes('content-disposition'));
   assert.ok(marked.rawPayload.includes('AI-generated content'));
   const pixels = createCanvas(32,32).getContext('2d');
   pixels.drawImage(await loadImage(marked.rawPayload),0,0);
   assert.deepEqual([...pixels.getImageData(3,20,1,1).data],[17,24,39,255]);
+  const downloadSdk = workspaceV1(async (method,url)=>{
+    const download = await call(owner,method,url);
+    assert.equal(url,main.deliveryUrl);
+    assert.equal(download.statusCode,200);
+    return download.rawPayload;
+  });
+  assert.deepEqual(await downloadSdk.assetDelivery(main.assetId),marked.rawPayload);
   await json(other,'GET',main.deliveryUrl,404);
   await json(owner,'GET','/v1/assets/'+source.id+'/delivery',422);
   await db.query('UPDATE assets SET rights_restricted=true WHERE id=$1',[main.assetId]);

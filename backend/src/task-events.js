@@ -1,12 +1,12 @@
 import { rows } from './db.js';
-import { array, bool, choice, integer, invalid, object, page, paginate, route, uuid } from './http.js';
+import { array, bool, choice, integer, invalid, object, page, paginate, route, text, uuid } from './http.js';
 
 const eventLevels = ['info','warn','error'];
 const states = ['queued','running','provider_pending','retrying','succeeded','failed','cancelled'];
 const timestamp = {type:'string',format:'date-time'};
 export const eventCursor = {type:'string',pattern:'^(0|[1-9][0-9]{0,18})$',
   description:'Decimal task event ID. Use 0 to start from the first event.'};
-const eventRecord = object({ id: eventCursor, event: choice(...states), level: choice(...eventLevels),
+const eventRecord = object({ id: text(24), event: choice(...states), level: choice(...eventLevels),
   attempt: integer(0,2147483647), errorCode:{ type:['string','null'] }, createdAt:timestamp });
 const taskEvent = object({...eventRecord.properties,taskId:uuid,retryable:bool});
 

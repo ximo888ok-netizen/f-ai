@@ -52,7 +52,12 @@ export async function buildApp({
     bodyLimit: 15000000,
     ajv: { customOptions: { removeAdditional: false } },
   });
-  await app.register(cors, { origin: origins, allowedHeaders: ['authorization', 'content-type', 'x-workspace-id'], exposedHeaders:['x-content-sha256', 'x-request-id'], methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
+  await app.register(cors, {
+    origin: origins,
+    allowedHeaders: ['authorization', 'content-type', 'x-workspace-id'],
+    exposedHeaders: ['content-disposition', 'x-content-sha256', 'x-request-id'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
   await app.register(rateLimit, {
     global: false,
     errorResponseBuilder: () => new ApiError(429, 'RATE_LIMITED', 'Too many authentication requests'),
