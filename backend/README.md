@@ -179,7 +179,7 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 
 - **任务归属与重试**。任务列表和详情的 `imagePlan` 给出 `planId`、从 0 开始的 `position`、从 1 开始的 `attempt` 和 `latest`。普通任务的该字段为 `null`。当 `canRetry` 为真时，用图片或任务中的 `retryUrl` 提交当前 `taskId`。旧版任务中心的 `POST /v1/tasks/{id}/regenerate` 可重试同一张失败或取消的套图，两个入口共享幂等行为。成功的套图任务返回 409，避免重复生成与扣分。
 - **进度与续读**。对每张图按 `taskId` 调用 `GET /v1/tasks/{id}/events?after=0&limit=30` 可从头按时间顺序读取事件，也可用快照里的 `eventCursor` 从当前状态继续。后续请求带上响应的 `nextCursor`，重连后沿用该值。游标是十进制字符串，空结果沿用请求游标，换到新任务时为新任务单独保存游标。省略 `after` 时保持倒序历史分页。事件中的 `attempt` 是工作线程执行次数，套图图片上的 `attempt` 是该图片的提交次数。事件的 `retryable` 表示查询时该失败或取消的套图任务仍可手动重试。
-- **交付下载**。可用的生成图在方案图片和任务 `imagePlan` 上返回 `aiGenerated: true` 和 `deliveryUrl`。用当前会话和工作区请求该地址，返回带可见 AI 标识和嵌入元数据的二进制附件。素材库的 `/content` 用于读取原文件。所有 HTTP 响应可通过 `X-Request-Id` 关联服务端日志。
+- **交付下载**。可用的生成图在方案图片和任务 `imagePlan` 上返回 `aiGenerated: true` 和 `deliveryUrl`。用当前会话和工作区请求该地址，返回带可见 AI 标识和嵌入元数据的二进制附件。尺寸过小的图片会在交付时加边留出标识空间。素材库的 `/content` 用于读取原文件。所有 HTTP 响应可通过 `X-Request-Id` 关联服务端日志。
 
 宿主 SDK 支持 `events(taskId, {after, limit})` 和 `assetDelivery(assetId)`。GitHub Actions 使用合成商品和回环模型适配器验收失败、跨入口重试、进度续读、带标识的下载、积分及草稿回填。
 

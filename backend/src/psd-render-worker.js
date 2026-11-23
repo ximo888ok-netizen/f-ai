@@ -61,11 +61,19 @@ async function render({layout,subject,background,format,aiGenerated}) {
 
 async function renderMarkedSource({subject,mime}) {
   const image=await decodeImage(subject);
-  if (image.width<64 || image.height<32) throw new Error('AI export is too small to mark');
-  const canvas=createCanvas(image.width,image.height);
+  const needsLabelSpace = image.width < 64 || image.height < 32;
+  const width = needsLabelSpace ? Math.max(96,Math.min(4096,image.width)) : image.width;
+  const height = needsLabelSpace ? Math.max(32,Math.min(4096,image.height)+16) : image.height;
+  const canvas=createCanvas(width,height);
   const context=canvas.getContext('2d');
-  context.drawImage(image,0,0);
-  drawAiBadge(context,image.width,image.height);
+  if (needsLabelSpace) {
+    context.fillStyle = '#ffffff';
+    context.fillRect(0,0,width,height);
+    drawFitted(context,image,0,0,width,height-16);
+  } else {
+    context.drawImage(image,0,0);
+  }
+  drawAiBadge(context,width,height);
   return canvas.toBuffer(mime,metadata);
 }
 

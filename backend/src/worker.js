@@ -16,6 +16,7 @@ import { dispatchFeishuReply } from './feishu-channel.js';
 import { dispatchSms } from './sms-channel.js';
 import { maintainRealtimeVoice } from './realtime-voice.js';
 import { appendTaskText } from './task-stream.js';
+import { decodeImage } from './raster.js';
 
 const maxAttempts = 3;
 
@@ -119,6 +120,11 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
     if (task.input.requireImageAsset && !(result instanceof PendingModelJob)) {
       if (!(result instanceof GeneratedFile)) result = GeneratedFile.image(result?.dataBase64, result?.mediaType);
       if (!['image/png','image/jpeg'].includes(result.mediaType)) throw new ProviderError('INVALID_PROVIDER_IMAGE');
+      try {
+        await decodeImage(result.bytes);
+      } catch {
+        throw new ProviderError('INVALID_PROVIDER_IMAGE');
+      }
     }
   } catch (error) {
     if (task.input.requireImageAsset) result = undefined;

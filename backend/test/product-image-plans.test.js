@@ -49,20 +49,21 @@ function assertPlanOpenApi(paths) {
   assert.equal(paths['/v1/assets/{id}/content'].get.responses['200'].content['image/png'].schema.format,'binary');
 }
 
-function png(color) {
+function fixtureImage(color, type = 'image/png') {
   const canvas = createCanvas(32,32);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = color;
   ctx.fillRect(0,0,32,32);
-  return canvas.toBuffer('image/png');
+  return canvas.toBuffer(type);
 }
 
 test('product image plans generate one main and three details, retry one failure and fill the draft', async t => {
   const database = process.env.FAI_TEST_DATABASE_URL;
   const db = database ? postgres(database) : new PGlite();
-  const sourceImage = png('#406ab0');
+  const sourceImage = fixtureImage('#406ab0');
   const resultImages = new Map([
-    ['商品主图',png('#ccd121')], ['主体细节',png('#20d120')], ['使用场景',png('#db0a23')], ['卖点摘要',png('#5395ee')],
+    ['商品主图',fixtureImage('#ccd121')], ['主体细节',fixtureImage('#20d120','image/jpeg')],
+    ['使用场景',fixtureImage('#db0a23')], ['卖点摘要',fixtureImage('#5395ee')],
   ]);
   const providerCalls = [];
   const providerErrors = [];
@@ -79,8 +80,8 @@ test('product image plans generate one main and three details, retry one failure
       providerCalls.push(title);
       const firstScene = title === '使用场景' && providerCalls.filter(value=>value===title).length === 1;
       // A URL-only provider response cannot be applied to a draft or paid as a successful image.
-      const item = firstScene ? {url:'https://image.example.test/preview.png'} :
-        {b64_json:resultImages.get(title).toString('base64')};
+      const imageBytes = prompt.includes('损坏图片测试') ? sourceImage.subarray(0,8) : resultImages.get(title);
+      const item = firstScene ? {url:'https://image.example.test/preview.png'} : {b64_json:imageBytes.toString('base64')};
       response.writeHead(200,{'content-type':'application/json'});
       response.end(JSON.stringify({data:[item]}));
     } catch (error) {
@@ -277,9 +278,17 @@ test('product image plans generate one main and three details, retry one failure
   assert.match(marked.headers['content-disposition'],/^attachment; filename="delivery-/);
   assert.ok(marked.headers['access-control-expose-headers'].toLowerCase().includes('content-disposition'));
   assert.ok(marked.rawPayload.includes('AI-generated content'));
-  const pixels = createCanvas(32,32).getContext('2d');
-  pixels.drawImage(await loadImage(marked.rawPayload),0,0);
-  assert.deepEqual([...pixels.getImageData(3,20,1,1).data],[17,24,39,255]);
+  const deliveredImage = await loadImage(marked.rawPayload);
+  assert.equal(deliveredImage.width,96);
+  assert.equal(deliveredImage.height,48);
+  const pixels = createCanvas(96,48).getContext('2d');
+  pixels.drawImage(deliveredImage,0,0);
+  assert.deepEqual([...pixels.getImageData(91,34,1,1).data],[17,24,39,255]);
+  assert.deepEqual([...pixels.getImageData(48,16,1,1).data],[204,209,33,255]);
+  const jpeg = await call(owner,'GET',details[0].deliveryUrl);
+  assert.equal(jpeg.statusCode,200,jpeg.statusCode===200?'':jpeg.body);
+  assert.equal(jpeg.headers['content-type'],'image/jpeg');
+  assert.ok(jpeg.rawPayload.includes('AI-generated content'));
   const downloadSdk = workspaceV1(async (method,url)=>{
     const download = await call(owner,method,url);
     assert.equal(url,main.deliveryUrl);
@@ -299,4 +308,16 @@ test('product image plans generate one main and three details, retry one failure
   assert.deepEqual(await json(owner,'POST',base+'/apply-to-draft',200,fill),applied);
   await json(owner,'POST',base+'/apply-to-draft',409,{...fill,detailPositions:[3,2,1]});
   await json(other,'POST',base+'/apply-to-draft',404,fill);
+
+  const corrupt = await json(owner,'POST',root,201,{...planInput,id:randomUUID(),productName:'损坏图片测试',detailCount:0});
+  const corruptUrl = root+'/'+corrupt.id;
+  await json(owner,'PUT',corruptUrl,200,{...layout,images:layout.images.slice(0,1)});
+  await json(owner,'POST',corruptUrl+'/confirm',202,confirm);
+  assert.equal(await workOnce({db,providers,shops}),true);
+  const broken = (await json(owner,'GET',corruptUrl,200)).images[0];
+  assert.equal(broken.state,'failed');
+  assert.equal(broken.errorCode,'INVALID_PROVIDER_IMAGE');
+  assert.equal(broken.deliveryUrl,null);
+  assert.deepEqual(await wallet(),{balance:10,reserved:0,available:10});
+  assert.deepEqual(providerErrors,[]);
 });
