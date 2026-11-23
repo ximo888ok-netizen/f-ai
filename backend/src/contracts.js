@@ -1,4 +1,7 @@
 
+import { imagePlanTask } from './product-image-contract.js';
+import { eventCursor } from './task-events.js';
+
 const string = { type: 'string' };
 const date = { type: 'string', format: 'date-time' };
 const uuid = { type: 'string', format: 'uuid' };
@@ -11,6 +14,12 @@ const shape = properties => ({ type: 'object', properties, required: Object.keys
 const items = schema => ({ type: 'array', items: schema });
 const collection = schema => shape({ items: items(schema) });
 const none = { type: 'null', description: 'No content' };
+const fileAttachment = {type:'string',description:'Attachment disposition for the binary download'};
+
+export function assetDownload(description, mediaTypes, headers = {}) {
+  return {description, headers:{'content-disposition':fileAttachment,...headers},
+    content:Object.fromEntries(mediaTypes.map(type => [type,{schema:{type:'string',format:'binary'}}]))};
+}
 
 const account = shape({ id: uuid, email: string, displayName: string, type: enumOf('personal', 'enterprise', 'agent') });
 const workspace = shape({ id: uuid, name: string, kind: enumOf('personal', 'enterprise', 'agent'), role: enumOf('owner', 'admin', 'member') });
@@ -35,6 +44,8 @@ const task = shape({
   state: enumOf('queued', 'running', 'succeeded', 'failed', 'cancelled'), cost: count, attempts: count, streamed: bool,
   result: nullable(anyObject), errorCode: nullable(string), createdAt: date, updatedAt: date, templateVersion:nullable(count),
 });
+task.properties.imagePlan = nullable(imagePlanTask);
+task.properties.eventCursor = eventCursor;
 const pluginCapability = shape({
   id: string, name: string, pluginId: string, available: bool, cost: count, modes: items(string),
   minAssets: count, requiresConsent: bool, requiresConfirmation: bool, parameters: anyObject,
@@ -44,7 +55,7 @@ const plugin = shape({
   id: string, name: string, enabled: bool, capabilities: items(pluginCapability),
 });
 const draftSummary = { id: uuid, title: string, revision: count, updatedAt: date };
-const listingDraft = shape({ ...draftSummary, category: string, description: string, specification: string, sku: string,
+export const listingDraft = shape({ ...draftSummary, category: string, description: string, specification: string, sku: string,
   priceMinor: nullable(count), stock: nullable(count), images: items(shape({ role: enumOf('main','sku','detail'), assetId: uuid })),
   variants: items(shape({ specification: string, sku: string, priceMinor: nullable(count), stock: nullable(count), assetId: nullable(uuid) })) });
 const operationField = { type:'object', properties: { label:string, type:enumOf('text','money','date','integer','choice'),

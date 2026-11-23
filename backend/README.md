@@ -168,14 +168,20 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 
 | 方法 | 请求 | 结果 |
 | --- | --- | --- |
-| `POST /` | `{id, productName, requirements, assetIds, detailCount}`。客户端生成 UUID，最多 6 张参考图、合计 20 MiB。详情可选 0–7 张 | 返回含 1 张主图和详情图的初稿。相同 ID 和内容重发可找回已保存方案 |
-| `GET /`，`GET /:id` | 列表支持 `limit`、`offset` | 查询自己的方案、总状态、各图片的 `position`、`taskId`、`state`、`errorCode` 和可用的 `assetId` |
+| `POST /` | `{id, productName, requirements, assetIds, detailCount}`。客户端生成 UUID，最多 6 张参考图、合计 20 MiB。详情可选 0–7 张 | 201 创建含 1 张主图的初稿。相同 ID 和内容重发返回 200 和现有方案 |
+| `GET /`，`GET /:id` | 列表支持 `limit`、`offset` | 查询自己的方案列表或详情。详情含总状态和各图片的 `position`、`taskId`、`attempt`、`state`、`errorCode` 和可用的 `assetId` |
 | `PUT /:id` | `{revision, designNotes, images:[{role,title,direction}]}`。第一张为 `main`，其余为 `detail` | 保存编辑并递增版本。409 表示版本过期或方案已确认 |
-| `POST /:id/confirm` | `{revision, modelId?}` | 锁定方案，原子预占整组积分并入队。余额不足时整组保持草稿。重复确认返回已建任务 |
-| `POST /:id/images/:position/retry` | `{taskId}`，传该位置失败或已取消的任务 ID | 返回新尝试。重发同一请求返回同一重试任务 |
+| `POST /:id/confirm` | `{revision, modelId?}` | 202 锁定方案并预占整组积分入队。余额不足时整组保持草稿。重复确认返回 200 和当前方案 |
+| `POST /:id/images/:position/retry` | `{taskId}`，传该位置失败或已取消的任务 ID | 202 返回新尝试的 `{position,attempt,taskId}`。同一个原任务再次请求时返回 200 和同一个重试任务 |
 | `POST /:id/apply-to-draft` | `{draftId, draftRevision, detailPositions:[1,2,3]}` | 用已生成的第 0 张作为主图，按所选顺序替换详情图，保留草稿的 SKU 图、商品信息和变体。目标需为当前成员已有的拼多多草稿 |
 
-`estimatedCredits` 按方案中图片数量和当前每张任务成本计算。部分完成时可先选已有的成功图片回填。刷新后按方案 ID 恢复状态。CI 使用合成商品和本机回环模型适配器验收失败、重试、积分及草稿回填。
+`estimatedCredits` 按方案中图片数量和当前每张任务成本计算。部分完成时可先选已有的成功图片回填。刷新后按方案 ID 恢复状态。
+
+- **任务归属与重试**。任务列表和详情的 `imagePlan` 给出 `planId`、从 0 开始的 `position`、从 1 开始的 `attempt` 和 `latest`。普通任务的该字段为 `null`。当 `canRetry` 为真时，用图片或任务中的 `retryUrl` 提交当前 `taskId`。旧版任务中心的 `POST /v1/tasks/{id}/regenerate` 可重试同一张失败或取消的套图，两个入口共享幂等行为。成功的套图任务返回 409，避免重复生成与扣分。
+- **进度与续读**。对每张图按 `taskId` 调用 `GET /v1/tasks/{id}/events?after=0&limit=30` 可从头按时间顺序读取事件，也可用快照里的 `eventCursor` 从当前状态继续。后续请求带上响应的 `nextCursor`，重连后沿用该值。游标是十进制字符串，空结果沿用请求游标，换到新任务时为新任务单独保存游标。省略 `after` 时保持倒序历史分页。事件中的 `attempt` 是工作线程执行次数，套图图片上的 `attempt` 是该图片的提交次数。事件的 `retryable` 表示查询时该失败或取消的套图任务仍可手动重试。
+- **交付下载**。可用的生成图在方案图片和任务 `imagePlan` 上返回 `aiGenerated: true` 和 `deliveryUrl`。用当前会话和工作区请求该地址，返回带可见 AI 标识和嵌入元数据的二进制附件。素材库的 `/content` 用于读取原文件。所有 HTTP 响应可通过 `X-Request-Id` 关联服务端日志。
+
+宿主 SDK 支持 `events(taskId, {after, limit})` 和 `assetDelivery(assetId)`。GitHub Actions 使用合成商品和回环模型适配器验收失败、跨入口重试、进度续读、带标识的下载、积分及草稿回填。
 
 ## 本地商品草稿
 

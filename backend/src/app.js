@@ -52,7 +52,7 @@ export async function buildApp({
     bodyLimit: 15000000,
     ajv: { customOptions: { removeAdditional: false } },
   });
-  await app.register(cors, { origin: origins, allowedHeaders: ['authorization', 'content-type', 'x-workspace-id'], exposedHeaders:['x-content-sha256'], methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
+  await app.register(cors, { origin: origins, allowedHeaders: ['authorization', 'content-type', 'x-workspace-id'], exposedHeaders:['x-content-sha256', 'x-request-id'], methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
   await app.register(rateLimit, {
     global: false,
     errorResponseBuilder: () => new ApiError(429, 'RATE_LIMITED', 'Too many authentication requests'),
@@ -70,11 +70,15 @@ export async function buildApp({
   app.addHook('onRoute', options => {
 
     const response = contracts.get(options.url)?.[options.method] ?? options.schema?.response;
-    if (response && options.schema) options.schema.response = { ...response, ...errorContracts };
+    if (response && options.schema) {
+      options.schema.response = Object.fromEntries(Object.entries({...response,...errorContracts}).map(([status,schema]) => [
+        status, {...schema,headers:{...schema.headers,'x-request-id':{type:'string',description:'Server request identifier'}}},
+      ]));
+    }
   });
 
   app.addHook('onRequest', async (request, reply) => {
-    reply.header('cache-control', 'no-store').header('x-content-type-options', 'nosniff');
+    reply.header('cache-control', 'no-store').header('x-content-type-options', 'nosniff').header('x-request-id', request.id);
     if (loopbackOnly && request.headers.host !== '127.0.0.1:'+request.raw.socket.localPort) {
       throw new ApiError(403,'LOCAL_HOST_REQUIRED','Access the desktop workspace through its local address');
     }
@@ -146,7 +150,7 @@ export async function buildApp({
   registerWebSearch(app, webSearch);
   registerAssets(app, workspaceDb);
   registerImageStudio(app,workspaceDb);
-  registerProductImagePlans(app, workspaceDb, providers, shops);
+  const retryProductImageTask = registerProductImagePlans(app, workspaceDb, providers, shops);
   registerImagePreflight(app,workspaceDb);
   registerCopywritingReview(app,workspaceDb);
   registerCopywritingDrafts(app,workspaceDb);
@@ -158,7 +162,7 @@ export async function buildApp({
   registerCustomerService(app, workspaceDb, customerAnswer);
   registerModels(app, providers);
   registerRealtimeVoice(app, workspaceDb, realtimeVoice);
-  registerTasks(app, workspaceDb, providers, shops);
+  registerTasks(app, workspaceDb, providers, shops, retryProductImageTask);
   registerSchedules(app, workspaceDb, providers);
   return app;
 }

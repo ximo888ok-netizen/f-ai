@@ -97,10 +97,19 @@ export function workspaceV1(request) {
     plugins:()=>request('GET','/v1/plugins'),
     submit:input=>request('POST','/v1/tasks',input),
     task:id=>request('GET',taskPath(id)),
-    events:(id,options)=>request('GET',taskPath(id)+'/events?'+page(options)),
+    events:(id,options)=>{
+      const query = page(options);
+      if (options?.after !== undefined) {
+        if (typeof options.after !== 'string' || !/^(0|[1-9][0-9]{0,18})$/.test(options.after) ||
+          BigInt(options.after)>9223372036854775807n || Number(query.get('offset'))!==0) throw new RangeError('Invalid event cursor');
+        query.set('after',options.after);
+      }
+      return request('GET',taskPath(id)+'/events?'+query);
+    },
     assets:options=>request('GET','/v1/assets?'+page(options)),
     asset:value=>request('GET','/v1/assets/'+id(value)),
     assetContent:value=>request('GET','/v1/assets/'+id(value)+'/content'),
+    assetDelivery:value=>request('GET','/v1/assets/'+id(value)+'/delivery'),
     uploadAsset:input=>request('POST','/v1/assets',input),
     notifications:options=>request('GET','/v1/notifications?'+page(options)),
     readNotification:value=>{

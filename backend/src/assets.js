@@ -1,6 +1,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { row, rows } from './db.js';
+import { assetDownload } from './contracts.js';
 import { checkImageInputs, needsImageReview } from './image-preflight.js';
 import { ApiError, choice, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 
@@ -83,7 +84,10 @@ export function registerAssets(app, db) {
   });
 
   route(app, 'GET', '/v1/assets/:id/content', {
-    tags, summary: 'Download an owned asset', params: idParams,
+    tags, summary: 'Download the stored bytes of an owned asset', params: idParams,
+    response:{200:assetDownload('Original asset bytes',mediaTypes,{
+      'x-content-sha256':{type:'string',pattern:'^[a-f0-9]{64}$',description:'SHA-256 digest of the downloaded bytes'},
+    })},
   }, async (request, reply) => {
     const asset = await row(db, 'SELECT media_type, data FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = $3 AND NOT rights_restricted', [request.context.workspaceId, request.context.accountId, request.params.id]);
     if (!asset) throw notFound('Asset');

@@ -12,6 +12,7 @@ import { finishCredits, reserveCredits } from './wallet.js';
 import { accessibleProject } from './workspace.js';
 import { guidedMessages } from './workspace-library.js';
 import { notify } from './notifications.js';
+import { imageDelivery, imagePlanRetryUrl } from './product-image-contract.js';
 import { logTask, registerTaskEvents } from './task-events.js';
 import { registerTaskStream } from './task-stream.js';
 import { lockPlugin } from './plugin-policy.js';
@@ -28,6 +29,27 @@ const taskFields = [
   "COALESCE(capability_id = 'model.chat' AND input->'parameters'->'stream' = 'true'::jsonb, false) AS streamed",
 ].join(', ');
 const stateSchema = choice('queued', 'running', 'succeeded', 'failed', 'cancelled');
+const taskReadFields = taskFields + `, COALESCE((SELECT MAX(e.id) FROM task_events e WHERE e.task_id=tasks.id),0)::text AS "eventCursor",
+  (SELECT jsonb_build_object('planId',a.plan_id,'position',a.position,'attempt',a.attempt,'assetId',asset.id,'latest',
+    NOT EXISTS(SELECT 1 FROM product_image_attempts successor WHERE successor.workspace_id=a.workspace_id
+      AND successor.account_id=a.account_id AND successor.plan_id=a.plan_id AND successor.position=a.position
+      AND successor.attempt>a.attempt))
+   FROM product_image_attempts a
+   LEFT JOIN assets asset ON tasks.state='succeeded'
+     AND asset.id=CASE WHEN tasks.input->>'requireImageAsset'='true' THEN (tasks.result->>'assetId')::uuid END
+     AND asset.workspace_id=a.workspace_id AND asset.account_id=a.account_id AND NOT asset.rights_restricted
+   WHERE a.task_id=tasks.id AND a.workspace_id=tasks.workspace_id
+     AND a.account_id=tasks.account_id) AS "imagePlan"`;
+
+function presentTask(task) {
+  if (task.imagePlan) {
+    const {planId,position,latest,assetId} = task.imagePlan;
+    const canRetry = latest && ['failed','cancelled'].includes(task.state);
+    task.imagePlan = {...task.imagePlan,canRetry,retryUrl:canRetry ? imagePlanRetryUrl(planId,position) : null,
+      ...imageDelivery(assetId)};
+  }
+  return task;
+}
 
 export function stableJson(value) {
   if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
@@ -53,6 +75,10 @@ async function findTask(db, context, id, fields = taskFields, lock = false) {
   const task = await row(db, 'SELECT ' + fields + ' FROM tasks WHERE workspace_id = $1 AND account_id = $2 AND id = $3' + (lock ? ' FOR UPDATE' : ''), [context.workspaceId, context.accountId, id]);
   if (!task) throw notFound('Task');
   return task;
+}
+
+async function readTask(db, context, id) {
+  return presentTask(await findTask(db,context,id,taskReadFields));
 }
 
 async function submit(db, providers, shops, context, input, parentId = null) {
@@ -135,8 +161,8 @@ export async function finishTask(db, task, state, result, errorCode) {
     { taskId: task.id, capabilityId: task.capability_id, state, errorCode });
 }
 
-export function registerTasks(app, db, providers, shops) {
-  registerTaskEvents(app, db, findTask);
+export function registerTasks(app, db, providers, shops, retryProductImageTask) {
+  registerTaskEvents(app, db, readTask);
   registerTaskStream(app,findTask);
   route(app, 'GET', '/v1/plugins', { tags: ['Plugins'], summary: 'List business plugins, capabilities and input contracts' }, async request => {
     const settings = new Map((await rows(db, 'SELECT plugin_id, enabled FROM plugin_settings WHERE workspace_id = $1', [request.context.workspaceId])).map(setting => [setting.plugin_id, setting.enabled]));
@@ -200,11 +226,11 @@ export function registerTasks(app, db, providers, shops) {
     tags, summary: 'List tasks for the authenticated member',
     querystring: object({ ...page.properties, state: stateSchema }, []),
   }, async request => ({
-    items: await rows(db, 'SELECT ' + taskFields + ' FROM tasks WHERE workspace_id = $1 AND account_id = $2 AND ($3::text IS NULL OR state = $3) ORDER BY created_at DESC, id LIMIT $4 OFFSET $5', [request.context.workspaceId, request.context.accountId, request.query.state ?? null, ...paginate(request.query)]),
+    items: (await rows(db, 'SELECT ' + taskReadFields + ' FROM tasks WHERE workspace_id = $1 AND account_id = $2 AND ($3::text IS NULL OR state = $3) ORDER BY created_at DESC, id LIMIT $4 OFFSET $5', [request.context.workspaceId, request.context.accountId, request.query.state ?? null, ...paginate(request.query)])).map(presentTask),
   }));
 
   route(app, 'GET', '/v1/tasks/:id', { tags, summary: 'Read task status, error and output', params: idParams },
-    request => findTask(db, request.context, request.params.id));
+    request => readTask(db, request.context, request.params.id));
 
   route(app, 'POST', '/v1/tasks/:id/cancel', {
     tags, summary: 'Cancel a task before the worker acquires it', params: idParams,
@@ -214,16 +240,21 @@ export function registerTasks(app, db, providers, shops) {
       if (existing.state !== 'queued' || existing.attempts > 0) throw new ApiError(409, 'TASK_ALREADY_STARTED', 'Only tasks that have never started can be cancelled');
       await finishTask(connection, existing, 'cancelled', null, null);
     }
-    return findTask(connection, request.context, existing.id);
+    return readTask(connection, request.context, existing.id);
   }));
 
   route(app, 'POST', '/v1/tasks/:id/regenerate', {
-    tags, summary: 'Create a new execution linked to a completed task',
+    tags, summary: 'Create a new execution linked to a completed task or retry one failed product image',
     params: idParams, body: object({ idempotencyKey: keySchema, instructions:text(2000) }, ['idempotencyKey']),
   }, async (request, reply) => {
     const previous = await findTask(db, request.context, request.params.id, '*');
     if (previous.input.requireImageAsset) {
-      throw new ApiError(409, 'IMAGE_PLAN_RETRY_REQUIRED', 'Retry this image from its product image plan');
+      if (request.body.instructions !== undefined) throw invalid('Revision instructions apply to copywriting generation tasks');
+      const {imagePlan} = await readTask(db, request.context, previous.id);
+      if (!imagePlan) throw new ApiError(409, 'IMAGE_PLAN_RETRY_REQUIRED', 'Retry this image from its product image plan');
+      const result = await retryProductImageTask(request.context, imagePlan.planId, imagePlan.position, previous.id);
+      reply.code(result.created ? 202 : 200);
+      return readTask(db, request.context, result.image.taskId);
     }
     if (['queued', 'running'].includes(previous.state)) throw new ApiError(409, 'TASK_IN_PROGRESS', 'Wait for the original task to finish');
     if (catalog.get(previous.capability_id).requiresConfirmation) {
