@@ -1,3 +1,4 @@
+import { revisedCopy } from './live-copy-suggestions.js';
 import { field, form, grid, h, heading, input, item, link, list, notice, panel, textarea, toast } from './live.js';
 
 const platforms={taobao:'淘宝',pinduoduo:'拼多多',douyin:'抖店'};
@@ -28,14 +29,31 @@ export async function copyReviewPage(ctx) {
     toast('平台规则已保存');
     ctx.reload();
   });
-  ctx.submit('copy-review',async data=>{
-    const response=await ctx.api(root+'/review',{method:'POST',body:{
-      platform,revision:rules.revision,title:data.get('title'),sellingPoints:lines(data.get('sellingPoints')),
-    }});
-    if (!ctx.active()) return;
-    document.querySelector('[data-copy-result]').innerHTML=notice(response.passed?'文案通过工作区规则校验。':'发现需要修改或确认的内容。')+
+  const edit=document.querySelector('[data-form="copy-review"]');
+  if(!edit)return;
+  let sequence=0;
+  const target=document.querySelector('[data-copy-result]');
+  edit.addEventListener('input',()=>{sequence++;target.replaceChildren();});
+  function read(){return {platform,revision:rules.revision,title:edit.elements.title.value,sellingPoints:lines(edit.elements.sellingPoints.value)};}
+  async function check(){
+    const token=++sequence, submitted=read();
+    target.textContent='正在校验…';
+    let response;
+    try {response=await ctx.api(root+'/review',{method:'POST',body:submitted});}
+    catch(e){if(ctx.active()&&token===sequence)target.textContent='校验未完成，可以重新提交。';throw e;}
+    if(!ctx.active()||token!==sequence)return;
+    const revised=revisedCopy(submitted,response.issues);
+    const replaceable=response.issues.some(i=>i.code==='REVIEW_TERM');
+    target.innerHTML=notice(response.passed?'文案通过工作区规则校验。':'发现需要修改或确认的内容。')+
       list(response.issues,issue=>item(issue.field==='title'?'标题':'卖点 '+(issue.position+1),
         issue.code==='TOO_LONG'?'当前 '+issue.length+' 字，上限 '+issue.limit :
-          issue.code==='REVIEW_TERM'?'审阅词语 '+issue.term+'，建议 '+issue.suggestion:'命中禁用短语 '+issue.term),'');
-  });
+          issue.code==='REVIEW_TERM'?'审阅词语 '+issue.term+'，建议 '+issue.suggestion:'命中禁用短语 '+issue.term),'')+
+      (replaceable?'<p>'+revised.marked+'</p><button type="button" class="smallbtn" data-apply-copy>应用词语建议并复检</button>':'');
+    target.querySelector('[data-apply-copy]')?.addEventListener('click',()=>{
+      if(token!==sequence)return;
+      edit.elements.title.value=revised.title;edit.elements.sellingPoints.value=revised.sellingPoints.join('\n');
+      target.replaceChildren();edit.requestSubmit();
+    },{once:true});
+  }
+  ctx.submit('copy-review',check);
 }

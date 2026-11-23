@@ -1,3 +1,4 @@
+import { connectionEnabled, requireConnection } from './merchant-connections.js';
 import { randomUUID } from 'node:crypto';
 import { row, rows } from './db.js';
 import { ApiError, array, bool, choice, integer, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
@@ -35,6 +36,7 @@ export function registerFeishuChannel(app,db,bindings) {
       if (!message) return {};
       if (Object.hasOwn(message,'challenge')) return message;
       const tenantDb=await app.workspaceDatabaseRouter.forWorkspace(binding.workspaceId);
+      if (!await connectionEnabled(tenantDb,binding.workspaceId,'feishu',binding.id)) return { code: 0 };
       const owner=await row(tenantDb,'SELECT id FROM workspaces WHERE id=$1',[binding.workspaceId]);
       if (!owner) throw notFound('Workspace');
       await tenantDb.query(`INSERT INTO feishu_messages(workspace_id,connector_id,event_id,binding_hash,chat_id,remote_message_id,content)
@@ -47,7 +49,8 @@ export function registerFeishuChannel(app,db,bindings) {
   route(app,'GET',root,{...options,summary:'List authenticated Feishu inbox messages',querystring:page,
     response:{200:object({available:bool,items:array(details,100)})}},async request=>{
     const {workspaceId}=request.context;
-    return {available:[...bindings.values()].some(binding=>binding.workspaceId===workspaceId.toLowerCase()),
+    const binding = [...bindings.values()].find(item=>item.workspaceId===workspaceId.toLowerCase());
+    return {available:Boolean(binding && await connectionEnabled(db,workspaceId,'feishu',binding.id)),
       items:await rows(db,`SELECT ${inboxFields} FROM feishu_messages WHERE workspace_id=$1
         ORDER BY created_at DESC,event_id LIMIT $2 OFFSET $3`,[workspaceId,...paginate(request.query)])};
   });
@@ -69,6 +72,7 @@ export function registerFeishuChannel(app,db,bindings) {
     const [workspace,id,event]=parentKey(request);
     const {accountId}=request.context;
     const received=await lookup(db,[workspace,id,event]);
+    await requireConnection(db, workspace, 'feishu', id);
     const binding=bindings.get(id);
     if (!binding || binding.fingerprint!==received.binding_hash || binding.workspaceId!==workspace.toLowerCase()) {
       throw new ApiError(409,'FEISHU_BINDING_CHANGED','The corresponding Feishu connector is unavailable');
@@ -118,9 +122,10 @@ export async function dispatchFeishuReply({db,feishu,identityDb=db}) {
   let errorCode=null;
   let state='sent';
   try {
-    const account=await row(identityDb,'SELECT role FROM memberships WHERE workspace_id=$1 AND account_id=$2',
+    const account=await row(identityDb,'SELECT role FROM memberships WHERE workspace_id=$1 AND account_id=$2 AND state=\'active\'',
       [task.workspace_id,task.account_id]);
     if (!account || account.role==='member') throw new ProviderError('FEISHU_PERMISSION_CHANGED');
+    if (!await connectionEnabled(db,task.workspace_id,'feishu',task.connector_id)) throw new ProviderError('CONNECTION_DISABLED');
     const binding=feishu.get(task.connector_id);
     if (!binding || binding.workspaceId!==task.workspace_id || binding.fingerprint!==task.binding_hash) {
       throw new ProviderError('FEISHU_BINDING_CHANGED');

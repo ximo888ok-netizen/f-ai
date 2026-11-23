@@ -29,8 +29,8 @@ function validate(value,limit,phrases,field,position) {
   const length=Array.from(normalized).length;
   const property={field,...(position!==undefined && {position})};
   if (length>limit) issues.push({...property,code:'TOO_LONG',length,limit});
-  for (const {term,suggestion} of detectTerms({content:normalized}).matches) {
-    issues.push({...property,code:'REVIEW_TERM',term,suggestion});
+  for (const {term,suggestion,start,end} of detectTerms({content:value}).matches) {
+    issues.push({...property,code:'REVIEW_TERM',term,suggestion,start,end});
   }
   const lower=normalized.toLowerCase();
   for (const phrase of phrases) {
@@ -42,7 +42,7 @@ function validate(value,limit,phrases,field,position) {
 export function registerCopywritingReview(app,db) {
   route(app,'GET',root+'/rules/:platform',{tags,params:ruleParams,summary:'Read workspace copywriting rules for a platform'},
     request=>read(db,request.context.workspaceId,request.params.platform));
-  route(app,'PUT',root+'/rules/:platform',{
+  route(app,'PUT',root+'/rules/:platform',{ feature: 'copywriting',
     tags,params:ruleParams,manager:true,summary:'Save explicit workspace copy rules at a specified revision',
     body:object({revision,titleLimit:integer(1,300),sellingPointLimit:integer(1,1000),forbiddenPhrases:array(text(100),50)}),
   },async request=>{
@@ -57,7 +57,7 @@ export function registerCopywritingReview(app,db) {
     if (!saved) throw changed();
     return saved;
   });
-  route(app,'POST',root+'/review',{
+  route(app,'POST',root+'/review',{ feature: 'copywriting.detect-terms',
     tags,summary:'Review title and selling points against versioned workspace rules',
     body:object({platform,revision:integer(1,2147483646),title:text(600),sellingPoints:array(text(2000),10)}),
   },async request=>{

@@ -1,3 +1,5 @@
+import { shopGrantExpired, connectionEnabled, modelProviders, requireConnection } from './merchant-connections.js';
+import { featureAllowed, requireFeature, updateFeature } from './merchant-features.js';
 
 import { randomUUID } from 'node:crypto';
 import { digest } from './auth.js';
@@ -8,7 +10,7 @@ import { ApiError, bool, choice, freeObject, invalid, notFound, object, page, pa
 import { modelIdSchema } from './models.js';
 import { matchingProviders, providerFor, taskProvider } from './providers.js';
 import { finishCredits, reserveCredits } from './wallet.js';
-import { accessibleProject } from './workspace.js';
+import { accessibleProject } from './merchant-projects.js';
 import { guidedMessages } from './workspace-library.js';
 import { notify } from './notifications.js';
 import { logTask, registerTaskEvents } from './task-events.js';
@@ -19,7 +21,7 @@ const idParams = object({ id: uuid });
 export const keySchema = { ...text(100, 8), pattern: '^(?!schedule:)[A-Za-z0-9_.:-]+$' };
 const taskFields = [
   'id', 'capability_id AS "capabilityId"', 'plugin_id AS "pluginId"', 'project_id AS "projectId"',
-  'parent_id AS "parentId"', "CASE WHEN provider_id LIKE 'model:%' THEN substr(provider_id, 7) END AS \"modelId\"", 'state', 'cost', 'attempts', 'result', 'error_code AS "errorCode"',
+  'parent_id AS "parentId"', 'feature_version AS "featureVersion"', "CASE WHEN provider_id LIKE 'model:%' THEN substr(provider_id, 7) END AS \"modelId\"", 'state', 'cost', 'attempts', 'result', 'error_code AS "errorCode"',
   'created_at AS "createdAt"', 'updated_at AS "updatedAt"',
   "COALESCE(capability_id = 'model.chat' AND input->'parameters'->'stream' = 'true'::jsonb, false) AS streamed",
 ].join(', ');
@@ -33,6 +35,11 @@ export function stableJson(value) {
   return JSON.stringify(value);
 }
 
+export function capabilitySignature(capability) {
+  const { execution, parameters, cost, minAssets, requiresConsent, requiresConfirmation, modes } = capability;
+  return digest(stableJson({ execution, parameters, cost, minAssets, requiresConsent, requiresConfirmation, modes }));
+}
+
 export function shopFingerprint(shop) {
   return digest(stableJson([shop.id, shop.platform, shop.gatewayReference]));
 }
@@ -41,15 +48,9 @@ function bindingFor(shops, context, capability, parameters) {
   if (capability.pluginId !== 'operations') return null;
   const shop = shops.get(parameters.shopId);
   if (!shop || shop.workspaceId !== context.workspaceId || shop.platform !== parameters.platform) throw notFound('Authorized shop');
+  if (shopGrantExpired(shop)) throw new ApiError(403,'SHOP_AUTH_EXPIRED','Shop authorization expired');
   if (!shop.capabilities.includes(capability.id)) throw new ApiError(403, 'SHOP_PERMISSION_DENIED', 'This shop lacks the requested permission');
   return shop;
-}
-
-async function lockPlugin(db, workspaceId, pluginId) {
-  // A missing row means enabled. Write once so disabling and submitting serialize.
-  await db.query('INSERT INTO plugin_settings (workspace_id, plugin_id, enabled) VALUES ($1, $2, true) ON CONFLICT DO NOTHING', [workspaceId, pluginId]);
-  const setting = await row(db, 'SELECT enabled FROM plugin_settings WHERE workspace_id = $1 AND plugin_id = $2 FOR UPDATE', [workspaceId, pluginId]);
-  if (!setting.enabled) throw new ApiError(409, 'PLUGIN_DISABLED', 'Plugin is disabled for this workspace');
 }
 
 async function findTask(db, context, id, fields = taskFields, lock = false) {
@@ -79,8 +80,10 @@ export async function submitInTransaction(connection, providers, shops, context,
     return { task, created: false };
   }
 
-  const providerId = providerFor(providers,capability,input.modelId,id==='model.chat' && parameters.stream===true);
-  const provider = taskProvider(providers,providerId);
+  const featureVersion = await requireFeature(connection, context, capability.pluginId, id, true);
+  const availableProviders = await modelProviders(connection, workspaceId, providers);
+  const providerId = providerFor(availableProviders, capability, input.modelId, id==='model.chat' && parameters.stream===true);
+  const provider = taskProvider(availableProviders, providerId);
   provider.validate?.(capability, parameters);
   if (provider.taskConfiguration) storedInput.providerConfiguration=provider.taskConfiguration(parameters);
   if (id === 'model.chat' && parameters.guidanceIds?.length) {
@@ -90,12 +93,12 @@ export async function submitInTransaction(connection, providers, shops, context,
     storedInput.modelSignature = provider.signature;
     storedInput.modelId = provider.info.id;
   }
-  await lockPlugin(connection, workspaceId, capability.pluginId);
-  await accessibleProject(connection, context, projectId, true);
+  await accessibleProject(connection, context, projectId, true, true);
   if (capability.pluginId === 'operations' && context.role === 'member') {
     throw new ApiError(403, 'FORBIDDEN', 'Workspace owner or administrator required for shop operations');
   }
   const shop = bindingFor(shops, context, capability, parameters);
+  if (shop) await requireConnection(connection, workspaceId, 'shop', shop.id);
   const binding = shop ? shopFingerprint(shop) : null;
   if (binding) storedInput.shopFingerprint = binding;
   await taskAssets(connection, context, parameters.assetIds ?? parameters.listing?.assetIds ?? [], capability);
@@ -109,12 +112,13 @@ export async function submitInTransaction(connection, providers, shops, context,
     throw invalid('This capability does not accept a confirmation ID');
   }
 
+  storedInput.capabilitySignature = capabilitySignature(capability);
   const taskId = randomUUID();
   await reserveCredits(connection, workspaceId, accountId, taskId, capability.cost);
   const task = await row(connection, [
-    'INSERT INTO tasks (id, workspace_id, account_id, project_id, parent_id, capability_id, provider_id, plugin_id, input, request_hash, idempotency_key, state, cost)',
-    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'queued', $12) RETURNING " + taskFields,
-  ].join(' '), [taskId, workspaceId, accountId, projectId ?? null, parentId, id, providerId, capability.pluginId, storedInput, hash, idempotencyKey, capability.cost]);
+    'INSERT INTO tasks (id, workspace_id, account_id, project_id, parent_id, capability_id, provider_id, plugin_id, input, request_hash, idempotency_key, state, cost, feature_version)',
+    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'queued', $12, $13) RETURNING " + taskFields,
+  ].join(' '), [taskId, workspaceId, accountId, projectId ?? null, parentId, id, providerId, capability.pluginId, storedInput, hash, idempotencyKey, capability.cost, featureVersion]);
   await logTask(connection, taskId, 'queued', 0);
   return { task, created: true };
 }
@@ -134,12 +138,18 @@ export function registerTasks(app, db, providers, shops) {
   registerTaskEvents(app, db, findTask);
   registerTaskStream(app,findTask);
   route(app, 'GET', '/v1/plugins', { tags: ['Plugins'], summary: 'List business plugins, capabilities and input contracts' }, async request => {
-    const settings = new Map((await rows(db, 'SELECT plugin_id, enabled FROM plugin_settings WHERE workspace_id = $1', [request.context.workspaceId])).map(setting => [setting.plugin_id, setting.enabled]));
+    const { workspaceId, accountId } = request.context;
+    const rowsForWorkspace = await rows(db, `SELECT plugin_id,enabled,release_mode AS mode,release_capabilities AS capabilities,
+      EXISTS (SELECT 1 FROM merchant_plugin_members m WHERE m.workspace_id=s.workspace_id AND m.plugin_id=s.plugin_id
+        AND m.account_id=$2) AS included FROM plugin_settings s WHERE workspace_id=$1`, [workspaceId, accountId]);
+    const availableProviders = await modelProviders(db, workspaceId, providers);
+    const settings = new Map(rowsForWorkspace.map(setting => [setting.plugin_id, setting]));
     const describe = plugin => ({
-      ...plugin, enabled: settings.get(plugin.id) ?? true,
+      ...plugin, enabled: featureAllowed(settings.get(plugin.id)),
       capabilities: [...catalog.values()].filter(capability => capability.pluginId === plugin.id).map(capability => {
         const { execution, ...contract } = capability;
-        return { ...contract, available: execution === 'endpoint' || matchingProviders(providers, capability).length > 0 };
+        return { ...contract, available: featureAllowed(settings.get(plugin.id), capability.id) &&
+          (execution === 'endpoint' || matchingProviders(availableProviders, capability).length > 0) };
       }),
     });
     return { items: plugins.map(describe), models: describe({ id: 'models', name: '模型工具' }) };
@@ -149,26 +159,26 @@ export function registerTasks(app, db, providers, shops) {
     manager: true, tags: ['Plugins'], summary: 'Enable or disable new submissions in a workspace',
     params: object({ id: choice('models', ...plugins.map(plugin => plugin.id)) }),
     body: object({ enabled: bool }),
-  }, async request => {
-    const { workspaceId } = request.context;
-    await db.query('INSERT INTO plugin_settings (workspace_id, plugin_id, enabled) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, plugin_id) DO UPDATE SET enabled = EXCLUDED.enabled', [workspaceId, request.params.id, request.body.enabled]);
-    return { id: request.params.id, enabled: request.body.enabled };
-  });
+  }, request => updateFeature(db, request, null, true));
 
   route(app, 'GET', '/v1/shops', { manager: true, tags: ['Shops'], summary: 'List provisioned shop bindings and granted capabilities' }, async request => ({
-    items: [...shops.values()].filter(shop => shop.workspaceId === request.context.workspaceId)
-      .map(({ id, name, platform, capabilities }) => ({ id, name, platform, capabilities })),
+    items: (await Promise.all([...shops.values()].filter(shop => shop.workspaceId === request.context.workspaceId)
+      .map(async shop => await connectionEnabled(db, request.context.workspaceId, 'shop', shop.id)
+        ? { id:shop.id, name:shop.name, platform:shop.platform, capabilities:shopGrantExpired(shop)?[]:shop.capabilities,
+          ...(shop.authorizedUntil?{authorizedUntil:new Date(shop.authorizedUntil).toISOString()}: {}) } : null))).filter(Boolean),
   }));
 
   route(app, 'POST', '/v1/shops/previews', {
-    manager: true, tags: ['Shops'], summary: 'Create a short-lived preview for manual confirmation',
+    manager: true, feature: 'operations', tags: ['Shops'], summary: 'Create a short-lived preview for manual confirmation',
     body: { ...object({ capabilityId: choice('operations.publish', 'operations.bulk-maintenance'), parameters: freeObject }), allOf: capabilityRules.filter(rule => catalog.get(rule.if.properties.capabilityId.const).requiresConfirmation) },
   }, async (request, reply) => {
     const { workspaceId, accountId } = request.context;
     const { capabilityId: id, parameters } = request.body;
     const capability = catalog.get(id);
+    await requireFeature(db, request.context, capability.pluginId, id);
     providerFor(providers, capability);
     const shop = bindingFor(shops, request.context, capability, parameters);
+    await requireConnection(db, workspaceId, 'shop', shop.id);
     await taskAssets(db, request.context, parameters.listing?.assetIds ?? [], capability);
     const previewId = randomUUID();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -181,12 +191,17 @@ export function registerTasks(app, db, providers, shops) {
     tags, summary: 'Submit a priced and idempotent plugin task',
     body: {
       ...object({
-        capabilityId, modelId: modelIdSchema, mode: choice('chat', 'workflow'), parameters: freeObject, idempotencyKey: keySchema, projectId: uuid, confirmationId: uuid,
+        capabilityId, modelId: modelIdSchema, mode: choice('chat', 'workflow'), parameters: freeObject, idempotencyKey: keySchema, projectId: uuid, confirmationId: uuid, parentId: uuid,
       }, ['capabilityId', 'mode', 'parameters', 'idempotencyKey']),
       allOf: capabilityRules,
     },
   }, async (request, reply) => {
-    const result = await submit(db, providers, shops, request.context, request.body);
+    const parent = request.body.parentId;
+    if (parent) {
+      const source = await findTask(db, request.context, parent, 'capability_id, state');
+      if (source.capability_id !== request.body.capabilityId || ['queued','running'].includes(source.state)) throw invalid('Select a finished task of the same capability');
+    }
+    const result = await submit(db, providers, shops, request.context, request.body, parent ?? null);
     reply.code(result.created ? 202 : 200);
     return result.task;
   });
@@ -200,6 +215,11 @@ export function registerTasks(app, db, providers, shops) {
 
   route(app, 'GET', '/v1/tasks/:id', { tags, summary: 'Read task status, error and output', params: idParams },
     request => findTask(db, request.context, request.params.id));
+
+  route(app, 'GET', '/v1/tasks/:id/inputs', { tags, summary: 'Read your own editable task parameters', params: idParams },
+    request => findTask(db, request.context, request.params.id,
+      `capability_id AS "capabilityId", project_id AS "projectId", input->>'mode' AS mode,
+       input->>'modelId' AS "modelId", input->'parameters' AS parameters`));
 
   route(app, 'POST', '/v1/tasks/:id/cancel', {
     tags, summary: 'Cancel a task before the worker acquires it', params: idParams,

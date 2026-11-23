@@ -21,7 +21,7 @@
   --ui-warning: #ffdfaa;
 }
 
-:root[data-theme=paper] {
+:root[data-scheme=light] {
   --ui-success: #326246;
   --ui-progress: #385c86;
   --ui-error: #963334;

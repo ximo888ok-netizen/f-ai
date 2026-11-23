@@ -14,7 +14,15 @@
   <link rel="stylesheet" href="/studio/themes.css">
   <link rel="stylesheet" href="/studio/components.css">
   <link rel="stylesheet" href="/studio/live.css">
-  <script defer src="/studio/glass.js"></script>
+  <link rel="stylesheet" href="/studio/live-depth.css">
+  <link rel="stylesheet" href="/studio/live-spatial.css">
+  <link rel="stylesheet" href="/studio/live-light.css">
+  <link rel="stylesheet" href="/studio/live-agent.css">
+  <link rel="stylesheet" href="/studio/liquid-glass.css">
+  <link rel="stylesheet" href="/studio/liquid-layout.css">
+  <link rel="stylesheet" href="/studio/studio-wallpaper.css">
+  <link rel="stylesheet" href="/studio/workbench-layout.css">
+  <script defer src="/studio/glass.js"></script><script defer src="/studio/theme-motion.js"></script>
   <script type="module" src="/studio/live.js"></script>
 </head>
 <body>
@@ -23,9 +31,21 @@
   <a class="skip" href="#main">跳到工作区</a>
   <div class="app-shell">
     <aside class="rail">
-      <a class="brandline" href="#desk"><svg viewBox="0 0 44 44" aria-hidden="true"><path fill="currentColor" d="M6 33 17 6h23L26 16H17l-3 7h14L8 37H4z"/></svg><span>F/AI <i>Studio</i></span></a>
+      <a class="brandline" href="#home"><svg viewBox="0 0 44 44" aria-hidden="true"><path fill="currentColor" d="M6 33 17 6h23L26 16H17l-3 7h14L8 37H4z"/></svg><span>F/AI <i>Studio</i></span></a>
+      <button type="button" id="studioMenu" class="smallbtn" aria-controls="nav" aria-expanded="false" hidden>菜单</button>
       <nav id="nav" aria-label="主导航"></nav>
-      <div class="railFoot"><a href="#account" id="profile"></a></div>
+      <div class="railFoot">
+        <button type="button" class="smallbtn" id="profile" popovertarget="account-menu" hidden></button>
+        <section class="studio-popover account-menu" id="account-menu" popover aria-label="账户快捷操作">
+          <div class="popover-heading"><strong data-account-name></strong><span data-account-scope></span></div>
+          <a href="#account" class="account-balance" data-account-balance></a>
+          <a href="#settings">设置与诊断</a>
+          <button type="button" data-account-appearance>外观与壁纸</button>
+          <a href="#resources/memory/personal">个人记忆</a>
+          <a href="#inbox">消息中心</a>
+          <button type="button" data-account-logout>退出登录</button>
+        </section>
+      </div>
     </aside>
     <div class="app-content">
       <header class="topline">
@@ -33,7 +53,8 @@
         <div class="topActions">
           <span id="connection" class="localState" role="status">正在连接</span>
           <button type="button" class="appearanceButton" data-theme-open aria-haspopup="dialog"><i aria-hidden="true"></i><span>冰蓝玻璃</span></button>
-          <button type="button" class="motionToggle" data-motion-toggle><span>暂停动效</span></button>
+          <button type="button" class="motionToggle" data-motion-toggle><svg viewBox="0 0 12 12" aria-hidden="true"><path class="pause" d="M2 1h3v10H2zM7 1h3v10H7z"/><path class="play" d="M3 1l8 5-8 5z"/></svg><span>暂停动效</span></button>
+          <a href="/merchant" class="smallbtn" id="merchantLink" hidden>商家后台</a>
           <a href="#tasks" id="queueLink" hidden>任务记录</a>
         </div>
       </header>
@@ -42,5 +63,7 @@
   </div>
   <div id="live" class="toast" role="status"></div>
   <noscript>请启用 JavaScript 后重新打开工作台。</noscript>
+  <script type="module" src="/studio/liquid-glass.js"></script>
+  <script type="module" src="/studio/studio-wallpaper.js"></script>
 </body>
 </html>

@@ -1,0 +1,318 @@
+:root {
+  --liquid-blur: blur(2px);
+  --liquid-clear-layer: linear-gradient(transparent, transparent);
+  --liquid-tint-light: transparent;
+  --liquid-tint: rgba(255, 255, 255, .025);
+  --liquid-tint-strong: rgba(255, 255, 255, .06);
+  --liquid-border: rgba(255, 255, 255, .15);
+  --liquid-rim: inset 0 1px 0 rgba(255, 255, 255, .3), inset 0 -1px 0 rgba(255, 255, 255, .05);
+  --liquid-shadow: 0 12px 32px rgba(0, 0, 0, .4);
+  --liquid-field: transparent;
+  --liquid-focus: #8ccaff;
+  --liquid-glow: #66b5ff52;
+  --liquid-speed: 180ms;
+  --liquid-press: .97;
+  --liquid-ease: cubic-bezier(.2, .75, .25, 1);
+}
+
+:root[data-scheme="light"] {
+  --liquid-border: rgba(53, 84, 120, .22);
+  --liquid-focus: #2863a4;
+  --liquid-glow: #468ed640;
+  --liquid-shadow: 0 12px 32px rgba(41, 65, 101, .17);
+}
+
+:root[data-motion="off"] {
+  --liquid-speed: 0ms;
+  --liquid-press: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --liquid-speed: 0ms;
+    --liquid-press: 1;
+  }
+}
+
+@media screen and (forced-colors: none) {
+  :root[data-theme][data-scheme] {
+    --pigment: #526d87;
+    --sheen: #c4d8e9;
+    --bloom: #7c9db9;
+    --bg: light-dark(#edf4fa, #0b1a2a);
+    --panel: light-dark(#eff6fb, #142437);
+    --paper: var(--panel);
+    --ink: light-dark(#172838, #f4f8fc);
+    --sub: light-dark(#344c60, #c7d6e3);
+    --muted: light-dark(#476178, #acc0d0);
+    --accent: light-dark(#245b8a, #c0def7);
+    --mark: var(--ink);
+    --line: var(--liquid-border);
+    --line-strong: light-dark(#44648468, #d5ecfa72);
+    --control: linear-gradient(150deg, #fff1, #fff0 60%), transparent;
+    --well: var(--liquid-field);
+    --tab: var(--liquid-tint);
+    --primary: var(--liquid-tint-strong);
+    --on-primary: var(--ink);
+    --brand-ink: var(--ink);
+    --nav-edge: var(--accent);
+    --nav-border: var(--line-strong);
+    --title-start: var(--ink);
+    --title-mid: var(--ink);
+    --title-end: var(--ink);
+    --front-edge: light-dark(#637e952d, #a2c9e138);
+    --deck-base: light-dark(#c9ddec4d, #172c423b);
+    --deck-light: light-dark(#e7f1fa, #26384a);
+    --front-face: var(--panel);
+    --surface-light: #f5fbff;
+    --surface-shadow: light-dark(#6b859c, #07111c);
+    --feature-light: #c9e3f4;
+    --glass-film: var(--liquid-clear-layer);
+    --radius: 20px;
+    --liquid-panel-edge: color-mix(in srgb, var(--palette-sheen, #c4d8e9) 32%, var(--liquid-border));
+  }
+
+  :where(.liquid-glass, .topline, .app-shell .rail, .card, .live-panel, .composerShell, dialog, .ui-dialog) {
+    --liquid-edge: var(--liquid-border);
+    --liquid-specular: var(--liquid-clear-layer);
+    --liquid-float: var(--liquid-shadow);
+    --liquid-optics: var(--liquid-blur);
+  }
+
+  :is(.card:not(.merchant-menu), .live-panel, .composerShell, dialog, .ui-dialog) {
+    --liquid-edge: var(--liquid-panel-edge);
+  }
+
+  :root[data-theme] :is(.live-desk-stage, .live-main:has(> .live-title:first-child),
+      #merchantContent:has(> .merchant-heading:first-child))::before {
+    background: transparent;
+    border-color: var(--liquid-panel-edge);
+    box-shadow: var(--liquid-rim), var(--liquid-shadow);
+  }
+
+  :root[data-theme] body :is(.liquid-glass:not(button, a, .uploadButton), .topline,
+      .app-shell .rail, .card.live-panel, .merchant-layout > .card.merchant-menu,
+      .live-desk-stage > .live-panel, .card, .live-panel, .composerShell, dialog, .ui-dialog) {
+    background: var(--liquid-specular), transparent;
+    border: 1px solid var(--liquid-edge);
+    box-shadow: var(--liquid-rim), var(--liquid-float);
+    -webkit-backdrop-filter: var(--liquid-optics);
+    backdrop-filter: var(--liquid-optics);
+  }
+
+  /* Keep the existing sticky position and stacking order. */
+  header.topline {
+    --liquid-float: 0 1px 0 #8fc7f333, 0 12px 32px #0005;
+  }
+
+  :is(.topline, .app-shell .rail)::after {
+    opacity: .32;
+  }
+
+  .agent-composer.card,
+  .composerShell {
+    position: relative;
+    border-radius: max(22px, var(--radius, 16px));
+  }
+
+  :root[data-theme] .agent-composer.card {
+    --liquid-float: var(--liquid-shadow), inset 0 7px 14px #e5f5ff1a, inset 0 -7px 14px #d1e6f41f;
+    border-radius: clamp(26px, 5.5vw, 44px);
+  }
+
+  /* Nested surfaces share the surrounding glass instead of filtering it again. */
+  :where(.card, .live-panel, dialog, .ui-dialog) :is(.card, .live-panel) {
+    --liquid-optics: none;
+    --liquid-float: 0 4px 14px #0a12242e;
+  }
+
+  :root.liquid-refraction-ready :is(header.topline, .agent-composer, dialog[open]).liquid-glass {
+    --liquid-optics: var(--liquid-blur) url("#fai-liquid-refraction");
+  }
+
+  :is(.agent-composer, .composerShell)::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 2px;
+    pointer-events: none;
+    background: conic-gradient(from 27deg, #eeffffef, #b2d4f01e 21%, #c5e8ffe6 45%, #e9f0f83f 69%, #e3f4ffc2 93%);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+
+  :root.liquid-refraction-ready :is(.agent-composer, .composerShell)::before {
+    filter: url("#fai-liquid-refraction");
+  }
+
+  .agent-composer::before {
+    background: conic-gradient(from 14deg, #f1fdffe0, #c0e5ec81 12%, #84b0d827 26%,
+      #dfedffd0 41%, #f9eddaaa 49%, #adcfe856 59%, #8fb2c46e 76%, #c2e4f5dc 94%, #f1fdffe0);
+  }
+
+  .agent-composer::after {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 31% 15% at 28% 0%, #fff9ec64, transparent 100%),
+      radial-gradient(ellipse 37% 15% at 72% 100%, #ddf9ff66, transparent 100%);
+  }
+
+  :root[data-theme] body .agent-composer.card:focus-within {
+    border-color: var(--liquid-focus);
+    box-shadow: var(--liquid-rim), var(--liquid-float), 0 0 0 2px var(--liquid-glow);
+  }
+
+  :root[data-theme] :is(dialog, .ui-dialog) {
+    color-scheme: dark;
+    --liquid-border: rgba(255, 255, 255, .15);
+    --liquid-focus: #8ccaff;
+    --liquid-glow: #66b5ff52;
+    --ink: #f1f7ff;
+    --sub: #c5d4e7;
+    --muted: #a9bcd2;
+    --control: transparent;
+    color: var(--ink);
+  }
+
+  :root[data-theme] #themeDialog.ui-dialog[open] {
+    border-color: var(--liquid-edge);
+    box-shadow: var(--liquid-rim), var(--liquid-shadow);
+  }
+
+  :root[data-theme] #themeDialog .ui-dialog-header {
+    background: var(--control);
+  }
+
+  .ui-dialog-header h2 {
+    color: var(--ink);
+  }
+
+  :root[data-theme] :is(dialog, #themeDialog)::backdrop {
+    background: rgba(4, 10, 19, .62);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+
+  :where(button, a:is(.smallbtn, .primary, .plain, .start), .uploadButton, .navitem, #queueLink) {
+    --liquid-control-fill: var(--liquid-tint-light);
+    --liquid-specular: var(--liquid-clear-layer);
+  }
+
+  :is(.primary, .start, .sel, [aria-pressed="true"], [aria-current="page"]) {
+    --liquid-control-fill: var(--liquid-tint-strong);
+  }
+
+  :root[data-theme] :is(.topActions, .app-shell, .merchant-layout, #merchantContent, .ui-dialog, #nav)
+      :is(button, a:is(.smallbtn, .primary, .plain, .start), .uploadButton, .navitem, :where(#queueLink)) {
+    background: var(--liquid-specular), var(--liquid-control-fill);
+    border-color: var(--liquid-border);
+    color: var(--ink);
+    box-shadow: var(--liquid-rim), 0 3px 9px #0002;
+  }
+
+  :root[data-theme] :is(.app-shell, .merchant-layout) #nav .navitem:is([aria-current="page"], .active) {
+    --liquid-control-fill: var(--liquid-tint-strong);
+    border-color: var(--line-strong);
+    box-shadow: inset 2px 0 0 var(--nav-edge), var(--liquid-rim);
+  }
+
+  :root[data-theme] :is(.app-shell, .merchant-layout) #nav .navitem:not([aria-current="page"], .active) {
+    --liquid-control-fill: transparent;
+    border-color: color-mix(in srgb, var(--liquid-border) 65%, transparent);
+    box-shadow: inset 0 1px rgba(255, 255, 255, .12);
+  }
+
+  :root[data-theme] :is(.app-shell, .merchant-layout, .ui-dialog)
+      :is(.tag, .notice, .metric, .ui-empty, .live-original, .agent-message, fieldset) {
+    background: var(--liquid-tint-light);
+    border-color: var(--liquid-border);
+  }
+
+  :root[data-theme] :is(.live-table, .merchant-table, .rows) th {
+    background: var(--liquid-tint);
+  }
+
+  :root[data-theme] :is(.live-table, .merchant-table, .rows) tbody tr:hover td {
+    background: var(--liquid-tint-light);
+  }
+
+  :root[data-theme] :is(.toast.show, .merchant-ticket, .agent-mark) {
+    background: var(--control);
+    border-color: var(--liquid-border);
+    box-shadow: var(--liquid-rim), var(--liquid-shadow);
+    -webkit-backdrop-filter: var(--liquid-blur);
+    backdrop-filter: var(--liquid-blur);
+  }
+
+  :root[data-theme] :is(button, a:is(.smallbtn, .primary, .plain, .start), .navitem) {
+    transition: background-color var(--liquid-speed) var(--liquid-ease),
+      border-color var(--liquid-speed) var(--liquid-ease),
+      box-shadow var(--liquid-speed) var(--liquid-ease),
+      filter var(--liquid-speed) var(--liquid-ease), scale var(--liquid-speed) var(--liquid-ease);
+  }
+
+  @media (any-hover: hover) {
+    :root[data-theme] :is(button, a:is(.smallbtn, .primary, .plain, .start), .navitem):hover:not(:disabled, [aria-disabled="true"]) {
+      filter: brightness(1.13);
+    }
+  }
+
+  :root[data-theme] :is(button, a:is(.smallbtn, .primary, .plain, .start), .navitem):active:not(:disabled, [aria-disabled="true"]) {
+    scale: var(--liquid-press);
+  }
+
+  :root[data-theme] :is(.topline, .work, .merchant-layout, .ui-dialog) :is(textarea, select,
+      input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"],
+        [type="button"], [type="reset"], [type="submit"], [type="color"], [type="image"], [type="hidden"])) {
+    background: var(--liquid-field);
+    color: var(--ink);
+    border-color: var(--liquid-border);
+    transition: border-color var(--liquid-speed) var(--liquid-ease),
+      box-shadow var(--liquid-speed) var(--liquid-ease);
+
+    &:focus {
+      border-color: var(--liquid-focus);
+      box-shadow: var(--liquid-rim), 0 0 0 2px var(--liquid-glow), 0 0 18px var(--liquid-glow);
+    }
+  }
+
+  :root[data-theme] .work .agent-composer textarea,
+  :root[data-theme] .work .agent-composer textarea:focus {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .agent-composer textarea::placeholder {
+    color: var(--ink);
+    opacity: .88;
+  }
+
+  :root[data-theme] #main .agent-composer .agent-bar
+      :is(.agent-send, .agent-attach:not([data-attached])) {
+    border-color: transparent;
+    background: var(--liquid-specular);
+    box-shadow: none;
+    color: var(--ink);
+  }
+
+  .agent-bar .agent-attach:not([data-attached])::before {
+    content: "";
+    inline-size: 32px;
+    block-size: 32px;
+    border: 2px solid currentColor;
+    border-radius: 10px;
+    background: linear-gradient(currentColor, currentColor) center / 13px 2px no-repeat,
+      linear-gradient(currentColor, currentColor) center / 2px 13px no-repeat;
+  }
+
+  :root:not([data-motion="off"]) .liquid-glass.liquid-highlight {
+    --liquid-specular: radial-gradient(ellipse min(220px, 70%) min(88px, 95%) at
+      var(--mouse-x, 50%) var(--mouse-y, 50%), #e4f5ff3d, #b0daff18 46%, transparent 100%);
+  }
+}

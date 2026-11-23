@@ -134,7 +134,7 @@ export function registerCustomerService(app, db, answer=null) {
     return { items: await rows(db, 'SELECT ' + conversationFields + ' FROM service_conversations WHERE workspace_id = $1 AND ($3::boolean OR account_id = $2) ORDER BY updated_at DESC, id LIMIT $4 OFFSET $5', [workspaceId, accountId, operator(request.context), ...paginate(request.query)]) };
   });
 
-  route(app, 'POST', '/v1/customer-service/conversations', {
+  route(app, 'POST', '/v1/customer-service/conversations', { feature: 'customer-service.conversation',
     tags, summary: 'Create a support conversation with an optional knowledge scope',
     body: object({ subject: text(160), knowledgeBaseIds: array(uuid, 20),
       productReference: text(100), orderReference: text(100) }, ['subject']),
@@ -167,7 +167,7 @@ export function registerCustomerService(app, db, answer=null) {
     return { conversation: current, items: await rows(db, 'SELECT ' + messageFields + ' FROM service_messages WHERE workspace_id = $1 AND conversation_id = $2 ORDER BY service_messages.id LIMIT $3 OFFSET $4', [workspaceId, current.id, ...paginate(request.query)]) };
   });
 
-  route(app, 'POST', '/v1/customer-service/conversations/:id/messages', {
+  route(app, 'POST', '/v1/customer-service/conversations/:id/messages', { feature: 'customer-service.answer',
     tags, summary: 'Post or safely replay a customer or operator message', params: idParams,
     body: object({ content: text(4000), search: text(160), sender: choice('customer', 'operator'), clientId: uuid }, ['content']),
   }, async (request, reply) => {
@@ -176,7 +176,7 @@ export function registerCustomerService(app, db, answer=null) {
     return {message:created,assistant,state};
   });
 
-  route(app, 'POST', '/v1/customer-service/conversations/:id/handoff', {
+  route(app, 'POST', '/v1/customer-service/conversations/:id/handoff', { feature: 'customer-service.handoff',
     manager: true, tags, summary: 'Atomically take over a conversation and stop assistant replies', params: idParams,
   }, async request => db.transaction(async connection => {
     const { workspaceId, accountId } = request.context;
@@ -199,7 +199,7 @@ export function registerCustomerService(app, db, answer=null) {
     return { items: await rows(db, 'SELECT ' + replyFields + ' FROM service_replies WHERE workspace_id = $1 AND ($2::text IS NULL OR scenario = $2) ORDER BY updated_at DESC, id LIMIT $3 OFFSET $4', [workspaceId, request.query.scenario ?? null, ...paginate(request.query)]) };
   });
 
-  route(app, 'POST', '/v1/customer-service/quick-replies', {
+  route(app, 'POST', '/v1/customer-service/quick-replies', { feature: 'customer-service.quick-replies',
     manager: true, tags, summary: 'Create a scoped quick reply', body: replyInput,
   }, async (request, reply) => {
     const { workspaceId } = request.context;
@@ -210,7 +210,7 @@ export function registerCustomerService(app, db, answer=null) {
     return created;
   });
 
-  route(app, 'PUT', '/v1/customer-service/quick-replies/:id', {
+  route(app, 'PUT', '/v1/customer-service/quick-replies/:id', { feature: 'customer-service.quick-replies',
     manager: true, tags, summary: 'Update quick reply text and revision', params: idParams, body: replyInput,
   }, async request => {
     const { workspaceId } = request.context;

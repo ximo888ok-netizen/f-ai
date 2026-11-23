@@ -73,6 +73,8 @@ function loadShops(value) {
     if (!shop || !isUuid(shop.id) || !isUuid(shop.workspaceId) || shops.has(shop.id)
       || typeof shop.name !== 'string' || !shop.name.trim() || shop.name.length > 120
       || typeof shop.gatewayReference !== 'string' || !/^[A-Za-z0-9_.:-]{1,120}$/.test(shop.gatewayReference)
+      || (shop.authorizedUntil != null && (typeof shop.authorizedUntil !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(shop.authorizedUntil) || !Number.isFinite(Date.parse(shop.authorizedUntil))))
       || !['taobao', 'pinduoduo', 'douyin'].includes(shop.platform)
       || !Array.isArray(shop.capabilities) || !shop.capabilities.length
       || shop.capabilities.some(id => catalog.get(id)?.pluginId !== 'operations' || catalog.get(id)?.execution !== 'gateway')) {

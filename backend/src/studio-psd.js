@@ -73,7 +73,7 @@ export function registerStudioPsd(app, db, videoDelivery) {
     return document;
   });
 
-  route(app,'PUT',root+'/:id',{tags,summary:'Save a layered design at the specified revision (zero for new)',params,body:saveBody,
+  route(app,'PUT',root+'/:id',{ feature: 'image',tags,summary:'Save a layered design at the specified revision (zero for new)',params,body:saveBody,
     response:{200:record}},request=>db.transaction(async tx=>{
     const {workspaceId,accountId}=request.context;
     const {id}=request.params;

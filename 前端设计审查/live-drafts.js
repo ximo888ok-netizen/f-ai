@@ -1,3 +1,4 @@
+import { searchable } from './live-record-tools.js';
 import { action, date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, select, textarea, toast, uid } from './live.js';
 import { uploadMedia } from './live-workspace.js';
 
@@ -122,8 +123,8 @@ export async function listingDrafts(ctx) {
   if (!id) {
     const records = await ctx.all(endpoint);
     ctx.html(heading('拼多多草稿', '保存在当前工作区，仅自己可见。') + link('新建商品草稿', 'drafts/new') + link('检查草稿资料', 'drafts/quality') +
-      panel('我的草稿', list(records, record => item(record.title, '最近保存于 ' + date(record.updatedAt),
-        link('继续编辑', 'drafts/' + record.id)), '还没有保存的商品草稿。')));
+      panel('我的草稿', searchable('搜索草稿标题',list(records, record => item(record.title, '最近保存于 ' + date(record.updatedAt),
+        link('继续编辑', 'drafts/' + record.id)), '还没有保存的商品草稿。'))));
     return;
   }
   const [draft, assets, task] = await Promise.all([

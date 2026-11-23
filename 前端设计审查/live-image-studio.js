@@ -1,3 +1,4 @@
+import { assetPreview } from './live-asset-preview.js';
 import { action, field, form, heading, input, item, link, list, notice, panel, path, retryKey, select, toast } from './live.js';
 import { downloadFile } from './live-files.js';
 import { assetField, editRows, imageFiles, numeric, rowControls, toggleFields } from './live-media-controls.js';
@@ -17,15 +18,18 @@ const failures={
 
 function imageRow(files,assetId) {
   return '<fieldset data-edit-row><legend>处理项</legend>' +
+    '<div class="live-image-layout"><div class="live-image-source">' +
+    '<div class="live-original" data-source-preview aria-live="polite">选择主体图片后可查看原图</div>' +
+    assetField('主体图片','source',files,assetId,true,'选择图片') + '</div><div class="live-fields">' +
     field('SKU 或处理名称',input('key','required maxlength="100"')) +
-    field('图片组成',select('composition',[['single','单张图片'],['stack','纵向拼接']], 'single')) +
-    assetField('主体图片','source',files,assetId,true,'选择图片') +
-    '<div class="live-fields" data-image-stack>' + [2,3,4,5,6].map(index=>
-      assetField('第 '+index+' 张图','panel',files)).join('') + '</div>' +
     field('画布尺寸',select('size',profiles,'square')) +
     '<div class="live-fields" data-image-size>' + numeric('自定义宽度','width',800,32,1920) +
     numeric('自定义高度','height',800,32,6144) + '</div>' +
     '<div data-image-scale>'+numeric('放大倍数','scale',2,2,4)+'</div>' +
+    '<details class="live-fold"><summary>拼接、格式与局部编辑</summary><div class="live-fields">' +
+    field('图片组成',select('composition',[['single','单张图片'],['stack','纵向拼接']], 'single')) +
+    '<div class="live-fields" data-image-stack>' + [2,3,4,5,6].map(index=>
+      assetField('第 '+index+' 张图','panel',files)).join('') + '</div>' +
     field('适配方式',select('fit',[['contain','等比保留完整图片'],['cover','等比裁切填满']], 'contain')) +
     field('格式',select('format',[['png','PNG'],['jpeg','JPG']], 'png')) +
     field('背景方式',select('backgroundMode',[['default','使用默认背景'],['color','纯色背景'],['transparent','透明背景'],
@@ -37,7 +41,7 @@ function imageRow(files,assetId) {
     )+'<div data-image-mask>'+assetField('蒙版图片','maskAssetId',files,'',true,'选择蒙版图片')+'</div>' +
     '<div data-image-tint>'+field('着色颜色',input('color','type="color" value="#2867af"'))+'</div>' +
     '<div data-image-replace>'+assetField('替换图片','replacementAssetId',files,'',true,'选择替换图片')+'</div></div>' +
-    rowControls('移除处理项') + '</fieldset>';
+    '</div></details></div></div>' + rowControls('移除处理项') + '</fieldset>';
 }
 
 function imageFields(row) {
@@ -111,7 +115,19 @@ export async function imageStudio(ctx,id,assetId,navigation) {
     (batch?batchResults(batch):'')+panel('新批次',controls));
   if (!ctx.active()) return;
   const editor=document.querySelector('[data-form=image-batch]');
-  if (editor) editRows(editor,()=>imageRow(files),8,{update:imageFields});
+  if (editor) {
+    const previews = new WeakMap();
+    editRows(editor, () => imageRow(files), 8, { update(row) {
+      imageFields(row);
+      const source = row.elements.namedItem('source');
+      if (!previews.has(row)) previews.set(row, assetPreview(ctx, row.querySelector('[data-source-preview]')));
+      if (source.value !== (row.dataset.previewSource ?? '')) {
+        row.dataset.previewSource = source.value;
+        void previews.get(row)(source.value, source.selectedOptions[0]?.textContent ?? '主体原图');
+        if (!source.value) row.querySelector('[data-source-preview]').textContent = '选择主体图片后可查看原图';
+      }
+    } });
+  }
   const key=retryKey();
   ctx.submit('image-batch',async (_data,node)=>{
     const items=[...node.querySelectorAll('[data-edit-row]')].map(readJob);

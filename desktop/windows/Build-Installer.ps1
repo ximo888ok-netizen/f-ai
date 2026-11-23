@@ -57,7 +57,7 @@ foreach ($file in ($files | Sort-Object -Unique)) {
     if ($tracked -notcontains "$studio/$file") { throw "Untracked workbench file $file" }
     Copy-Item -LiteralPath (Join-Path (Join-Path $repo $studio) $file) -Destination $root
 }
-foreach ($file in @('aurora.webp','optic-wave.webp')) {
+foreach ($file in @('aurora.webp','optic-wave.webp','studio-wallpaper.webp')) {
     if ($tracked -notcontains "$studio/assets/$file") { throw "Untracked workbench image $file" }
     Copy-Item -LiteralPath (Join-Path $repo "$studio/assets/$file") -Destination (Join-Path $root 'assets')
 }

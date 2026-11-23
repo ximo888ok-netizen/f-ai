@@ -1,3 +1,5 @@
+import { downloadContent } from './live-text-delivery.js';
+import { searchable } from './live-record-tools.js';
 
 import { action, date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, select, textarea, toast, uid } from './live.js';
 
@@ -54,9 +56,9 @@ async function products(ctx) {
     });
     return;
   }
-  ctx.html(heading('商品档案') + tabs + grid(panel('商品清单', list(entries, product => item(product.name,
+  ctx.html(heading('商品档案') + tabs + grid(panel('商品清单', searchable('搜索商品名称、SKU 或分类',list(entries, product => item(product.name,
     product.sku + ' · ' + (categories.find(v => v.id === product.categoryId)?.name ?? '未分类'),
-    link('详情', 'products/edit/' + product.id)))),
+    link('详情', 'products/edit/' + product.id))))),
   ...(ctx.manager ? [panel('创建商品档案', form('new-product', productFields({}, categories), '创建商品'))] : [])));
   ctx.submit('new-product', async fields => {
     const entry = await ctx.api(productPath, { method:'POST', body:productBody(fields) });
@@ -119,14 +121,17 @@ function roi(ctx) {
   ctx.html(heading('投放收益测算', '使用你填写的成本和预计销量，由服务端计算。') +
     panel('测算参数', form('roi', fields.map(([key, label, min]) => field(label, input(key, 'required type="number" step="1" min="' + min + '"'))).join(''), '计算')) +
     '<div id="roi-result"></div>');
+  let report;
   ctx.submit('roi', async data => {
     const body = Object.fromEntries(fields.map(([key]) => [key, Number(data.get(key))]));
     const computed = await ctx.api(root + '/roi', { method:'POST', body });
     if (!ctx.active()) return;
+    report={parameters:body,result:computed};
     const money = value => new Intl.NumberFormat('zh-CN', { style:'currency', currency:'CNY' }).format(value / 100);
     document.querySelector('#roi-result').innerHTML = panel('测算结果',
       item('预计销售额', money(computed.revenueMinor)) + item('商品成本', money(computed.productCostMinor)) +
-      item('扣除成本与广告后的贡献额', money(computed.contributionMinor)) + item('销售额 / 广告费', computed.roas.toFixed(2) + ' 倍'));
+      item('扣除成本与广告后的贡献额', money(computed.contributionMinor)) + item('销售额 / 广告费', computed.roas.toFixed(2) + ' 倍')+action('导出本次测算','roi-export'));
+    document.querySelector('[data-roi-export]').onclick=()=>downloadContent('投放收益测算.json',JSON.stringify(report,null,2),'application/json');
   });
 }
 

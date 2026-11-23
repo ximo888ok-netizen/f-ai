@@ -14,7 +14,7 @@ const StudioGlass = (() => {
   const definitions = document.getElementById('glassFilters');
   const lenses = new Map();
   let layoutFrame = 0;
-  let observedGroups = [];
+  const observed = new Set();
 
   function syncMotion() {
     moving = preferred == null ? !reduced.matches : preferred === 'on';
@@ -40,29 +40,35 @@ const StudioGlass = (() => {
     motion(target,[{scale:'1 1'},{scale:'1.016 .981',offset:.18},{scale:'.992 1.009',offset:.68},{scale:'1 1'}],340);
   }
 
-  // A neutral displacement map preserves the centre. Only the rounded bevel bends the backdrop.
+  // Red and green carry edge normals; blue mixes a sharp bevel over the frosted centre.
   function applyLens(element) {
     if (!definitions) return;
     const w = element.offsetWidth, h = element.offsetHeight;
     if (!w || !h) return;
-    const radius = Math.min(parseFloat(getComputedStyle(element).borderTopLeftRadius)||0, w/2, h/2);
-    const id = 'refraction-'+w+'-'+h+'-'+Math.round(radius);
+    const css = getComputedStyle(element);
+    const blur = parseFloat(css.getPropertyValue('--glass-blur')) || 24;
+    const radius = Math.min(parseFloat(css.borderTopLeftRadius)||0, w/2, h/2);
+    const bevel = Math.max(5, Math.min(13, radius * .7));
+    const id = 'refraction-'+w+'-'+h+'-'+Math.round(radius)+'-'+blur;
     if (!lenses.has(id)) {
       const canvas = document.createElement('canvas');
       const scale=Math.min(1,400/Math.max(w,h),Math.sqrt(44000/(w*h)));
       const mw=Math.max(1,Math.round(w*scale)),mh=Math.max(1,Math.round(h*scale));
       canvas.width=mw; canvas.height=mh;
-      const ctx=canvas.getContext('2d'), map=ctx.createImageData(mw,mh);
+      const ctx=canvas.getContext('2d');
+      if (!ctx) return;
+      const map=ctx.createImageData(mw,mh);
       for(let y=0;y<mh;y++) for(let x=0;x<mw;x++) {
         const dx=(x+.5)*w/mw-w/2, dy=(y+.5)*h/mh-h/2, qx=Math.abs(dx)-w/2+radius, qy=Math.abs(dy)-h/2+radius;
         const nx=Math.max(qx,0), ny=Math.max(qy,0), length=Math.hypot(nx,ny);
         const depth=radius-length-Math.min(Math.max(qx,qy),0);
-        const bend=Math.pow(Math.max(0,1-Math.max(0,depth)/8),2);
+        const edge=Math.max(0,1-Math.max(0,depth)/bevel);
+        const bend=edge*edge;
         const normalX=length?nx/length:Number(qx>qy), normalY=length?ny/length:Number(qy>=qx);
         const i=(y*mw+x)*4;
         map.data[i]=128-118*Math.sign(dx)*normalX*bend;
         map.data[i+1]=128-118*Math.sign(dy)*normalY*bend;
-        map.data[i+2]=128; map.data[i+3]=255;
+        map.data[i+2]=255*edge*edge*(3-2*edge); map.data[i+3]=255;
       }
       ctx.putImageData(map,0,0);
       const filter=document.createElementNS(svgNS,'filter');
@@ -70,9 +76,18 @@ const StudioGlass = (() => {
       for(const [name,value] of Object.entries({filterUnits:'userSpaceOnUse',primitiveUnits:'userSpaceOnUse',x:0,y:0,width:w,height:h,'color-interpolation-filters':'sRGB'})) filter.setAttribute(name,value);
       const image=document.createElementNS(svgNS,'feImage');
       image.setAttribute('href',canvas.toDataURL());image.setAttribute('preserveAspectRatio','none');image.setAttribute('width',w);image.setAttribute('height',h);image.setAttribute('result','normal');
-      const displacement=document.createElementNS(svgNS,'feDisplacementMap');
-      for(const [name,value] of Object.entries({in:'SourceGraphic',in2:'normal',scale:17,xChannelSelector:'R',yChannelSelector:'G'})) displacement.setAttribute(name,value);
-      filter.append(image,displacement);definitions.append(filter);lenses.set(id,filter);
+      function primitive(tag, attributes) {
+        const node = document.createElementNS(svgNS, tag);
+        for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
+        return node;
+      }
+      const frost = primitive('feGaussianBlur', { in:'SourceGraphic', stdDeviation:blur, edgeMode:'duplicate', result:'frost' });
+      const displacement = primitive('feDisplacementMap', { in:'SourceGraphic', in2:'normal', scale:24, xChannelSelector:'R', yChannelSelector:'G', result:'bent' });
+      const mask = primitive('feColorMatrix', { in:'normal', type:'matrix', values:'0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 1 0 0', result:'rim' });
+      const rim = primitive('feComposite', { in:'bent', in2:'rim', operator:'in', result:'bevel' });
+      const combined = primitive('feComposite', { in:'bevel', in2:'frost', operator:'over' });
+      filter.append(image, frost, displacement, mask, rim, combined);
+      definitions.append(filter);lenses.set(id,filter);
     }
     element.style.setProperty('--edge-filter','url("#'+id+'")');
     return id;
@@ -81,8 +96,9 @@ const StudioGlass = (() => {
     const groups=[...document.querySelectorAll(segmentSelector)].filter(g=>g.querySelector(selectedSelector));
     groups.forEach(group=>group.classList.add('glass-segment'));
     const liveLenses=new Set();
-    const surfaces='.quickFloat,.node,.medium,.composerShell,.glass-segment:is(.hubTabs,.modes,.medium,.tabs,.slideTabs),.rail,.topline,.card,.deskTile,.example,.hubLink,.guideBar,.miniStats button,.quickGrid button,.toolList button,dialog[open],.editorTools,.review-guide section';
-    for(const element of (root.dataset.theme==='glass' ? document.querySelectorAll(surfaces) : [])) {
+    const surfaces='.quickFloat,.node,.medium,.composerShell,.glass-segment:is(.hubTabs,.modes,.medium,.tabs,.slideTabs),.rail,.topline,.card,.deskTile,.example,.hubLink,.guideBar,.miniStats button,.quickGrid button,.toolList button,dialog[open],.editorTools,.review-guide section,[data-optical-surface]';
+    const targets = definitions ? [...document.querySelectorAll(surfaces)].filter(element => !element.classList.contains('liquid-glass')) : [];
+    for(const element of targets) {
       liveLenses.add(applyLens(element));
     }
     for(const [id,filter] of lenses) if(!liveLenses.has(id)){filter.remove();lenses.delete(id);}
@@ -106,10 +122,9 @@ const StudioGlass = (() => {
       }
       previousThumbs.set(token,{x,y,w,name:button.textContent});
     }
-    if(groups.length!==observedGroups.length || groups.some((g,i)=>g!==observedGroups[i])){
-      observer.disconnect();observedGroups=groups;
-      groups.forEach(g=>observer.observe(g));
-    }
+    const sized = new Set([...groups, ...targets]);
+    for (const element of observed) if (!sized.has(element)) { observer.unobserve(element); observed.delete(element); }
+    for (const element of sized) if (!observed.has(element)) { observed.add(element); observer.observe(element); }
   }
   function schedule(){
     if(layoutFrame) return;

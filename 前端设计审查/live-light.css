@@ -1,0 +1,125 @@
+/* The blue and violet light belongs to the glass finish. */
+:root[data-theme] {
+  --ribbon-light: color-mix(in srgb, var(--sheen) 74%, white);
+  --ribbon-haze: color-mix(in srgb, var(--bloom) 38%, transparent);
+  --ribbon-edge: color-mix(in srgb, var(--ribbon-light) 68%, transparent);
+  --aurora-silk:
+    radial-gradient(ellipse 62% 330% at -14% -83%, transparent 87%, var(--ribbon-haze) 91%, var(--ribbon-edge) 92%, transparent 94%),
+    radial-gradient(ellipse 54% 280% at -7% -67%, transparent 91%, var(--ribbon-haze) 94%, var(--ribbon-edge) 95%, transparent 96.5%),
+    radial-gradient(ellipse 65% 260% at -12% -63%, transparent 86%, var(--ribbon-haze) 93%, transparent 96%),
+    radial-gradient(ellipse 29% 90% at 38% 0%, var(--ribbon-haze), transparent 83%);
+}
+:root[data-scheme="light"] {
+  --ribbon-haze: color-mix(in srgb, var(--bloom) 24%, transparent);
+  --ribbon-edge: color-mix(in srgb, var(--pigment) 23%, transparent);
+}
+:root[data-theme] .aurora-field {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(ellipse 52% 57% at 80% 6%, color-mix(in srgb, var(--bloom) 18%, transparent), transparent 83%),
+    radial-gradient(ellipse at 32% 0%, var(--sky, #1d182e), transparent 62%), var(--bg);
+}
+:root[data-theme] .aurora-field::before,
+:root[data-theme] .aurora-field::after { content: none; }
+
+.studio-pointer-field { display: none; }
+:root[data-theme] .studio-pointer-field {
+  display: block;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  contain: paint;
+  border-radius: inherit;
+  pointer-events: none;
+}
+:root[data-theme] .studio-light-host {
+  position: relative;
+  isolation: isolate;
+}
+.studio-light-host > .studio-pointer-field {
+  z-index: -1;
+  opacity: .55;
+}
+:is(.live-desk-stage, .live-desk-stage > .live-panel, .studio-light-surface) > .studio-pointer-field { opacity: .88; }
+.studio-pointer-field::before, .studio-pointer-field::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate3d(var(--light-x, 54vw), var(--light-y, 16vh), 0) translate(-50%, -50%);
+}
+.studio-pointer-field::before {
+  width: clamp(360px, 45vw, 680px);
+  height: clamp(270px, 35vw, 480px);
+  background: radial-gradient(ellipse at 39% 46%, #416cf435, transparent 50%),
+              radial-gradient(ellipse at 59% 54%, #7946f743, transparent 60%);
+}
+.studio-pointer-field::after {
+  width: clamp(260px, 32vw, 450px);
+  height: clamp(220px, 28vw, 370px);
+  background: radial-gradient(circle, var(--dot-ink, #b6b1ffb0) .65px, transparent 1px) center / 9px 9px;
+  mask-image: radial-gradient(ellipse, #000 5%, #0009 39%, transparent 72%);
+}
+@media (any-hover: hover) and (any-pointer: fine) and (prefers-reduced-motion: no-preference) {
+  :root[data-motion="on"] .studio-pointer-field::before { transition: transform 160ms ease-out; }
+  :root[data-motion="on"] .studio-pointer-field::after { transition: transform 75ms ease-out; }
+}
+
+:root[data-theme] .brandline > svg { color: var(--brand-ink, #bad6ff); }
+:root[data-theme] #nav .navitem[aria-current="page"] {
+  border-color: var(--nav-border, #a2a1e664);
+  box-shadow: inset 2px 0 var(--nav-edge, #a0c5ff), inset 0 1px #e2d9ff29, 0 2px 4px var(--ambient);
+}
+:root[data-theme] .live-desk-stage::before,
+:root[data-theme] .live-main:has(> .live-title:first-child)::before,
+:root[data-theme] #merchantContent:has(> .merchant-heading:first-child)::before {
+  background:
+    linear-gradient(0deg, var(--deck-base), transparent 84%),
+    var(--aurora-silk),
+    linear-gradient(118deg, var(--header-start, #23222edc), var(--header-mid, #191620d9) 65%, var(--header-end, #242033bd));
+}
+:root[data-theme] .live-desk-stage > .live-panel {
+  background:
+    var(--glass-film),
+    radial-gradient(ellipse 29% 31% at 38% 0%, var(--ribbon-haze), transparent 92%),
+    radial-gradient(ellipse 46% 32% at 78% 108%, var(--ribbon-haze), transparent),
+    linear-gradient(118deg, var(--hero-start, #282535db), var(--hero-mid, #191523db) 60%, var(--hero-end, #211d36dc));
+}
+.studio-light-surface { position: relative; isolation: isolate; }
+.studio-light-surface::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  border-radius: inherit; background: var(--aurora-silk);
+  mask-image: linear-gradient(to bottom, black, transparent 83%);
+}
+:root[data-theme] :is(.live-main, #merchantContent, .ui-dialog) .primary:not(:disabled):not(:active) {
+  background: linear-gradient(172deg, #ffffff26, transparent 43%), var(--primary);
+  box-shadow: inset 0 1px 0 #fff8, inset 0 -1px 2px var(--ribbon-edge),
+    0 3px 0 var(--front-edge), 0 5px 11px -4px var(--ribbon-haze);
+}
+:root[data-theme] :is(.live-home-title, .demo-copy) h1 {
+  color: #e4e3ff;
+  background: linear-gradient(100deg, var(--title-start, #c6eaff) 4%, var(--title-mid, #eae9ff) 52%, var(--title-end, #c5aeff) 97%);
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+:root[data-theme] .live-main .primary:not(:disabled):hover,
+:root[data-theme] #merchantContent .primary:not(:disabled):hover {
+  border-color: var(--nav-edge, #d8c9ff);
+}
+:root[data-theme] .relief-sample .relief-right {
+  background: linear-gradient(90deg, var(--slab-light, #72619b), var(--slab-mid, #302b43) 35%, var(--slab-edge, #221e30) 85%, var(--slab-rim, #8c87b8));
+}
+@media (forced-colors: active) {
+  :root[data-theme] .studio-pointer-field, .studio-light-surface::before { display: none; }
+  :root[data-theme] :is(.live-home-title, .demo-copy) h1 {
+    background: none;
+    color: CanvasText;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+@media print {
+  :root[data-theme] .studio-pointer-field { display: none; }
+}

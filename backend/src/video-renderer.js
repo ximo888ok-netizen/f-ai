@@ -171,10 +171,10 @@ export function createVideoDelivery({
         videoMap.splice(0,videoMap.length,'-filter_complex_threads','1','-filter_complex',filter,'-map','[marked]');
       }
       const hasAudio=keepAudio && Boolean(video.audio);
+      const duration=hasAudio?video.duration:(video.videoDuration || video.duration);
       await run(ffmpeg,[...base,...inputArgs,...badgeArgs,...videoMap,
         ...(hasAudio?['-map','0:a:0',...audioEncoding]:['-an']),...videoEncoding,
-        '-t',String(maxSeconds+1),...mux(mark),output],90000);
-      const duration=hasAudio?video.duration:(video.videoDuration || video.duration);
+        '-t',String(duration),...mux(mark),output],90000);
       return verify(output,{...target,duration,tolerance:Math.max(0.15,1/video.fps),videoDuration:video.videoDuration,
         audioDuration:hasAudio?video.audio.duration:undefined,hasAudio,mark});
     });

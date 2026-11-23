@@ -1,4 +1,3 @@
-
 import { randomUUID } from 'node:crypto';
 import { GeneratedFile } from './model-file.js';
 import { PendingModelJob } from './model-http.js';
@@ -8,8 +7,9 @@ import { row, rows } from './db.js';
 import { ApiError } from './http.js';
 import { ProviderError, taskProvider } from './providers.js';
 import { dispatchSchedule } from './schedules.js';
-import { finishTask, shopFingerprint } from './tasks.js';
-import { accessibleProject } from './workspace.js';
+import { capabilitySignature, finishTask, shopFingerprint } from './tasks.js';
+import { modelProviders, requireConnection, shopGrantExpired } from './merchant-connections.js';
+import { accessibleProject } from './merchant-projects.js';
 import { logTask } from './task-events.js';
 import { dispatchFeishuReply } from './feishu-channel.js';
 import { appendTaskText } from './task-stream.js';
@@ -48,12 +48,14 @@ async function claim(db) {
 }
 
 async function providerPayload(db, identityDb, task, capability, shops) {
-  const scope = await row(identityDb, 'SELECT m.role, w.kind FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.workspace_id = $1 AND m.account_id = $2', [task.workspace_id, task.account_id]);
+  const scope = await row(identityDb, 'SELECT m.role, m.state, w.kind FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.workspace_id = $1 AND m.account_id = $2', [task.workspace_id, task.account_id]);
   if (!scope) throw new ProviderError('MEMBERSHIP_REVOKED');
   const context = { ...scope, workspaceId: task.workspace_id, accountId: task.account_id };
   await accessibleProject(db, context, task.project_id, true);
-  const setting = await row(db, 'SELECT enabled FROM plugin_settings WHERE workspace_id = $1 AND plugin_id = $2', [task.workspace_id, task.plugin_id]);
-  if (setting?.enabled === false) throw new ProviderError('PLUGIN_DISABLED');
+  if (!task.feature_version) {
+    const setting = await row(db, 'SELECT enabled FROM plugin_settings WHERE workspace_id=$1 AND plugin_id=$2', [task.workspace_id, task.plugin_id]);
+    if (setting?.enabled === false) throw new ProviderError('PLUGIN_DISABLED');
+  }
   if (task.provider_id === 'local') return null;
 
   const { mode, parameters } = task.input;
@@ -63,9 +65,11 @@ async function providerPayload(db, identityDb, task, capability, shops) {
   let shopReference;
   if (shopId) {
     const shop = shops.get(shopId);
-    if (!shop || shop.workspaceId !== task.workspace_id || shop.platform !== parameters.platform || context.role === 'member' || !shop.capabilities.includes(capability.id)) {
+    if (scope.state!=='active' || !shop || shop.workspaceId !== task.workspace_id || shop.platform !== parameters.platform || context.role === 'member' || !shop.capabilities.includes(capability.id)) {
       throw new ProviderError('SHOP_PERMISSION_DENIED');
     }
+    if (shopGrantExpired(shop)) throw new ProviderError('SHOP_AUTH_EXPIRED');
+    await requireConnection(db, task.workspace_id, 'shop', shop.id);
     if (task.input.shopFingerprint !== shopFingerprint(shop)) throw new ProviderError('SHOP_BINDING_CHANGED');
     shopReference = shop.gatewayReference;
   }
@@ -95,11 +99,16 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
   if (!task) return false;
   if (task.expired) return true;
   const capability = catalog.get(task.capability_id);
-  const provider = taskProvider(providers,task.provider_id);
+  // A provider job already accepted upstream can still be polled to settle its result.
+  const available = task.provider_job_id ? providers : await modelProviders(db, task.workspace_id, providers);
+  const provider = taskProvider(available, task.provider_id);
   let result;
   let failure;
   try {
     if (!capability || !provider?.supports(capability)) throw new ProviderError('CAPABILITY_UNAVAILABLE');
+    if (task.input.capabilitySignature && task.input.capabilitySignature !== capabilitySignature(capability)) {
+      throw new ProviderError('CAPABILITY_CONFIGURATION_CHANGED');
+    }
     if (provider.signature && task.input.modelSignature !== provider.signature) throw new ProviderError('MODEL_CONFIGURATION_CHANGED');
     if (task.provider_job_id) {
       result = await provider.poll(task.provider_job_id);

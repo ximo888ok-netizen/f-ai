@@ -1,0 +1,127 @@
+@media screen {
+  :root[data-theme] {
+    --page-gutter: clamp(14px, 2.5vw, 36px);
+    --panel-gap: clamp(12px, 1.4vw, 20px);
+    --panel-padding: clamp(14px, 1.6vw, 22px);
+    --control-height: 40px;
+    --compact-height: 34px;
+    --field-height: 40px;
+    --control-radius: 11px;
+    --text-title: clamp(26px, 3vw, 40px);
+  }
+
+  :root[data-theme] .topline {
+    min-block-size: 64px;
+    block-size: auto;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--page-gutter);
+  }
+
+  :root[data-theme] .topline #crumb label { margin: 0; }
+
+  :root[data-theme] :is(.work, .merchant-layout) {
+    padding: var(--space-4) var(--page-gutter) var(--space-6);
+  }
+
+  .merchant-layout {
+    gap: var(--panel-gap);
+    max-inline-size: 1440px;
+  }
+
+  .merchant-menu { top: var(--space-4); }
+  .live-grid { gap: var(--panel-gap); }
+  .live-panel { padding: var(--panel-padding); margin-block-end: var(--panel-gap); }
+
+  .live-grid > .live-panel {
+    margin-block-end: 0;
+  }
+
+  .live-grid:has(> .live-panel) {
+    align-items: stretch;
+  }
+
+  :is(.live-title, .agent-heading) h1 {
+    margin-block: 0;
+    font-size: var(--text-title);
+    font-weight: 650;
+    line-height: 1.18;
+    letter-spacing: -.04em;
+  }
+
+  .live-title .live-muted { margin-block: var(--space-2) 0; }
+
+  .live-panel > h2 {
+    margin-block-end: var(--space-3);
+    font-size: clamp(16px, 1.35vw, 19px);
+    line-height: 1.32;
+  }
+
+  :is(.live-form, .live-fields, .topActions, .agent-bar, .merchant-filter, .merchant-actions) {
+    gap: var(--space-2);
+  }
+
+  :root[data-theme] :is(.live-form, .topline, .merchant-layout, .ui-dialog)
+      :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"]), select),
+  :root[data-theme] .live-form button {
+    min-block-size: var(--field-height);
+  }
+
+  :root[data-theme] :is(.live-table, .merchant-table, .rows) :is(th, td) {
+    padding: var(--space-3);
+    vertical-align: middle;
+  }
+
+  .agent-home .agent-composer {
+    align-self: center;
+    inline-size: min(100%, 620px);
+    padding: clamp(20px, 4vw, 36px) clamp(22px, 6vw, 56px);
+  }
+
+  .agent-home:not(.in-chat) .agent-composer {
+    min-block-size: 230px;
+    display: grid;
+    align-content: space-between;
+  }
+
+  .agent-composer > :is(textarea, .agent-bar) {
+    position: relative;
+    z-index: 1;
+  }
+
+  :root[data-theme] #main .agent-composer textarea {
+    padding-inline: 0;
+    font-size: clamp(18px, 2.4vw, 28px);
+    font-weight: 650;
+    line-height: 1.4;
+  }
+
+  .agent-composer .agent-bar { flex-wrap: wrap; }
+
+  :root[data-theme] #main .agent-composer .agent-bar :is(.agent-send, .agent-attach:not([data-attached])) {
+    display: inline-grid;
+    place-items: center;
+    inline-size: 44px;
+    min-block-size: 44px;
+    padding: 0;
+  }
+
+  .agent-composer .agent-attach:not([data-attached]) { font-size: 0; }
+  .agent-composer .agent-send svg { width: 30px; height: 30px; }
+
+  .agent-home.in-chat .agent-composer {
+    padding: var(--space-3) var(--space-6);
+  }
+
+  :root[data-theme] #main .agent-home.in-chat .agent-composer textarea {
+    font-size: var(--text-body);
+    font-weight: 450;
+  }
+
+  .agent-starters { gap: var(--space-2); }
+
+  @media (max-width: 720px) {
+    :root[data-theme] .topline { min-block-size: 56px; flex-wrap: wrap; }
+    .topActions { flex-wrap: wrap; }
+    .agent-home:not(.in-chat) .agent-composer { min-block-size: 184px; }
+  }
+}

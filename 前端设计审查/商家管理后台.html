@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <script src="/studio/themes.js"></script>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>F/AI Studio 商家后台</title>
+  <link rel="stylesheet" href="/studio/studio.css">
+  <link rel="stylesheet" href="/studio/creation.css">
+  <link rel="stylesheet" href="/studio/glass.css">
+  <link rel="stylesheet" href="/studio/themes.css">
+  <link rel="stylesheet" href="/studio/components.css">
+  <link rel="stylesheet" href="/studio/live.css">
+  <link rel="stylesheet" href="/studio/merchant.css">
+  <link rel="stylesheet" href="/studio/live-depth.css">
+  <link rel="stylesheet" href="/studio/live-spatial.css">
+  <link rel="stylesheet" href="/studio/live-light.css">
+  <link rel="stylesheet" href="/studio/liquid-glass.css">
+  <link rel="stylesheet" href="/studio/liquid-layout.css">
+  <link rel="stylesheet" href="/studio/studio-wallpaper.css">
+  <script defer src="/studio/glass.js"></script><script defer src="/studio/theme-motion.js"></script>
+  <script type="module" src="/studio/merchant.js"></script>
+</head>
+<body>
+  <div class="aurora-field" aria-hidden="true"></div>
+  <svg class="optical-defs" aria-hidden="true" focusable="false"><defs id="glassFilters"></defs></svg>
+  <a class="skip" href="#merchantContent">跳到内容</a>
+  <header class="merchant-head topline">
+    <a class="merchant-brand" href="/merchant">F/AI Studio <span>商家后台</span></a>
+    <div class="topActions">
+      <a class="plain smallbtn" href="/">返回工作台</a>
+      <button class="appearanceButton" data-theme-open aria-haspopup="dialog"><i aria-hidden="true"></i><span>冰蓝玻璃</span></button>
+    </div>
+  </header>
+  <div class="merchant-layout">
+    <aside class="card merchant-menu" hidden>
+      <label for="merchantWorkspace">企业工作区</label>
+      <select id="merchantWorkspace"></select>
+      <p id="merchantRole" class="live-muted"></p>
+      <nav id="nav" aria-label="后台导航"></nav>
+      <button class="smallbtn" id="merchantLogout" type="button">退出登录</button>
+    </aside>
+    <main id="merchantContent" tabindex="-1">
+      <p role="status">正在验证后台权限…</p>
+    </main>
+  </div>
+  <div id="merchantNotice" class="toast" role="status"></div>
+  <noscript>请启用 JavaScript 后打开商家后台。</noscript>
+  <script type="module" src="/studio/liquid-glass.js"></script>
+  <script type="module" src="/studio/studio-wallpaper.js"></script>
+</body>
+</html>

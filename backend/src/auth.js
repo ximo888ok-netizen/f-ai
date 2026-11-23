@@ -2,8 +2,7 @@
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { row, rows } from './db.js';
-import { recordMemberEvent } from './workspace-database.js';
-import { ApiError, choice, invalid, notFound, object, requireEnterprise, route, text, uuid } from './http.js';
+import { ApiError, choice, invalid, notFound, object, route, text } from './http.js';
 
 const derive = promisify(scrypt);
 const emailSchema = { ...text(254, 3), format: 'email' };
@@ -30,7 +29,7 @@ async function checkPassword(password, stored) {
 }
 
 export async function getWorkspaces(db, accountId) {
-  return rows(db, 'SELECT w.id, w.name, w.kind, m.role FROM workspaces w JOIN memberships m ON m.workspace_id = w.id WHERE m.account_id = $1 ORDER BY m.created_at, w.id', [accountId]);
+  return rows(db, 'SELECT w.id, w.name, w.kind, m.role FROM workspaces w JOIN memberships m ON m.workspace_id = w.id WHERE m.account_id = $1 AND m.state=\'active\' ORDER BY m.created_at, w.id', [accountId]);
 }
 
 async function createSession(db, account) {
@@ -62,8 +61,9 @@ export function registerAuth(app, db) {
   app.decorate('authenticateWorkspace', async request => {
     await app.authenticate(request);
     const workspaceId = request.headers['x-workspace-id'];
-    const membership = await row(db, 'SELECT m.role, w.kind FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.account_id = $1 AND m.workspace_id = $2', [request.account.id, workspaceId]);
+    const membership = await row(db, 'SELECT m.role, m.state, w.kind FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.account_id = $1 AND m.workspace_id = $2', [request.account.id, workspaceId]);
     if (!membership) throw notFound('Workspace');
+    if (membership.state !== 'active') throw new ApiError(403, 'MEMBER_SUSPENDED', 'Workspace membership is suspended');
     request.context = { workspaceId, accountId: request.account.id, ...membership };
   });
 
@@ -114,60 +114,4 @@ export function registerAuth(app, db) {
       reply.code(204).send();
     });
 
-  route(app, 'GET', '/v1/members', { manager: true, database: 'identity', tags, summary: 'List workspace members' }, async request => {
-    requireEnterprise(request);
-    return { items: await rows(db, 'SELECT a.id, a.email, a.display_name AS "displayName", m.role FROM memberships m JOIN accounts a ON a.id = m.account_id WHERE m.workspace_id = $1 ORDER BY m.created_at, a.id', [request.context.workspaceId]) };
-  });
-
-  route(app, 'POST', '/v1/invitations', {
-    manager: true, database: 'identity', tags, summary: 'Create a one-time invitation for a specific email',
-    body: object({ email: emailSchema, role: choice('admin', 'member') }),
-  }, async (request, reply) => {
-    requireEnterprise(request);
-    const { workspaceId } = request.context;
-    const { role } = request.body;
-    if (role === 'admin' && request.context.role !== 'owner') throw new ApiError(403, 'FORBIDDEN', 'Only owners may invite administrators');
-    const email = normalizeEmail(request.body.email);
-    const token = secret();
-    const expiresAt = new Date(Date.now() + 48 * 3600 * 1000);
-    await db.query('INSERT INTO invitations (token_hash, workspace_id, email, role, expires_at) VALUES ($1, $2, $3, $4, $5)', [digest(token), workspaceId, email, role, expiresAt]);
-    reply.code(201);
-    return { token, expiresAt };
-  });
-
-  route(app, 'POST', '/v1/invitations/accept', {
-    tenant: false, tags, summary: 'Accept an invitation using the invited account',
-    body: object({ token: { ...text(43, 43), pattern: '^[A-Za-z0-9_-]+$' } }),
-  }, async request => db.transaction(async connection => {
-    const tokenHash = digest(request.body.token);
-    const invitation = await row(connection, 'SELECT workspace_id, role FROM invitations WHERE token_hash = $1 AND email = $2 AND accepted_at IS NULL AND expires_at > now() FOR UPDATE', [tokenHash, request.account.email]);
-    if (!invitation) throw notFound('Invitation');
-    const workspaceId = invitation.workspace_id;
-    const membership = await row(connection, 'INSERT INTO memberships (workspace_id, account_id, role) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, account_id) DO NOTHING RETURNING role', [workspaceId, request.account.id, invitation.role]);
-    await connection.query(`INSERT INTO wallets(workspace_id,account_id)
-      SELECT $1,$2 WHERE NOT EXISTS (SELECT 1 FROM workspace_database_routes WHERE workspace_id=$1)
-      ON CONFLICT (workspace_id,account_id) DO NOTHING`,[workspaceId,request.account.id]);
-    await connection.query('UPDATE invitations SET accepted_at = now() WHERE token_hash = $1', [tokenHash]);
-    if (membership) await recordMemberEvent(connection,workspaceId,request.account.id,'member.joined','member:join:' + workspaceId,{role:membership.role});
-    return { workspaceId, workspaces: await getWorkspaces(connection, request.account.id) };
-  }));
-
-  route(app, 'PATCH', '/v1/members/:id', {
-    manager: true, database: 'identity', tags, summary: 'Change an enterprise member role',
-    params: object({ id: uuid }), body: object({ role: choice('admin', 'member') }),
-  }, async request => {
-    requireEnterprise(request);
-    if (request.context.role !== 'owner') throw new ApiError(403, 'FORBIDDEN', 'Workspace owner required');
-    const {workspaceId} = request.context;
-    const {role} = request.body;
-    return db.transaction(async tx => {
-      const key = [workspaceId,request.params.id];
-      const member = await row(tx, "SELECT account_id AS id,role FROM memberships WHERE workspace_id=$1 AND account_id=$2 AND role<>'owner' FOR UPDATE", key);
-      if (!member) throw notFound('Editable member');
-      if (member.role === role) return member;
-      await tx.query('UPDATE memberships SET role=$3 WHERE workspace_id=$1 AND account_id=$2', [...key,role]);
-      await recordMemberEvent(tx,workspaceId,member.id,'member.role-changed','member:role:' + randomUUID(),{previousRole:member.role,role});
-      return {id:member.id,role};
-    });
-  });
 }

@@ -1,0 +1,266 @@
+@media screen {
+  @media (min-width: 1001px) {
+    .app-shell {
+      grid-template-columns: clamp(228px, 18.6vw, 272px) minmax(0, 1fr);
+    }
+
+    .app-shell .rail { padding: 18px 14px 12px; }
+  }
+
+  .app-shell .rail .live-shortcuts { gap: 5px; }
+  .app-shell .rail .workspace-new {
+    min-height: 38px;
+    justify-content: flex-start;
+    margin-bottom: 5px;
+    background: var(--liquid-tint-strong);
+    border-color: var(--line-strong);
+  }
+
+  .railFoot { min-width: 0; }
+  .railFoot #profile {
+    width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: start;
+  }
+
+  .agent-home { width: min(100%, 800px); }
+  .agent-home:not(.in-chat) {
+    min-height: 0;
+    padding-block-start: clamp(24px, 6vh, 68px);
+  }
+
+  .agent-home:not(.in-chat) .agent-heading {
+    gap: 11px;
+    margin-block-end: 23px;
+  }
+
+  .agent-home .agent-starters {
+    margin: 0 0 12px;
+    justify-content: center;
+  }
+
+  :root[data-theme] #main .agent-home .agent-composer {
+    inline-size: 100%;
+    padding: 12px clamp(14px, 3vw, 26px) 9px;
+    border-radius: 27px;
+  }
+
+  .agent-home:not(.in-chat) .agent-composer {
+    min-block-size: 176px;
+    align-content: stretch;
+    grid-template-rows: minmax(66px, 1fr) auto auto;
+    gap: 5px;
+  }
+
+  .agent-home.in-chat .agent-composer { display: grid; gap: 5px; }
+
+  :root[data-theme] #main .agent-composer textarea {
+    min-block-size: 54px;
+    padding: 8px 0;
+    font-size: 16px;
+    font-weight: 500;
+  }
+
+  .agent-composer > :is(.agent-bar, .composer-scope) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .agent-bar-end {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    margin-inline-start: auto;
+  }
+
+  .agent-composer .composer-add {
+    min-inline-size: 36px;
+    padding-inline: 0;
+    font-size: 21px;
+  }
+
+  :root[data-theme] #main .agent-composer .agent-send {
+    inline-size: 36px;
+    min-inline-size: 36px;
+    block-size: 36px;
+    min-block-size: 36px;
+  }
+
+  .agent-composer .agent-send svg { width: 22px; height: 22px; }
+  .agent-composer .composer-model {
+    max-inline-size: min(36vw, 230px);
+    overflow-wrap: anywhere;
+  }
+
+  .agent-composer .agent-attach { font-size: var(--text-label); }
+  .composer-scope {
+    justify-content: space-between;
+    border-block-start: 1px solid var(--line);
+    padding-block-start: 5px;
+    color: var(--sub);
+    font-size: var(--text-label);
+  }
+
+  .composer-scope > span {
+    min-inline-size: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .composer-scope > button { flex-shrink: 0; }
+
+  .studio-popover {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    width: min(300px, calc(100vw - 24px));
+    padding: 9px;
+    border: 1px solid var(--line-strong);
+    border-radius: 17px;
+    color: var(--ink);
+    background: light-dark(rgb(235 245 252 / .82), rgb(13 27 43 / .75));
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+    box-shadow: var(--liquid-rim), var(--liquid-shadow);
+    overflow: auto;
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
+  }
+
+  .studio-popover:not([data-positioned]) { visibility: hidden; }
+  .studio-popover .popover-heading { padding: 7px 9px 9px; }
+  .popover-heading strong, .popover-heading span { display: block; }
+  .popover-heading span { font-size: var(--text-label); color: var(--sub); }
+  .studio-popover p { margin: 0; padding: 0 9px 8px; color: var(--sub); }
+
+  :root[data-theme] .app-shell :is(#account-menu, .studio-popover) :is(a, button) {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 34px;
+    padding: 5px 9px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    color: var(--ink);
+    background: transparent;
+    box-shadow: none;
+    text-align: start;
+    text-decoration: none;
+  }
+
+  :root[data-theme] .app-shell :is(#account-menu, .studio-popover) :is(a:hover, button:hover, button[aria-pressed="true"]) {
+    border-color: var(--line);
+    background: var(--liquid-tint-strong);
+  }
+
+  .account-menu .account-balance { margin-block-end: 5px; font-weight: 650; }
+
+  .studio-directory > .live-title,
+  .studio-data .live-title { margin-block-end: var(--space-4); }
+
+  .directory-toolbar,
+  .directory-toolbar > :is(nav, div) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .directory-toolbar { justify-content: space-between; margin-block-end: 15px; }
+  :root[data-theme] #main .directory-toolbar input {
+    width: clamp(138px, 16vw, 235px);
+    max-inline-size: 100%;
+  }
+  :root[data-theme] #main :is(.directory-toolbar, .data-rail) a[aria-current="page"] {
+    border-color: var(--line-strong);
+    background: var(--liquid-tint-strong);
+    font-weight: 650;
+  }
+
+  .directory-grid {
+    --directory-columns: 3;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--panel-gap);
+  }
+
+  :root[data-theme] .work a.directory-card {
+    flex: 0 0 calc((100% - var(--panel-gap) * (var(--directory-columns) - 1)) / var(--directory-columns));
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 12px;
+    min-height: 116px;
+    padding: 17px 15px;
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .directory-card h2 { margin: 0 0 4px; font-size: 16px; line-height: 1.25; overflow-wrap: anywhere; }
+  .directory-card p { margin: 0 0 5px; font-size: 13px; }
+  .directory-card small { color: var(--sub); }
+  .directory-card:hover { outline: 1px solid var(--line-strong); }
+  .directory-icon {
+    display: grid;
+    place-items: center;
+    width: 37px;
+    height: 37px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    font-weight: 650;
+    color: var(--accent);
+  }
+
+  .studio-data {
+    display: grid;
+    grid-template-columns: clamp(188px, 17vw, 240px) minmax(0, 1fr);
+    gap: var(--panel-gap);
+  }
+
+  .data-rail, .data-records { padding: var(--panel-padding); }
+  .data-rail { position: static; height: auto; align-self: start; }
+  .data-rail h2 { margin: 0 0 10px; font-size: 18px; }
+  .data-rail nav { display: grid; gap: 7px; }
+  .data-rail hr { width: 100%; border: 0; border-top: 1px solid var(--line); }
+  .data-main { min-width: 0; }
+  .data-record {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+    padding: 11px 1px;
+    color: var(--ink);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+
+  .data-record + .data-record { border-block-start: 1px solid var(--line); }
+  .data-record :is(span, time) { color: var(--sub); font-size: var(--text-label); }
+  .data-record:hover strong { text-decoration: underline; }
+
+  @media (max-width: 1050px) {
+    .directory-grid { --directory-columns: 2; }
+  }
+
+  @media (max-width: 720px) {
+    .app-shell .rail .railFoot { display: block !important; max-width: 26vw; }
+    .app-shell .rail .railFoot #profile { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .agent-home:not(.in-chat) { padding-block-start: 24px; }
+    .agent-bar .agent-attach { max-width: 42%; }
+    .studio-data { grid-template-columns: minmax(0, 1fr); }
+    .data-rail nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .data-rail hr { grid-column: 1 / -1; }
+    .data-record { grid-template-columns: minmax(0, 1fr) auto; }
+    .data-record time { grid-column: 1 / -1; }
+  }
+
+  @media (max-width: 520px) {
+    .directory-grid { --directory-columns: 1; }
+  }
+}

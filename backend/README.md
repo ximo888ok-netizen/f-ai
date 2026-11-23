@@ -47,6 +47,14 @@ npm start
 
 模型能力和店铺操作的可用性以运行环境中的配置为准。通用任务接口可以展示实际返回的文件、文本和服务结果。「分层设计」支持工作台自行组合素材并导出 PSD。模型直接生成 PSD、视频编辑与数字人需要对应的处理服务。订阅支付和代理佣金仍待接入。自有 WebDAV 和飞书可在部署方授权配置后使用。Windows 工作台的安装方式见[桌面安装说明](../desktop/windows/README.md)。
 
+## 商家后台
+
+访问 `/merchant` 打开商家后台。企业所有者和管理员也可从工作台顶栏进入。后台提供成员邀请与停用、项目授权、插件开放范围、接入状态和管理操作记录。邀请链接交给指定邮箱的使用者，登录后在普通工作台接受。
+
+功能策略默认使用当前部署的内置版本。部署方可通过 `FAI_FEATURE_RELEASES_JSON` 发布基于现有能力的版本清单。每项填写 `pluginId`、`version`、`notes` 和 `capabilities`。能力 ID 取自当前 OpenAPI 和插件目录。商家可选择已发布版本，向全企业开放或定向试用。受理任务保存功能版本、能力契约摘要和已有执行配置标识。部署新运行代码前，应让依赖旧契约的任务完成。
+
+接入页管理部署方已配置的模型别名、店铺、飞书和 WebDAV。凭据与目标地址继续使用现有部署配置，后台按企业保存启用状态。飞书与 WebDAV 提供只读检查，重新连接需要 15 分钟内成功的检查。模型与店铺显示配置和启用状态，实际服务验收使用有权限的测试环境。店铺写入仍经预览和人工确认。
+
 ## 本机试用
 
 在 Windows 或其他系统的 Node.js 24 环境中，从 backend 目录运行 `npm ci` 和 `npm run studio:demo`。打开 `http://127.0.0.1:8080` 后注册测试账号，即可创建草稿和台账。试用进程使用内存数据库并自动应用迁移，关闭后本次试用数据会清空。需要保留数据时，按上面的 PostgreSQL 启动步骤配置数据库。
@@ -197,7 +205,7 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 
 GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维显式启用的能力会向配置中的 HTTPS 网关发请求。网关接收 capabilityId、mode、parameters 和必要的素材，响应为 {"result": {...}}。请求头带以任务 ID 为值的 Idempotency-Key。网关需对该键做去重，在写入结果不明时先查询平台状态，避免因超时重试重复上架。API 不把账号资料、知识库、供应商密钥或平台日志放进任务网关请求。联调只使用获准外发的素材和文本。
 
-店铺绑定由部署方维护。SHOP_BINDINGS_JSON 接受一个包含 id、workspaceId、name、platform、gatewayReference 和 capabilities 的数组。id 和 workspaceId 是 UUID，platform 为 taobao、pinduoduo 或 douyin。gatewayReference 是网关侧店铺标识，业务端不能修改或读取。发布及批量维护先提交店铺和参数换取有效期 5 分钟的 confirmationId，再用相同参数提交任务。后端在执行前复核角色、绑定目标及店铺能力。
+店铺绑定由部署方维护。SHOP_BINDINGS_JSON 接受一个包含 id、workspaceId、name、platform、gatewayReference 和 capabilities 的数组。id 和 workspaceId 是 UUID，platform 为 taobao、pinduoduo 或 douyin。可选 authorizedUntil 为带时区的 ISO 到期时间。到期后列表撤去可执行能力，提交与执行前都再次核对。gatewayReference 是网关侧店铺标识，业务端不能修改或读取。发布及批量维护先提交店铺和参数换取有效期 5 分钟的 confirmationId，再用相同参数提交任务。后端在执行前复核角色、绑定目标及店铺能力。
 
 ## AI 产物导出标识
 

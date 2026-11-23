@@ -1,0 +1,234 @@
+/* A CSS display stand. Width, height and depth describe each solid in the same units. */
+.live-draft-photo.spatial-ready {
+  container-type: size;
+  position: relative;
+  perspective: 740px;
+  perspective-origin: 50% 44%;
+  height: clamp(190px, 19vw, 282px);
+  max-width: none;
+  overflow: visible;
+}
+.relief-world {
+  --unit: min(1cqw, 1.55cqh);
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(calc(-14deg + var(--pointer-pitch, 0deg)))
+             rotateY(calc(-27deg + var(--view-turn, 0deg) + var(--pointer-turn, 0deg)));
+}
+.relief-solid, .relief-floor {
+  position: absolute;
+  left: 50%;
+  top: 49%;
+  width: var(--width);
+  height: var(--height);
+  margin-left: calc(var(--width) / -2);
+  margin-top: calc(var(--height) / -2);
+}
+.relief-solid {
+  transform-style: preserve-3d;
+  transform: translateY(var(--offset));
+}
+.relief-face {
+  box-sizing: border-box;
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border: 1px solid var(--lit-edge);
+}
+.relief-sample {
+  --width: calc(69 * var(--unit));
+  --height: calc(43 * var(--unit));
+  --thickness: calc(7 * var(--unit));
+  --offset: calc(-5 * var(--unit));
+}
+.relief-pedestal {
+  --width: calc(86 * var(--unit));
+  --height: calc(7 * var(--unit));
+  --thickness: calc(32 * var(--unit));
+  --offset: calc(20 * var(--unit));
+}
+.relief-front {
+  transform: translateZ(calc(var(--thickness) / 2));
+  background: linear-gradient(160deg, var(--front-face), var(--deck-base));
+}
+.relief-back {
+  transform: translateZ(calc(var(--thickness) / -2)) rotateY(180deg);
+  background: var(--front-edge);
+}
+.relief-right, .relief-left {
+  width: var(--thickness);
+  transform-origin: left center;
+}
+.relief-right {
+  left: 100%;
+  transform: translateZ(calc(var(--thickness) / 2)) rotateY(90deg);
+  background: linear-gradient(105deg, var(--front-edge), var(--deck-base));
+}
+.relief-left {
+  transform: translateZ(calc(var(--thickness) / -2)) rotateY(-90deg);
+  background: linear-gradient(90deg, var(--deck-light), var(--front-face));
+}
+.relief-top, .relief-bottom {
+  height: var(--thickness);
+  transform-origin: center top;
+}
+.relief-top {
+  transform: translateZ(calc(var(--thickness) / -2)) rotateX(90deg);
+  background: linear-gradient(128deg,
+    color-mix(in srgb, var(--feature-light) 57%, var(--front-face)), var(--deck-light));
+}
+.relief-bottom {
+  top: 100%;
+  transform: translateZ(calc(var(--thickness) / 2)) rotateX(-90deg);
+  background: var(--deck-base);
+}
+.relief-sample .relief-front {
+  padding: clamp(3px, 1.2cqw, 7px);
+  background: linear-gradient(133deg,
+    color-mix(in srgb, var(--surface-light) 72%, var(--front-face)),
+    var(--deck-light) 62%, var(--feature-light));
+}
+.relief-sample .relief-right {
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--feature-light) 50%, var(--front-edge)),
+    var(--deck-light) 32%, var(--front-edge) 85%, var(--lit-edge));
+}
+.live-draft-photo.spatial-ready img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  border: 0;
+  border-radius: 0;
+  background: var(--paper);
+  box-shadow: 0 0 0 1px var(--front-edge);
+}
+.relief-pedestal .relief-front {
+  background: linear-gradient(95deg, var(--deck-light), var(--front-face) 47%, var(--front-edge));
+  box-shadow: inset 0 2px 0 var(--lit-edge), inset 0 -2px 0 var(--contact);
+}
+.relief-pedestal .relief-top {
+  /* The upright sample occludes a strip of the top face at its contact point. */
+  background:
+    radial-gradient(ellipse at 50% 51%, var(--surface-shadow) 0 36%, transparent 69%),
+    linear-gradient(128deg, color-mix(in srgb, var(--feature-light) 70%, var(--front-face)), var(--deck-light));
+}
+.relief-floor {
+  --width: calc(108 * var(--unit));
+  --height: calc(69 * var(--unit));
+  pointer-events: none;
+  transform: translate3d(calc(3 * var(--unit)), calc(24 * var(--unit)), 0) rotateX(90deg);
+  background: radial-gradient(ellipse at center, var(--surface-shadow) 0 26%, var(--contact) 58%, transparent 75%);
+}
+.live-draft-photo[data-empty-display] { height: clamp(112px, 12vw, 160px); }
+[data-empty-display] .relief-pedestal { --offset: 0px; }
+[data-empty-display] .relief-pedestal .relief-top {
+  background: linear-gradient(130deg, var(--feature-light), var(--deck-light));
+}
+[data-empty-display] .relief-floor {
+  transform: translateY(calc(4 * var(--unit))) rotateX(90deg);
+}
+
+/* Front-facing working surfaces retain a straight reading plane and two exposed edges. */
+:where(.live-main, #merchantContent, .live-grid, .live-desk-stage, .live-desk-lower) > .card.live-panel:not(details) {
+  --wall: 5px;
+  overflow: visible;
+  position: relative;
+}
+.live-image-layout > .live-fields,
+.merchant-feature-row[open] > form {
+  --wall: 9px;
+  position: relative;
+  overflow: visible;
+  border-radius: var(--control-radius);
+}
+:where(.live-main, #merchantContent, .live-grid, .live-desk-stage, .live-desk-lower) > .card.live-panel:not(details)::before,
+.live-image-layout > .live-fields::before,
+.merchant-feature-row[open] > form::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  left: 100%;
+  top: 5px;
+  width: var(--wall);
+  height: calc(100% - 5px);
+  background: linear-gradient(to right, var(--front-edge), var(--deck-base));
+  clip-path: polygon(0 0, 100% var(--wall), 100% 100%, 0 calc(100% - 3px));
+}
+:where(.live-main, #merchantContent, .live-grid, .live-desk-stage, .live-desk-lower) > .card.live-panel:not(details)::after,
+.live-image-layout > .live-fields::after,
+.merchant-feature-row[open] > form::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  top: 100%;
+  left: 5px;
+  width: calc(100% + var(--wall) - 5px);
+  height: var(--wall);
+  background: linear-gradient(90deg, var(--front-edge), var(--deck-base));
+  clip-path: polygon(0 0, calc(100% - var(--wall)) 0, 100% 100%, var(--wall) 100%);
+}
+.live-image-layout > .live-fields { margin-right: 10px; }
+.merchant-feature-row[open] > form {
+  box-sizing: border-box;
+  margin: 12px 20px 22px 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-top-color: var(--lit-edge);
+  background: var(--surface);
+  box-shadow: var(--feature-lift);
+}
+:root[data-theme] .live-main .primary,
+:root[data-theme] #merchantContent .primary,
+:root[data-theme] .ui-dialog .primary {
+  box-shadow: inset 0 1px 0 #fff8, 0 3px 0 var(--front-edge), 0 6px 8px var(--contact);
+}
+:root[data-theme] :is(.live-main, #merchantContent, .ui-dialog) .primary:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: var(--recess);
+}
+
+@media(min-width:721px) {
+  .live-desk-stage .live-panel:has(.spatial-ready) {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 49%);
+  }
+  .live-draft-photo.spatial-ready { margin-block: -42px -18px; }
+}
+@media(max-width:720px) {
+  :where(.live-main, #merchantContent, .live-grid, .live-desk-stage, .live-desk-lower) > .card.live-panel:not(details) { --wall: 3px; }
+  .live-panel:has(.spatial-ready) > .live-resume {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .live-draft-photo.spatial-ready {
+    grid-row: 1;
+    width: 100%;
+    max-width: none;
+    height: clamp(150px, 42vw, 205px);
+    margin: -14px 0 2px;
+  }
+  .live-image-layout > .live-fields,
+  .merchant-feature-row[open] > form { --wall: 5px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-motion="on"] .relief-world { transition: transform 140ms ease-out; }
+}
+:root[data-motion="off"] .relief-world { --pointer-turn: 0deg; --pointer-pitch: 0deg; transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .relief-world { --pointer-turn: 0deg; --pointer-pitch: 0deg; }
+}
+@media (forced-colors: active) {
+  :where(.live-main, #merchantContent, .live-grid, .live-desk-stage, .live-desk-lower) > .card.live-panel:not(details)::before,
+  :where(.live-main, #merchantContent, .live-grid, .live-desk-stage, .live-desk-lower) > .card.live-panel:not(details)::after { display: none; }
+  .relief-world, .relief-sample, .relief-front { transform: none; }
+  .relief-floor, .relief-pedestal, .relief-sample .relief-face:not(.relief-front) { display: none; }
+  .relief-sample .relief-front { border: 1px solid CanvasText; background: Canvas; }
+  .live-image-layout > .live-fields::before, .live-image-layout > .live-fields::after,
+  .merchant-feature-row[open] > form::before, .merchant-feature-row[open] > form::after { display: none; }
+}

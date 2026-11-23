@@ -1,0 +1,50 @@
+@media screen and (forced-colors: none) {
+  :root[data-theme] {
+    --studio-wallpaper-image: url("assets/studio-wallpaper.webp");
+    --studio-wallpaper-scrim: linear-gradient(#111d2d36, #0815256b);
+  }
+
+  :root[data-theme][data-scheme="light"] {
+    --studio-wallpaper-scrim: linear-gradient(#f5faffb3, #eef5fbc0);
+  }
+
+  :root[data-theme] .aurora-field {
+    background: var(--studio-wallpaper-scrim), var(--studio-wallpaper-image) center / cover no-repeat, var(--bg);
+  }
+}
+
+#themeDialog .studio-wallpaper-settings {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+  min-width: 0;
+}
+
+.studio-wallpaper-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.studio-wallpaper-preview {
+  flex: 0 0 clamp(54px, 15vw, 90px);
+  aspect-ratio: 16 / 10;
+  border-radius: var(--control-radius);
+  border: 1px solid var(--line-strong);
+  background: var(--studio-wallpaper-image, none) center / cover no-repeat;
+}
+
+.studio-wallpaper-options {
+  min-width: 0;
+}
+
+.studio-wallpaper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.studio-wallpaper-options p {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}

@@ -41,12 +41,38 @@ test('Studio entry only serves real app code and current theme components', asyn
   assert.equal(entry.statusCode, 200);
   assert.match(entry.body, /\/studio\/live\.js/);
   assert.match(entry.body, /\/studio\/components\.css/);
+  assert.match(entry.body, /\/studio\/workbench-layout\.css/);
   assert.doesNotMatch(entry.body, /src="studio\.js"/);
   assert.match(entry.headers['content-security-policy'], /connect-src 'self'/);
+  const merchant = await send('GET', '/merchant');
+  assert.equal(merchant.statusCode, 200);
+  for (const { body } of [entry, merchant]) {
+    assert.match(body, /href="\/studio\/liquid-glass\.css"/);
+    assert.match(body, /href="\/studio\/liquid-layout\.css"/);
+    assert.match(body, /type="module" src="\/studio\/liquid-glass\.js"/);
+    assert.match(body, /href="\/studio\/studio-wallpaper\.css"/);
+    assert.match(body, /type="module" src="\/studio\/studio-wallpaper\.js"/);
+  }
+  for (const [file, contentType] of [
+    ['liquid-glass.css', 'text/css; charset=utf-8'],
+    ['liquid-layout.css', 'text/css; charset=utf-8'],
+    ['workbench-layout.css', 'text/css; charset=utf-8'],
+    ['liquid-glass.js', 'text/javascript; charset=utf-8'],
+    ['studio-wallpaper.css', 'text/css; charset=utf-8'],
+    ['studio-wallpaper.js', 'text/javascript; charset=utf-8'],
+    ['assets/studio-wallpaper.webp', 'image/webp'],
+  ]) {
+    const asset = await send('GET', '/studio/' + file);
+    assert.equal(asset.statusCode, 200, file);
+    assert.equal(asset.headers['content-type'], contentType);
+  }
   for (const file of ['live.js', 'live-tasks.js', 'live-workspace.js', 'live-products.js', 'live-drafts.js',
+    'live-popover.js', 'live-account-menu.js', 'live-capability-center.js', 'live-data-center.js', 'live-agent-controls.js',
     'live-operations.js', 'operations-file.js', 'live-customer.js', 'live-skills.js', 'live-copy-review.js',
     'live-rights.js', 'live-files.js', 'live-media.js', 'live-media-controls.js', 'live-image-studio.js',
-    'live-storyboards.js', 'components.css', 'assets/aurora.webp']) {
+    'live-storyboards.js', 'live-agent-home.js', 'live-agent-dialogue.js', 'live-agent-tools.js',
+    'live-agent-model.js', 'live-agent.css', 'live-settings.js', 'live-knowledge-tools.js', 'live-experts.js',
+    'live-task-edit.js', 'live-task-intake.js', 'merchant-credit-limit.js', 'live-record-tools.js', 'live-commerce-report.js', 'live-copy-suggestions.js', 'live-nav-search.js', 'components.css', 'assets/aurora.webp']) {
     assert.equal((await send('GET', '/studio/' + file)).statusCode, 200, file);
   }
   assert.equal((await send('GET', '/studio/studio.js')).statusCode, 404);
@@ -313,6 +339,11 @@ test('server settings save favorites and theme and suppress task notifications w
   const preferences = { studioTheme: 'jade', studioMotion: 'off', favoriteCapabilities: ['copywriting.detect-terms'], taskNotifications: false };
   assert.deepEqual(data(await send('PATCH', '/v1/settings', owner, preferences), 200).preferences, preferences);
   assert.deepEqual(data(await send('GET', '/v1/settings', other), 200).preferences, {});
+  for (const studioTheme of ['tide', 'rose', 'amber']) {
+    const next = { studioTheme, theme: 'system' };
+    assert.deepEqual(data(await send('PATCH', '/v1/settings', owner, next), 200).preferences, { ...preferences, ...next });
+  }
+  assert.equal(data(await send('GET', '/v1/settings', owner), 200).preferences.theme, 'system');
   await provisionCredits(db, owner.workspaces[0].id, owner.account.id, 4, 'studio-prefs-test');
   const task = data(await send('POST', '/v1/tasks', owner, {
     capabilityId: 'copywriting.detect-terms', mode: 'workflow', parameters: { content: '100%' }, idempotencyKey: 'studio-prefs-test',
@@ -321,4 +352,23 @@ test('server settings save favorites and theme and suppress task notifications w
   assert.equal(data(await send('GET', '/v1/tasks/' + task.id, owner), 200).state, 'succeeded');
   const notifications = data(await send('GET', '/v1/notifications', owner), 200);
   assert.deepEqual(notifications, { items: [], unread: 0 });
+});
+
+test('editable task inputs stay owner scoped and revised submissions link to the finished original', async () => {
+  await provisionCredits(db,owner.workspaces[0].id,owner.account.id,10,'editable-task-check');
+  const request={capabilityId:'copywriting.detect-terms',mode:'workflow',parameters:{content:'原稿 100%'},idempotencyKey:'nav-original-task'};
+  const original=data(await send('POST','/v1/tasks',owner,request),202);
+  const endpoint='/v1/tasks/'+original.id+'/inputs';
+  data(await send('GET',endpoint,other),404);
+  const revised={...request,parameters:{content:'更新后的描述'},parentId:original.id,idempotencyKey:'nav-revised-task'};
+  data(await send('POST','/v1/tasks',owner,revised),400);
+  await workOnce({db,providers,shops});
+  const inputs=data(await send('GET',endpoint,owner),200);
+  assert.deepEqual(inputs.parameters,request.parameters);
+  assert.deepEqual(Object.keys(inputs).sort(),['capabilityId','mode','modelId','parameters','projectId']);
+  data(await send('POST','/v1/tasks',other,revised),404);
+  const child=data(await send('POST','/v1/tasks',owner,revised),202);
+  assert.equal(child.parentId,original.id);
+  assert.equal(data(await send('POST','/v1/tasks',owner,revised),200).id,child.id);
+  assert.equal(data(await send('GET',endpoint,owner),200).parameters.content,request.parameters.content);
 });

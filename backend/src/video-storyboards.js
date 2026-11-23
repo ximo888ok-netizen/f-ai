@@ -67,7 +67,7 @@ export function registerStoryboards(app,db,renderer) {
       [request.context.workspaceId,request.context.accountId,...paginate(request.query)]),
   }));
   route(app,'GET',root+'/:id',{tags,params,summary:'Read an editable video storyboard'},request=>load(db,keyOf(request)));
-  route(app,'PUT',root+'/:id',{tags,params,body,summary:'Save an editable storyboard at the requested revision'},async request=>{
+  route(app,'PUT',root+'/:id',{ feature: 'video.storyboard',tags,params,body,summary:'Save an editable storyboard at the requested revision'},async request=>{
     const key=keyOf(request);
     const title=request.body.title.trim();
     if (!title) throw invalid('Enter a storyboard title');
@@ -103,7 +103,7 @@ export function registerStoryboards(app,db,renderer) {
       position:index,durationMs,prompt:prompt || [templates[template],caption].filter(Boolean).join(' '),
     }))};
   });
-  route(app,'POST',root+'/:id/export',{tags,params,summary:'Render a saved sequence of images and optional audio to MP4',
+  route(app,'POST',root+'/:id/export',{ feature: 'video.export',tags,params,summary:'Render a saved sequence of images and optional audio to MP4',
     body:object({revision:integer(1,2147483646)}),produces:['video/mp4']},async (request,reply)=>{
     const key=keyOf(request);
     const saved=await load(db,key);

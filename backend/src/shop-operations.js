@@ -116,7 +116,7 @@ function registerRecords(app, db, kind, form) {
     if (!result) throw notFound('Record');
     return result;
   });
-  route(app, 'PUT', url, { ...options, params, summary: 'Create or edit local ' + kind,
+  route(app, 'PUT', url, { ...options, feature: 'operations', params, summary: 'Create or edit local ' + kind,
     body: object({ ...values, revision }), response: { 200: record } }, async request => {
     const book = await requireBook(db, request);
     const input = clean(request.body, kind);
@@ -125,7 +125,7 @@ function registerRecords(app, db, kind, form) {
       return (await saveRecord(tx, book, kind, input, request.body.revision)).record;
     });
   });
-  route(app, 'POST', url + '/import', { ...options, params, summary: 'Atomically import local ' + kind,
+  route(app, 'POST', url + '/import', { ...options, feature: 'operations', params, summary: 'Atomically import local ' + kind,
     body: object({ items: array(object(values), 500, 1) }), response: { 200: object({ inserted: integer(0,500), unchanged: integer(0,500) }) } }, async request => {
     const book = await requireBook(db, request);
     const inputs = request.body.items.map(i => clean(i, kind));
@@ -181,11 +181,11 @@ async function draftImportPreview(db, context, book, payload, lock = false) {
 
 function registerInventoryDraftImport(app, db) {
   const url = root + '/books/:book/records/inventory/draft-import';
-  route(app, 'POST', url + '/preview', { ...options, params, summary: 'Preview saved draft variants without writing inventory',
+  route(app, 'POST', url + '/preview', { ...options, feature: 'operations', params, summary: 'Preview saved draft variants without writing inventory',
     body: object(draftImportFields), response: { 200: object({ previewId, title: text(200), category: text(200,0),
       day, threshold: draftImportFields.threshold, items: array(draftImportRow,50,1), ready: {type:'boolean'} }) } },
   async request => draftImportPreview(db, request.context, await requireBook(db, request), request.body));
-  route(app, 'POST', url + '/confirm', { ...options, params, summary: 'Confirm unchanged draft preview and insert the whole batch',
+  route(app, 'POST', url + '/confirm', { ...options, feature: 'operations', params, summary: 'Confirm unchanged draft preview and insert the whole batch',
     body: object({ ...draftImportFields, previewId }), response: { 200: object({ inserted: integer(1,50) }) } },
   request => db.transaction(async tx => {
     const book = await requireBook(tx, request, true);
@@ -219,7 +219,7 @@ export function registerShopOperations(app, db) {
     items: await rows(db, 'SELECT id,name FROM operation_books WHERE workspace_id=$1 ORDER BY name,id LIMIT $2 OFFSET $3',
       [request.context.workspaceId,...paginate(request.query)]),
   }));
-  route(app, 'POST', root + '/books', { ...options, summary: 'Open a named workspace ledger', body: object({ name: text(120) }), response: {200: bookFields} }, async request => {
+  route(app, 'POST', root + '/books', { ...options, feature: 'operations', summary: 'Open a named workspace ledger', body: object({ name: text(120) }), response: {200: bookFields} }, async request => {
     const name = request.body.name.trim();
     if (!name) throw invalid('请填写台账名称');
     return row(db, `INSERT INTO operation_books(id,workspace_id,name) VALUES($1,$2,$3)

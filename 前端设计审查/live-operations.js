@@ -1,3 +1,4 @@
+import { commerceReport } from './live-commerce-report.js';
 import { action, field, form, grid, h, heading, input, item, link, list, notice, panel, path, select, textarea, toast } from './live.js';
 import { parseValue, readOperationsCsv, template } from './operations-file.js';
 
@@ -91,7 +92,7 @@ async function recordsPage(ctx, book, kind, model, view, key) {
     action('下载 CSV 表头','template') + (entries.length ? action('导出本页 JSON','export') : '') +
     form('operation-import',field('业务文件',input('file','type="file" accept=".csv,.json" required')),'导入台账'));
   ctx.html(heading(model.label,book.name + ' · 手工录入或文件导入') + link('返回运营总览',bookRoute) +
-    (analytics ? '' : link('新增记录',base + '/new')) +
+    (analytics ? link('日周月报表与导出',bookRoute+'/report') : link('新增记录',base + '/new')) +
     (kind === 'inventory' ? link('从商品草稿入账','drafts') : '') + panel('查询',filterBar(model,kind,filters)) +
     panel(model.label,listHeading(entries,offset) + table + pager(base,filters,offset,items.length>pageSize)) + imports);
   ctx.submit('filter-records', data => {
@@ -136,6 +137,7 @@ export async function operationsPage(ctx) {
   }
   const book = books.find(b => b.id === id);
   if (!book) throw new Error('当前工作区找不到这个台账');
+  if(kind==='report')return commerceReport(ctx,book,view);
   const modules = await ctx.api(root + '/modules');
   if (kind) {
     if (kind !== 'analytics' && !Object.hasOwn(modules,kind)) throw new Error('找不到这个业务模块');
@@ -157,6 +159,6 @@ export async function operationsPage(ctx) {
     return item(m.label,[caption,...states].join(' · '),link('查看' + m.label,base) + overdue);
   }).join('');
   ctx.html(heading(book.name,'工作台台账汇总 · 数据范围为本台账已录入记录') + link('切换台账','commerce') +
-    link('查看订单经营日报','commerce/' + id + '/analytics') + link('检查我的商品草稿','drafts/quality') + panel('业务记录与待办',tiles) +
+    link('查看订单经营日报','commerce/' + id + '/analytics') + link('日周月报表与导出','commerce/'+id+'/report') + link('检查我的商品草稿','drafts/quality') + panel('业务记录与待办',tiles) +
     (insights.reviewTags.length ? panel('已录评价的常见标签',notice(insights.reviewTags.map(r => r.tag + '（' + r.count + '）').join('、'))) : ''));
 }

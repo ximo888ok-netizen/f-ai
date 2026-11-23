@@ -1,3 +1,4 @@
+import { modelProviders } from './merchant-connections.js';
 import { createHash } from 'node:crypto';
 import { catalog, modelAlias } from './catalog.js';
 import { invalid, object, route as httpRoute, text } from './http.js';
@@ -140,11 +141,11 @@ export function installModels(providers, definitions, env = process.env) {
   return providers;
 }
 
-export function registerModels(app, providers) {
+export function registerModels(app, providers, db) {
   httpRoute(app, 'GET', '/v1/models', {
     tags: ['Models'], summary: 'List configured upstream model aliases for task submission',
     querystring: object({ capabilityId: { type: 'string', enum: [...catalog.keys()] } }, []),
   }, async request => ({
-    items: [...providers.values()].map(provider => provider.info).filter(info => info && (!request.query.capabilityId || info.capabilities.includes(request.query.capabilityId))),
+    items: [...(await modelProviders(db, request.context.workspaceId, providers)).values()].map(provider => provider.info).filter(info => info && (!request.query.capabilityId || info.capabilities.includes(request.query.capabilityId))),
   }));
 }
