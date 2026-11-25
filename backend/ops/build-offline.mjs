@@ -27,17 +27,17 @@ try {
   const root=join(temp,'payload'),runtime=join(root,'runtime'),backend=join(root,'backend');
   await mkdir(runtime,{recursive:true});
   const revision=run('git',['rev-parse','HEAD']);
-  const web='前端设计审查';
+  const web='前端设计审查/';
   const gitDir=run('git',['rev-parse','--absolute-git-dir']);
   run('git',['--git-dir='+gitDir,'--work-tree='+root,'-c','core.autocrlf=false','restore','--source='+revision,'--worktree','--',
     'backend/src','backend/sdk','backend/migrations','backend/package.json',
     'backend/package-lock.json','backend/.env.example','backend/DEPLOYMENT.md','backend/README.md','backend/ACCEPTANCE.md',
-    web],
+    web+'打开设计稿.html',':(glob)'+web+'*.js',':(glob)'+web+'*.css',web+'assets/aurora.webp',web+'assets/optic-wave.webp'],
     repo,{...env,GIT_INDEX_FILE:join(temp,'release.index')});
   // Keep the portable archive paths independent of the target Windows system code page.
   const publicDir=join(backend,'public');
   await rename(join(root,web),publicDir);
-  await rename(join(publicDir,'商家管理后台.html'),join(publicDir,'merchant.html'));
+  await rename(join(publicDir,'打开设计稿.html'),join(publicDir,'index.html'));
   const node=join(runtime,'node.exe');
   await copyFile(join(nodeDir,'node.exe'),node);
   await copyFile(join(nodeDir,'LICENSE'),join(runtime,'NODE-LICENSE'));

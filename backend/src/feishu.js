@@ -60,8 +60,8 @@ function verify(binding,headers,raw) {
 
 function sender(binding, request) {
   let credential;
-  async function token(force = false) {
-    if (!force && credential?.expires>Date.now()) return credential.value;
+  async function token() {
+    if (credential?.expires>Date.now()) return credential.value;
     const result=await request(new URL('auth/v3/tenant_access_token/internal',endpoint),{
       body:{app_id:binding.appId,app_secret:binding.appSecret},timeout:8000,
     });
@@ -72,7 +72,7 @@ function sender(binding, request) {
     credential={value:result.tenant_access_token,expires:Date.now()+Math.max(0,seconds-60)*1000};
     return credential.value;
   }
-  const send = async (chatId,content,id)=>{
+  return async (chatId,content,id)=>{
     const accessToken=await token();
     const response=await request(new URL('im/v1/messages?receive_id_type=chat_id',endpoint),{
       headers:{authorization:'Bearer '+accessToken},timeout:10000,repeatable:true,
@@ -83,7 +83,6 @@ function sender(binding, request) {
     if (typeof message!=='string' || !validId.test(message)) throw new ProviderError('FEISHU_SEND_UNCONFIRMED',true);
     return message;
   };
-  return { send, check: async () => { await token(true); } };
 }
 
 function readSecret(env,name) {
@@ -108,7 +107,7 @@ export function createFeishuBindings(env=process.env,request=requestUpstream) {
       encryptKey:readSecret(env,data.encryptKeyEnv),verificationToken:readSecret(env,data.verificationTokenEnv),
       appSecret:readSecret(env,data.appSecretEnv)};
     bindings.set(data.id,{id:data.id,workspaceId,fingerprint:sha(JSON.stringify([data.id,workspaceId,data.appId,data.tenantKey])).toString('hex'),
-      verify:(headers,raw)=>verify(binding,headers,raw),...sender(binding,request)});
+      verify:(headers,raw)=>verify(binding,headers,raw),send:sender(binding,request)});
   }
   return bindings;
 }

@@ -1,5 +1,3 @@
-import { requireFeature } from './merchant-features.js';
-import { modelProviders } from './merchant-connections.js';
 
 import { randomUUID } from 'node:crypto';
 import { digest } from './auth.js';
@@ -9,7 +7,8 @@ import { ApiError, choice, freeObject, invalid, notFound, object, page, paginate
 import { modelIdSchema } from './models.js';
 import { providerFor } from './providers.js';
 import { keySchema, stableJson, submitInTransaction } from './tasks.js';
-import { accessibleProject } from './merchant-projects.js';
+import { accessibleProject } from './workspace.js';
+import { lockPlugin } from './plugin-policy.js';
 import { taskAssets } from './assets.js';
 import { needsImageReview } from './image-preflight.js';
 
@@ -46,14 +45,12 @@ export function registerSchedules(app, db, providers) {
       throw invalid('runAt must be in the next 366 days');
     }
     const capability = byId.get(input.capabilityId);
+    await accessibleProject(db, request.context, input.projectId, true);
     const schedule = await db.transaction(async tx=>{
-      await requireFeature(tx, request.context, capability.pluginId, capability.id, true);
-      await accessibleProject(tx, request.context, input.projectId, true, true);
+      await lockPlugin(tx,request.context.workspaceId,capability.pluginId);
       if (needsImageReview(capability)) await taskAssets(tx,request.context,input.parameters.assetIds ?? [],capability);
-      const available = await modelProviders(tx, request.context.workspaceId, providers);
-      const providerId = providerFor(available, capability, input.modelId,
-        capability.id === 'model.chat' && input.parameters.stream === true);
-      available.get(providerId).validate?.(capability, input.parameters);
+      const providerId=providerFor(providers,capability,input.modelId);
+      providers.get(providerId).validate?.(capability,input.parameters);
       return row(tx, [
         'INSERT INTO schedules (id, workspace_id, account_id, idempotency_key, run_at, request, request_hash, state)',
         "VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')",
@@ -88,7 +85,7 @@ export function registerSchedules(app, db, providers) {
 export async function dispatchSchedule({ db, providers, shops, identityDb = db }) {
   return db.transaction(async connection => {
     const pending = await row(connection, [
-      'SELECT s.id, s.workspace_id, s.account_id, s.request, m.role, m.state AS member_state, w.kind',
+      'SELECT s.id, s.workspace_id, s.account_id, s.request, m.role, w.kind',
       'FROM schedules s JOIN memberships m ON m.workspace_id = s.workspace_id AND m.account_id = s.account_id',
       'JOIN workspaces w ON w.id = s.workspace_id',
       "WHERE s.state = 'pending' AND s.run_at <= now()",
@@ -102,10 +99,9 @@ export async function dispatchSchedule({ db, providers, shops, identityDb = db }
     try {
       const {workspace_id:workspaceId,account_id:accountId}=pending;
       const membership = identityDb === db ? pending : await row(identityDb,
-        'SELECT m.role,m.state AS member_state,w.kind FROM memberships m JOIN workspaces w ON w.id=m.workspace_id WHERE m.workspace_id=$1 AND m.account_id=$2',
+        'SELECT m.role,w.kind FROM memberships m JOIN workspaces w ON w.id=m.workspace_id WHERE m.workspace_id=$1 AND m.account_id=$2',
         [workspaceId,accountId]);
       if (!membership) throw new ApiError(403,'MEMBERSHIP_REVOKED','Workspace membership no longer exists');
-      if (membership.member_state !== 'active') throw new ApiError(403,'MEMBER_SUSPENDED','Workspace membership is suspended');
       const context = { workspaceId, accountId, role:membership.role, kind:membership.kind };
       const { task } = await submitInTransaction(connection, providers, shops, context, {
         ...pending.request, idempotencyKey: 'schedule:' + pending.id,

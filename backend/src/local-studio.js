@@ -2,7 +2,6 @@ import { mkdir } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { buildApp } from './app.js';
-import { seedPreviewAdmin } from './auth.js';
 import { migrate } from './db.js';
 import { createProviders } from './providers.js';
 import { startWorker } from './worker.js';
@@ -22,12 +21,8 @@ const db = new PGlite(stateDir ? join(stateDir,'database') : undefined);
 let app;
 try {
   await migrate(db);
-  const dependencies = { db, providers: createProviders(), shops: new Map(),
-    realtimeVoice: createRealtimeBindings(), sms: createSmsBindings() };
-  const previewPassword = !stateDir && process.env.FAI_PREVIEW_ADMIN_PASSWORD;
-  if (previewPassword) await seedPreviewAdmin(db, previewPassword);
-  app = await buildApp({ ...dependencies, videoDelivery: createVideoDelivery(),
-    loopbackOnly: Boolean(stateDir || previewPassword), previewAdmin: Boolean(previewPassword) });
+  const dependencies = { db, providers: createProviders(), shops: new Map(), realtimeVoice:createRealtimeBindings(),sms:createSmsBindings() };
+  app = await buildApp({...dependencies,videoDelivery:createVideoDelivery(),loopbackOnly:Boolean(stateDir)});
   const location = await app.listen({ host: '127.0.0.1', port });
   const stopWorker = startWorker(dependencies, app.log);
   let closing = false;

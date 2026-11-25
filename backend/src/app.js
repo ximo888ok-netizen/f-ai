@@ -1,11 +1,4 @@
-import { catalog } from './catalog.js';
-import { registerMerchantConnections } from './merchant-connections.js';
-import { registerMerchantMembers } from './merchant-members.js';
-import { registerMerchantAudit } from './merchant-audit.js';
-import { featureReleases, registerMerchantFeatures, requireFeature } from './merchant-features.js';
-import { registerProjects } from './merchant-projects.js';
 
-import { randomUUID } from 'node:crypto';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
@@ -50,15 +43,11 @@ import { registerCopywritingReview } from './copywriting-review.js';
 import { registerCopywritingDrafts } from './copywriting-drafts.js';
 
 export async function buildApp({
-  db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null,
-  dedicatedDatabases = new Map(), previewAdmin = false, packagedStudio = false,
-  cloudAssets = new Map(), feishu = new Map(), wechat = new Map(), sms = new Map(), realtimeVoice = new Map(),
-  videoDelivery = null, customerAnswer = null, loopbackOnly = false,
-  releases = featureReleases(process.env.FAI_FEATURE_RELEASES_JSON),
+  db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(), packagedStudio = false,
+  cloudAssets = new Map(), feishu = new Map(), wechat = new Map(), sms = new Map(), realtimeVoice = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false,
 }) {
   const app = Fastify({
     logger,
-    genReqId: () => randomUUID(),
     logController: new Fastify.LogController({ disableRequestLogging: true }),
     bodyLimit: 15000000,
     ajv: { customOptions: { removeAdditional: false } },
@@ -143,21 +132,9 @@ export async function buildApp({
   });
   app.get('/openapi.json', { schema: { hide: true } }, async () => app.swagger());
 
-  registerStudio(app, packagedStudio);
+  registerStudio(app,packagedStudio);
   registerVersionHelp(app);
-  registerAuth(app, db, previewAdmin);
-  app.decorate('verifyFeature', (context, plugin) => {
-    const capability = catalog.get(plugin);
-    return requireFeature(workspaceDb, context, capability?.pluginId ?? plugin, capability?.id);
-  });
-  registerMerchantMembers(app, db);
-  registerMerchantAudit(app, db, workspaceDb);
-  registerMerchantFeatures(app, workspaceDb, providers, releases);
-  registerProjects(app, workspaceDb);
-  registerMerchantConnections(app, workspaceDb, { providers, shops, cloudAssets, feishu });
-  route(app, 'GET', '/v1/merchant/context', {
-    manager: true, enterprise: true, database: 'identity', tags: ['Merchant'], summary: 'Read access to the merchant workspace',
-  }, request => ({ role: request.context.role, workspaceId: request.context.workspaceId }));
+  registerAuth(app, db);
   route(app,'GET','/v1/workspace/database',{
     database:'identity', manager:true, tags:['Workspace support'], summary:'Read the current workspace database mode and connection state',
     response:{200:object({mode:choice('shared','dedicated'),state:choice('ready','preparing','unavailable')})},
@@ -188,7 +165,7 @@ export async function buildApp({
   registerSmsChannel(app,workspaceDb,sms);
   registerSupport(app, workspaceDb);
   registerCustomerService(app, workspaceDb, customerAnswer);
-  registerModels(app, providers, workspaceDb);
+  registerModels(app, providers);
   registerRealtimeVoice(app, workspaceDb, realtimeVoice);
   registerTasks(app, workspaceDb, providers, shops, retryProductImageTask);
   registerSchedules(app, workspaceDb, providers);

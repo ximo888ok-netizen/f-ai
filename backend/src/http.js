@@ -44,7 +44,7 @@ export function paginate(query = {}) {
 }
 
 export function route(app, method, url, options, handler) {
-  const { auth = true, tenant = true, manager = false, enterprise = false, feature = null, database = 'workspace', tags, summary, config, ...inputs } = options;
+  const { auth = true, tenant = true, manager = false, enterprise = false, database = 'workspace', tags, summary, config, ...inputs } = options;
   const schema = { tags, summary, config, ...inputs };
   if (auth) schema.security = [{ bearerAuth: [] }];
   if (auth && tenant) schema.headers = {
@@ -63,10 +63,7 @@ export function route(app, method, url, options, handler) {
       ...(manager ? [async request => requireManager(request)] : []),
     ],
     handler: auth && tenant && database === 'workspace'
-      ? (request, reply) => app.withWorkspaceDatabase(request.context.workspaceId, async () => {
-          if (feature) await app.verifyFeature(request.context, feature);
-          return handler(request, reply);
-        })
+      ? (request, reply) => app.withWorkspaceDatabase(request.context.workspaceId, () => handler(request, reply))
       : handler,
   });
 }

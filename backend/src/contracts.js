@@ -26,18 +26,7 @@ const workspace = shape({ id: uuid, name: string, kind: enumOf('personal', 'ente
 const identity = { account, workspaces: items(workspace) };
 const session = shape({ ...identity, token: string, expiresAt: date });
 const wallet = shape({ balance: count, reserved: count, available: count });
-const member = shape({ id: uuid, email: string, displayName: string, role: string, state: enumOf('active', 'suspended') });
-const memberRoles = enumOf('owner', 'admin', 'member');
-const memberState = enumOf('active', 'suspended');
-const invite = shape({ id: uuid, email: string, role: memberRoles, revision: count, createdAt: date, expiresAt: date,
-  status: enumOf('pending', 'accepted', 'expired', 'revoked') });
-const featureRelease = shape({ version: string, notes: string, capabilities: nullable(items(string)) });
-const featurePolicy = shape({ id: string, name: string, enabled: bool, revision: count,
-  mode: enumOf('all', 'trial'), version: string, releases: items(featureRelease), memberIds: items(uuid), provisioned: bool });
-const connectionState = shape({ kind: enumOf('model', 'shop', 'feishu', 'webdav'), id: string, enabled: bool,
-  revision: count, checkState: enumOf('unverified', 'reachable', 'failed'), checkedAt: nullable(date) });
-const connectionInfo = shape({ ...connectionState.properties, name: string, canCheck: bool });
-connectionInfo.properties.platform = string;
+const member = shape({ id: uuid, email: string, displayName: string, role: string });
 const project = shape({ id: uuid, name: string, archivedAt: nullable(date), createdAt: date });
 const base = shape({ id: uuid, name: string, createdAt: date });
 export const customerScope = { anyOf: [
@@ -51,7 +40,7 @@ const asset = shape({
   consentReference: nullable(string), consentExpiresAt: nullable(date), sizeBytes: count, createdAt: date,
 });
 const task = shape({
-  id: uuid, capabilityId: string, pluginId: string, modelId: nullable(string), featureVersion: nullable(string), projectId: nullable(uuid), parentId: nullable(uuid),
+  id: uuid, capabilityId: string, pluginId: string, modelId: nullable(string), projectId: nullable(uuid), parentId: nullable(uuid),
   state: enumOf('queued', 'running', 'succeeded', 'failed', 'cancelled'), cost: count, attempts: count, streamed: bool,
   result: nullable(anyObject), errorCode: nullable(string), createdAt: date, updatedAt: date, templateVersion:nullable(count),
 });
@@ -109,20 +98,13 @@ export const contracts = new Map([
   ['/v1/auth/logout', { POST: { 204: none } }],
   ['/v1/members', { GET: { 200: collection(member) } }],
   ['/v1/members/:id', { PATCH: { 200: shape({ id: uuid, role: string }) } }],
-  ['/v1/invitations', { GET: { 200: collection(invite) }, POST: { 201: shape({ id: uuid, token: string, revision: count, expiresAt: date }) } }],
-  ['/v1/invitations/:id', { DELETE: { 204: none } }],
-  ['/v1/merchant/context', { GET: { 200: shape({ role: memberRoles, workspaceId: uuid }) } }],
-  ['/v1/merchant/features', { GET: { 200: collection(featurePolicy) } }],
-  ['/v1/merchant/connections', { GET: { 200: collection(connectionInfo) } }],
-  ['/v1/merchant/connections/:kind/:id/check', { POST: { 200: connectionState } }],
-  ['/v1/merchant/connections/:kind/:id', { PUT: { 200: connectionState } }],
+  ['/v1/invitations', { POST: { 201: shape({ token: string, expiresAt: date }) } }],
   ['/v1/invitations/accept', { POST: { 200: shape({ workspaceId: uuid, workspaces: items(workspace) }) } }],
   ['/v1/credits/wallet', { GET: { 200: wallet } }],
   ['/v1/credits/allocate', { POST: { 200: wallet } }],
   ['/v1/credits/ledger', { GET: { 200: collection(shape({ id: string, reference: string, operation: string, amount: count, createdAt: date })) } }],
   ['/v1/projects', { GET: { 200: collection(project) }, POST: { 201: project } }],
   ['/v1/projects/:id', { GET: { 200: project }, PATCH: { 200: project } }],
-  ['/v1/projects/:id/members', { GET: { 200: collection(shape({ id: uuid, displayName: string, role: memberRoles, state: memberState })) } }],
   ['/v1/projects/:id/members/:memberId', { PUT: { 204: none }, DELETE: { 204: none } }],
   ['/v1/knowledge/bases', { GET: { 200: collection(base) }, POST: { 201: base } }],
   ['/v1/knowledge/bases/:id', { PATCH: { 200: base }, DELETE: { 204: none } }],
@@ -133,7 +115,7 @@ export const contracts = new Map([
   ['/v1/assets', { GET: { 200: collection(asset) }, POST: { 201: asset } }],
   ['/v1/assets/:id', { GET: { 200: shape({ ...asset.properties, sha256: {type:'string',pattern:'^[a-f0-9]{64}$'} }) }, DELETE: { 204: none } }],
   ['/v1/models', { GET: { 200: collection(shape({ id: string, model: string, protocol: string, kind: string,
-    capabilities: items(string), streamText: bool, imageQuality: bool })) } }],
+    capabilities: items(string), streamText: bool })) } }],
   ['/v1/plugins', { GET: { 200: shape({ items: items(plugin), models: plugin }) } }],
   ['/v1/plugins/:id/state', { PUT: { 200: shape({ id: string, enabled: bool }) } }],
   ['/v1/customer-service/conversations', { GET: { 200: collection(conversation) }, POST: { 201: conversation } }],
@@ -145,11 +127,10 @@ export const contracts = new Map([
   ['/v1/customer-service/conversations/:id/handoff', { POST: { 200: conversation } }],
   ['/v1/customer-service/quick-replies', { GET: { 200: collection(quickReply) }, POST: { 201: quickReply } }],
   ['/v1/customer-service/quick-replies/:id', { PUT: { 200: quickReply }, DELETE: { 204: none } }],
-  ['/v1/shops', { GET: { 200: collection({ ...shape({ id: uuid, name: string, platform: string, capabilities: items(string), authorizedUntil:date }), required:['id','name','platform','capabilities'] }) } }],
+  ['/v1/shops', { GET: { 200: collection(shape({ id: uuid, name: string, platform: string, capabilities: items(string) })) } }],
   ['/v1/shops/previews', { POST: { 201: shape({ confirmationId: uuid, expiresAt: date, capabilityId: string, parameters: anyObject }) } }],
   ['/v1/tasks', { GET: { 200: collection(task) }, POST: { 200: task, 202: task } }],
   ['/v1/tasks/:id', { GET: { 200: task } }],
-  ['/v1/tasks/:id/inputs', { GET: { 200: shape({capabilityId:string,projectId:nullable(uuid),mode:string,modelId:nullable(string),parameters:anyObject}) } }],
   ['/v1/tasks/:id/cancel', { POST: { 200: task } }],
   ['/v1/tasks/:id/regenerate', { POST: { 200: task, 202: task } }],
   ['/v1/schedules', { GET: { 200: collection(schedule) }, POST: { 200: schedule, 201: schedule } }],

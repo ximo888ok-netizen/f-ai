@@ -2,7 +2,6 @@ import { reviewCopy } from './catalog.js';
 import { row } from './db.js';
 import { integer, invalid, object, route, text, uuid } from './http.js';
 import { readDraft, variantCheck } from './listing-drafts.js';
-import { requireFeature } from './merchant-features.js';
 import { modelIdSchema } from './models.js';
 import { submitInTransaction } from './tasks.js';
 import { executableSkill } from './workspace-library.js';
@@ -30,14 +29,12 @@ export function registerSkillRuns(app,db,providers,shops) {
       const run={skillId:entry.id,revision:entry.revision,action};
       if (action==='sku-review') {
         if (!body.draftId || Object.keys(body).length!==2) throw invalid('Supply an owned draft ID for SKU review');
-        await requireFeature(tx,context,'operations',undefined,true);
         return {...run,result:await reviewSkus(tx,context,body.draftId)};
       }
       const content=body.content?.trim();
       if (!content || body.draftId) throw invalid('Supply text for the selected skill');
       if (action==='copy-review') {
         if (Object.keys(body).length!==2) throw invalid('Supply text for copy review');
-        await requireFeature(tx,context,'copywriting','copywriting.detect-terms',true);
         return {...run,result:reviewCopy(content)};
       }
       if (!body.idempotencyKey?.trim()) throw invalid('Model skills require an idempotency key');

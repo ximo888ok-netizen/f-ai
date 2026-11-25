@@ -1,4 +1,3 @@
-import { connectionEnabled, requireConnection } from './merchant-connections.js';
 import { row, rows } from './db.js';
 import { ApiError, array, bool, choice, integer, notFound, object, page, paginate, route, text, uuid } from './http.js';
 import { validMedia } from './assets.js';
@@ -14,8 +13,7 @@ const confirm=object({confirmed:{type:'boolean',const:true}});
 const keyOf=request=>[request.context.workspaceId.toLowerCase(),request.context.accountId,request.params.id.toLowerCase()];
 const remoteName=key=>'fai-'+key.join('-');
 
-async function bindingFor(db,bindings,workspace) {
-  await requireConnection(db,workspace,'webdav','workspace');
+function bindingFor(bindings,workspace) {
   const store=bindings.get(workspace.toLowerCase());
   if (!store) throw new ApiError(503,'WEBDAV_NOT_CONFIGURED','No file store is configured for this workspace');
   return store;
@@ -35,8 +33,7 @@ async function markReady(db,key) {
 
 export function registerCloudAssets(app,db,bindings) {
   route(app,'GET',root+'/status',{tags,summary:'Check whether a file store is bound to the workspace',
-    response:{200:object({available:bool})}},async request=>({available:bindings.has(request.context.workspaceId.toLowerCase()) &&
-      await connectionEnabled(db,request.context.workspaceId,'webdav','workspace')}));
+    response:{200:object({available:bool})}},async request=>({available:bindings.has(request.context.workspaceId.toLowerCase())}));
 
   route(app,'GET',root,{tags,summary:'List the current member’s backup copies',querystring:page,
     response:{200:object({items:array(details,100)})}},async request=>({
@@ -47,7 +44,7 @@ export function registerCloudAssets(app,db,bindings) {
   route(app,'PUT',root+'/:id',{tags,params:idParams,body:confirm,summary:'Explicitly copy an owned asset to its workspace WebDAV store',
     response:{200:details}},async request=>{
     const key=keyOf(request);
-    const store=await bindingFor(db,bindings,key[0]);
+    const store=bindingFor(bindings,key[0]);
     const asset=await row(db,`SELECT * FROM assets WHERE workspace_id=$1 AND account_id=$2 AND id=$3`,key);
     if (!asset) {
       const prepared=await copyFor(db,key,store);
@@ -69,7 +66,7 @@ export function registerCloudAssets(app,db,bindings) {
 
   route(app,'GET',root+'/:id/content',{tags,params:idParams,summary:'Download and verify an owned WebDAV backup'},async (request,reply)=>{
     const key=keyOf(request);
-    const store=await bindingFor(db,bindings,key[0]);
+    const store=bindingFor(bindings,key[0]);
     const copy=await copyFor(db,key,store);
     const bytes=await store.read(remoteName(key),copy.size_bytes,copy.sha256);
     if (copy.state==='pending') await markReady(db,key);
@@ -79,7 +76,7 @@ export function registerCloudAssets(app,db,bindings) {
   route(app,'POST',root+'/:id/restore',{tags,params:idParams,body:confirm,summary:'Restore a verified backup to the original asset ID',
     response:{200:details}},async request=>{
     const key=keyOf(request);
-    const store=await bindingFor(db,bindings,key[0]);
+    const store=bindingFor(bindings,key[0]);
     const copy=await copyFor(db,key,store);
     const bytes=await store.read(remoteName(key),copy.size_bytes,copy.sha256);
     if (!validMedia(bytes,copy.media_type)) throw new ApiError(422,'ASSET_CONTENT_INVALID','The stored bytes do not match the media type');

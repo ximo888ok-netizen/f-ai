@@ -29,7 +29,7 @@ async function expectApiError(result, statusCode, code, message) {
     assert.equal(error.statusCode, statusCode);
     assert.equal(error.code, code);
     if (message) assert.equal(error.message, message);
-    assert.match(error.requestId, /^[0-9a-f-]{36}$/);
+    assert.match(error.requestId, /^req-/);
     assert.equal(error.cause, undefined);
     return true;
   });

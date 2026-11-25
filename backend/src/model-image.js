@@ -1,16 +1,12 @@
 import { mediaUrl, ProviderError } from './model-http.js';
 import { GeneratedFile } from './model-file.js';
 
-export const supportsImageQuality = config => config.protocol === 'openai-images' &&
-  /^(?:gpt-image-|chatgpt-image-latest$)/.test(config.model);
-
 export async function generateImage(route, payload, call) {
   const { prompt, ratio, format } = payload.parameters;
   const expected = format ? { png: 'image/png', jpg: 'image/jpeg' }[format] : undefined;
 
   if (route.protocol === 'openai-images') {
     const body = { model: route.model, prompt, n: 1 };
-    if (payload.imageQuality && supportsImageQuality(route)) body.quality = payload.imageQuality;
     if (ratio) body.size = '1024x1024';
     if (format) body.output_format = format === 'jpg' ? 'jpeg' : 'png';
     let data;

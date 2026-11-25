@@ -15,10 +15,8 @@ const segments = [
   ['operation_books'], ['operation_records',related('book_id','operation_books')], ['inventory_draft_imports',related('book_id','operation_books')],
   ['workspace_library_entries'], ['workspace_library_builtin_state'], ['workspace_feedback'], ['studio_psd_documents'],
   ['asset_cloud_copies'], ['feishu_messages'], ['feishu_replies'], ['rights_notices'], ['rights_notice_events'], ['studio_image_batches'], ['studio_video_storyboards'],
-  ['workspace_copywriting_rules'], ['merchant_plugin_members'], ['merchant_connections'],
-  ['merchant_events',"workspace_id=$1 AND scope='workspace'"],
   ['image_platform_templates'], ['image_series_presets'], ['product_image_plans'], ['product_image_attempts'],
-  ['copywriting_drafts'],
+  ['workspace_copywriting_rules'], ['copywriting_drafts'],
   ['agency_partners'], ['agency_rates'], ['agency_receipts'], ['agency_reversals'],
   ['sms_messages'],
 ].map(([table, filter = byWorkspace]) => ({table,filter}));

@@ -89,7 +89,7 @@ export function registerImageStudio(app,db) {
     if (!batch) throw notFound('Image batch');
     return batch.result;
   });
-  route(app,'POST','/v1/media/images/batches',{ feature: 'image',
+  route(app,'POST','/v1/media/images/batches',{
     tags:['Image processing'],summary:'Render and save owned images per SKU or as a stacked detail sheet',
     body:object({id:uuid,items:array(jobSchema,8,1),seriesPreset:seriesPresetRef},['id','items']),
   },async (request,reply)=>{

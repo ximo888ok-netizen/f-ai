@@ -53,13 +53,7 @@ function newStore(base, authorization, request) {
     if (!response.ok && response.status!==412) throw failure();
     await read(key,bytes.length,digest);
   }
-  async function check() {
-    const response = await request(baseUrl, { method: 'PROPFIND', headers: { authorization, depth: '0' },
-      redirect: 'error', signal: AbortSignal.timeout(8000) });
-    await response.body?.cancel();
-    if (!response.ok) throw failure();
-  }
-  return { fingerprint, read, write, check };
+  return { fingerprint, read, write };
 }
 
 export function createWebdavBindings(env=process.env,request=fetch) {

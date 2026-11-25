@@ -38,12 +38,12 @@ export function registerVideoDelivery(app,db,render) {
   registerVideoPreflight(app,db,render);
   route(app,'GET','/v1/video-export/status',{tags,summary:'Check if marked MP4 export is enabled',
     response:{200:object({available:bool})}},async ()=>({available:Boolean(render)}));
-  route(app,'POST','/v1/assets/:id/video-export',{ feature: 'video.export',tags,params:idParams,
+  route(app,'POST','/v1/assets/:id/video-export',{tags,params:idParams,
     summary:'Export an owned MP4 explicitly declared to be AI-generated',produces:[mp4],
     body:object({aiGenerated:{const:true}})},async (request,reply)=>{
     return sendVideoDelivery(render,await source(db,request),request.params.id,reply);
   });
-  route(app,'POST','/v1/media/videos/:id/export',{ feature: 'video.export',tags,params:idParams,
+  route(app,'POST','/v1/media/videos/:id/export',{tags,params:idParams,
     summary:'Reframe an owned MP4, extract a still, mute it or export its audio',
     produces:Object.values(videoFormats),
     body:object({format:choice(...Object.keys(videoFormats)),ratio:choice('original',...Object.keys(videoProfiles)),

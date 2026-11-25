@@ -19,7 +19,7 @@ export async function syncWorkspaceIdentity(control, target, workspaceId, create
     ON CONFLICT(id) DO UPDATE SET name=excluded.name WHERE workspaces.name IS DISTINCT FROM excluded.name`,
   [workspaceId,workspace.kind,workspace.name,workspace.created_at]);
   const members = await rows(control,`SELECT a.id,a.email,a.display_name,a.account_type,a.created_at,
-    m.role,m.state,m.created_at AS member_since FROM memberships m JOIN accounts a ON a.id=m.account_id
+    m.role,m.created_at AS member_since FROM memberships m JOIN accounts a ON a.id=m.account_id
     WHERE m.workspace_id=$1 ORDER BY a.id`,[workspaceId]);
   // Only directory fields are copied. Password hashes and sessions remain in the control database.
   const data = JSON.stringify(members);
@@ -31,11 +31,10 @@ export async function syncWorkspaceIdentity(control, target, workspaceId, create
     WHERE (accounts.email,accounts.display_name,accounts.account_type) IS DISTINCT FROM
       (excluded.email,excluded.display_name,excluded.account_type)`,[data]);
   await target.query(`WITH directory AS (
-      SELECT * FROM jsonb_to_recordset($2::jsonb) AS d(id uuid,role text,state text,member_since timestamptz)
-    ) INSERT INTO memberships(workspace_id,account_id,role,state,created_at)
-    SELECT $1,id,role,state,member_since FROM directory ON CONFLICT(workspace_id,account_id)
-    DO UPDATE SET role=excluded.role,state=excluded.state
-    WHERE (memberships.role,memberships.state) IS DISTINCT FROM (excluded.role,excluded.state)`,[workspaceId,data]);
+      SELECT * FROM jsonb_to_recordset($2::jsonb) AS d(id uuid,role text,member_since timestamptz)
+    ) INSERT INTO memberships(workspace_id,account_id,role,created_at)
+    SELECT $1,id,role,member_since FROM directory ON CONFLICT(workspace_id,account_id)
+    DO UPDATE SET role=excluded.role WHERE memberships.role<>excluded.role`,[workspaceId,data]);
   if (createWallets) await target.query(`INSERT INTO wallets(workspace_id,account_id)
     SELECT workspace_id,account_id FROM memberships WHERE workspace_id=$1 ON CONFLICT DO NOTHING`,[workspaceId]);
 }

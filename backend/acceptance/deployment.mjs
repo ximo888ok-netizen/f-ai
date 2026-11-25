@@ -90,7 +90,7 @@ async function stopService() {
 }
 try {
   const revision = run('git', ['rev-parse', 'HEAD']);
-  const web = '前端设计审查';
+  const web = '前端设计审查/';
   const gitDir = run('git', ['rev-parse', '--absolute-git-dir']);
   const indexEnv = { ...osEnv, GIT_INDEX_FILE: join(work, 'qa.index') };
   if (archive) {
@@ -116,7 +116,8 @@ try {
   } else {
     run('git', ['--git-dir=' + gitDir, '--work-tree=' + work, '-c', 'core.autocrlf=false',
     'restore', '--source=' + revision, '--worktree', '--', 'backend/package.json', 'backend/package-lock.json',
-    'backend/src', 'backend/migrations', 'backend/sdk', web], indexEnv);
+    'backend/src', 'backend/migrations', 'backend/sdk', web + '打开设计稿.html', ':(glob)' + web + '*.js', ':(glob)' + web + '*.css',
+    web + 'assets/aurora.webp', web + 'assets/optic-wave.webp'], indexEnv);
     run(node, [npm, 'ci', '--offline', '--omit=dev', '--no-audit', '--no-fund', '--cache', cache], osEnv, application);
   }
   const preflight = spawnSync(node, ['src/deployment-capacity.js', work], {

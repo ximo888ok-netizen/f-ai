@@ -1,6 +1,6 @@
 import { row, rows } from './db.js';
 import { ApiError, array, integer, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
-import { requireFeature } from './merchant-features.js';
+import { lockPlugin } from './plugin-policy.js';
 
 const root = '/v1/copywriting/drafts';
 const tags = ['Copywriting drafts'];
@@ -36,7 +36,7 @@ export function registerCopywritingDrafts(app, db) {
     let content=request.body.content;
     if (!title) throw invalid('Enter a draft title');
     if (revision>0 && (sourceTaskId || content===undefined)) throw invalid('Supply the edited content and preserve the original task reference');
-    await requireFeature(tx, request.context, 'copywriting', undefined, true);
+    await lockPlugin(tx,owner[0],'copywriting');
     if (sourceTaskId) {
       const task=await row(tx,`SELECT result->>'text' AS content FROM tasks WHERE workspace_id=$1 AND account_id=$2 AND id=$3
         AND plugin_id='copywriting' AND state='succeeded' AND jsonb_typeof(result->'text')='string'`,[...owner.slice(0,2),sourceTaskId]);

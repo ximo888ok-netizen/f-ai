@@ -102,22 +102,6 @@ test('image protocols generate and edit images with correct binary and multipart
   assert.equal(requests[2].json.contents[0].parts[1].inlineData.data, png);
 });
 
-test('GPT Image sends supported quality separately from the original prompt', async t => {
-  const requests = mockWire(t, [{ data: [{ b64_json: png }] }, { data: [{ b64_json: png }] }]);
-  const model = adapter('openai-images', { model: 'gpt-image-2' });
-  const prompt = '  商品正面。\n保持原色。  ';
-  assert.equal(model.info.imageQuality, true);
-  assert.equal(adapter('gemini-image').info.imageQuality, false);
-  await model.run({}, { ...payload('image.main-image', { prompt }), imageQuality: 'medium' });
-  await model.run({}, {
-    ...payload('image.main-image', { prompt }, [{ mediaType: 'image/png', dataBase64: png }]), imageQuality: 'high',
-  });
-  assert.equal(requests[0].json.prompt, prompt);
-  assert.equal(requests[0].json.quality, 'medium');
-  assert.equal(requests[1].body.get('prompt'), prompt);
-  assert.equal(requests[1].body.get('quality'), 'high');
-});
-
 const videoCases = [
   ['runway-video', { id: 'vid-1' }, { status: 'THROTTLED' }, { status: 'SUCCEEDED', output: ['https://media.test/a.mp4'] }, 'text_to_video', 'tasks/vid-1'],
   ['ark-video', { id: 'vid-1' }, { status: 'running' }, { status: 'succeeded', content: { video_url: 'https://media.test/a.mp4' } }, 'contents/generations/tasks', 'contents/generations/tasks/vid-1'],

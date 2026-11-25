@@ -235,20 +235,6 @@ test('asset consent and operation confirmations are scoped and rechecked', async
   const stopped = response(await api('GET', '/v1/tasks/' + pending.id, enterprise), 200);
   assert.equal(stopped.errorCode, 'SHOP_BINDING_CHANGED');
   assert.equal(received.some(entry => entry.taskId === pending.id), false);
-  // A grant can expire after a valid preview and submission, before the worker runs.
-  shops.set(shopId, initialShop);
-  const grant = response(await api('POST','/v1/shops/previews',enterprise,{capabilityId:create.capabilityId,parameters}),201);
-  const accepted = response(await api('POST','/v1/tasks',enterprise,{...create,confirmationId:grant.confirmationId,idempotencyKey:'shop-expired-after-queue'}),202);
-  const expired=new Date(Date.now()-60000).toISOString();
-  shops.set(shopId,{...initialShop,authorizedUntil:expired});
-  const listed=response(await api('GET','/v1/shops',enterprise),200).items.find(s=>s.id===shopId);
-  assert.deepEqual(listed.capabilities,[]);assert.equal(listed.authorizedUntil,expired);
-  assert.equal(response(await api('POST','/v1/shops/previews',enterprise,{capabilityId:create.capabilityId,parameters}),403).error.code,'SHOP_AUTH_EXPIRED');
-  await workOnce({db,providers,shops});
-  assert.equal(response(await api('GET','/v1/tasks/'+accepted.id,enterprise),200).errorCode,'SHOP_AUTH_EXPIRED');
-  assert.equal(received.some(entry=>entry.taskId===accepted.id),false);
-  shops.set(shopId,initialShop);
-
 });
 
 test('personal and enterprise memory stay isolated and preferences persist', async () => {

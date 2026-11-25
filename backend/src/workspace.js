@@ -6,8 +6,10 @@ import { ensureKnowledgeCategory, lockKnowledgeBase, registerKnowledgeCategories
 import { ApiError, array, choice, invalid, notFound, object, page, paginate, requireEnterprise, route, text, uuid } from './http.js';
 
 const idParams = object({ id: uuid });
+const projectTags = ['Projects'];
 const knowledgeTags = ['Knowledge'];
 const manager = context => context.role !== 'member';
+const projectFields = 'id, name, archived_at AS "archivedAt", created_at AS "createdAt"';
 const baseFields = 'id, name, created_at AS "createdAt"';
 const documentFields = 'id, name, category, customer_scope AS "customerScope", created_at AS "createdAt"';
 const documentParams = object({ id: uuid, documentId: uuid });
@@ -32,6 +34,17 @@ async function memberIn(db, workspaceId, accountId) {
   if (!(await row(db, 'SELECT 1 FROM memberships WHERE workspace_id = $1 AND account_id = $2', [workspaceId, accountId]))) {
     throw notFound('Workspace member');
   }
+}
+
+export async function accessibleProject(db, context, projectId, active = false) {
+  if (!projectId) return null;
+  const result = await row(db, [
+    'SELECT ' + projectFields + ' FROM projects p WHERE workspace_id = $1 AND id = $2',
+    'AND ($3::boolean OR EXISTS (SELECT 1 FROM project_members m WHERE m.project_id = p.id AND m.account_id = $4))',
+  ].join(' '), [context.workspaceId, projectId, manager(context), context.accountId]);
+  if (!result) throw notFound('Project');
+  if (active && result.archivedAt) throw new ApiError(409, 'PROJECT_ARCHIVED', 'Project has been archived');
+  return result;
 }
 
 async function accessibleBase(db, context, baseId) {
@@ -61,6 +74,62 @@ async function indexDocument(db, id, content) {
 
 export function registerWorkspace(app, db) {
   registerKnowledgeCategories(app, db, accessibleBase);
+  route(app, 'GET', '/v1/projects', {
+    tags: projectTags, summary: 'List visible projects', querystring: object({ ...page.properties, state: choice('active', 'archived', 'all') }, []),
+  }, async request => {
+    const context = request.context;
+    return { items: await rows(db, [
+      'SELECT ' + projectFields + ' FROM projects p WHERE workspace_id = $1',
+      'AND ($3::boolean OR EXISTS (SELECT 1 FROM project_members m WHERE m.project_id = p.id AND m.account_id = $2))',
+      "AND ($4 = 'all' OR ($4 = 'archived') = (archived_at IS NOT NULL))",
+      'ORDER BY created_at DESC, id LIMIT $5 OFFSET $6',
+    ].join(' '), [context.workspaceId, context.accountId, manager(context), request.query.state ?? 'active', ...paginate(request.query)]) };
+  });
+
+  route(app, 'POST', '/v1/projects', {
+    manager: true, tags: projectTags, summary: 'Create a project',
+    body: object({ name: text(120) }),
+  }, async (request, reply) => {
+    const project = await row(db, 'INSERT INTO projects (id, workspace_id, name) VALUES ($1, $2, $3) RETURNING ' + projectFields, [randomUUID(), request.context.workspaceId, requiredText(request.body.name)]);
+    reply.code(201);
+    return project;
+  });
+
+  route(app, 'GET', '/v1/projects/:id', {
+    tags: projectTags, summary: 'Get a visible project', params: idParams,
+  }, request => accessibleProject(db, request.context, request.params.id));
+
+  route(app, 'PATCH', '/v1/projects/:id', {
+    manager: true, tags: projectTags, summary: 'Rename, archive, or restore a project', params: idParams,
+    body: object({ name: text(120), state: choice('active', 'archived') }, []),
+  }, async request => {
+    const { name, state } = request.body;
+    if (name === undefined && state === undefined) throw invalid('Specify a name or state');
+    const result = await row(db, [
+      'UPDATE projects SET name = COALESCE($3, name), archived_at = CASE',
+      "WHEN $4 = 'active' THEN NULL WHEN $4 = 'archived' THEN COALESCE(archived_at, now()) ELSE archived_at END",
+      'WHERE workspace_id = $1 AND id = $2 RETURNING ' + projectFields,
+    ].join(' '), [request.context.workspaceId, request.params.id, name === undefined ? null : requiredText(name), state ?? null]);
+    if (!result) throw notFound('Project');
+    return result;
+  });
+
+  route(app, ['PUT', 'DELETE'], '/v1/projects/:id/members/:memberId', {
+    manager: true, tags: projectTags, summary: 'Grant or remove project access', params: object({ id: uuid, memberId: uuid }),
+  }, async (request, reply) => {
+    requireEnterprise(request);
+    const { workspaceId } = request.context;
+    const { id, memberId } = request.params;
+    await accessibleProject(db, request.context, id, true);
+    await memberIn(db, workspaceId, memberId);
+    if (request.method === 'PUT') {
+      await db.query('INSERT INTO project_members (workspace_id, project_id, account_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [workspaceId, id, memberId]);
+    } else {
+      await db.query('DELETE FROM project_members WHERE workspace_id = $1 AND project_id = $2 AND account_id = $3', [workspaceId, id, memberId]);
+    }
+    reply.code(204).send();
+  });
+
   route(app, 'GET', '/v1/knowledge/bases', {
     tags: knowledgeTags, summary: 'List authorized knowledge bases', querystring: page,
   }, async request => {
@@ -96,14 +165,6 @@ export function registerWorkspace(app, db) {
     reply.code(204).send();
   });
 
-  route(app, 'GET', '/v1/knowledge/bases/:id/grants', {
-    manager:true, enterprise:true, tags:knowledgeTags, summary:'List explicit member grants for this knowledge base',
-    params:idParams, querystring:page, response:{200:object({items:array(object({accountId:uuid}),100)})},
-  }, async request => {
-    await accessibleBase(db,request.context,request.params.id);
-    return {items:await rows(db,'SELECT account_id AS "accountId" FROM knowledge_grants WHERE workspace_id=$1 AND base_id=$2 ORDER BY account_id LIMIT $3 OFFSET $4',
-      [request.context.workspaceId,request.params.id,...paginate(request.query)])};
-  });
   route(app, ['PUT', 'DELETE'], '/v1/knowledge/bases/:id/grants/:memberId', {
     manager: true, tags: knowledgeTags, summary: 'Grant or remove a knowledge-base permission', params: object({ id: uuid, memberId: uuid }),
   }, async (request, reply) => {

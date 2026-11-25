@@ -3,8 +3,7 @@ import { row, rows } from './db.js';
 import { ApiError, bool, choice, integer, invalid, notFound, object, route, text, uuid } from './http.js';
 import { isVoiceSdp, maxSdpBytes } from './realtime-provider.js';
 import { finishCredits, reserveCredits } from './wallet.js';
-import { pluginEnabled } from './plugin-policy.js';
-import { requireFeature } from './merchant-features.js';
+import { lockPlugin, pluginEnabled } from './plugin-policy.js';
 
 const root = '/v1/voice/realtime';
 const collection = root + '/sessions/:id';
@@ -31,7 +30,7 @@ function view(record, withAnswer = false) {
     ...(withAnswer && state === 'active' ? {answerSdp:record.answer_sdp} : {})};
 }
 
-async function reserve(db,key,offerHash,binding,context) {
+async function reserve(db,key,offerHash,binding) {
   return db.transaction(async tx => {
     // Serialize new calls for the same member across API processes.
     await tx.query('SELECT 1 FROM wallets WHERE workspace_id=$1 AND account_id=$2 FOR UPDATE',key.slice(0,2));
@@ -40,7 +39,7 @@ async function reserve(db,key,offerHash,binding,context) {
       if (existing.offer_hash !== offerHash) throw new ApiError(409,'VOICE_OFFER_CHANGED','Use the original offer for this session ID');
       return {record:existing,created:false};
     }
-    await requireFeature(tx, context, 'models', 'model.chat', true);
+    await lockPlugin(tx,key[0],'models');
     if (!binding) throw new ApiError(422,'REALTIME_VOICE_UNAVAILABLE','Realtime voice is unavailable for this workspace');
     const busy = await row(tx,`SELECT 1 FROM realtime_voice_sessions WHERE workspace_id=$1 AND account_id=$2
       AND state IN ('opening','active','closing') LIMIT 1`,key.slice(0,2));
@@ -141,7 +140,7 @@ export function registerRealtimeVoice(app,db,bindings) {
     if (!isVoiceSdp(offerSdp)) throw invalid('Supply a WebRTC audio offer with ICE and DTLS');
     const offerHash = createHash('sha256').update(offerSdp).digest('hex');
     const binding = bindings.get(key[0]);
-    const claim = await reserve(db,key,offerHash,binding,request.context);
+    const claim = await reserve(db,key,offerHash,binding);
     let record = claim.record;
     if (claim.created) {
       let outcome;

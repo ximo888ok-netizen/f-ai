@@ -5,7 +5,7 @@ import { row, rows } from './db.js';
 import { ApiError, array, bool, choice, integer, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 import { applyDraftImages } from './listing-drafts.js';
 import { modelIdSchema } from './models.js';
-import { requireFeature } from './merchant-features.js';
+import { lockPlugin } from './plugin-policy.js';
 import { imageDelivery, imageDeliveryFields, imagePlanRetryUrl, productImagePlanPath as root } from './product-image-contract.js';
 import { eventCursor } from './task-events.js';
 import { stableJson, submitInTransaction } from './tasks.js';
@@ -181,7 +181,7 @@ export function registerProductImagePlans(app, db, providers, shops) {
       const plan = saved ?? await getPlan(tx, key);
       if (stableJson(plan.source) !== stableJson(source)) throw new ApiError(409,'IMAGE_PLAN_ID_CONFLICT','This plan ID belongs to another product brief');
       if (saved) {
-        await requireFeature(tx, request.context, 'image', generationCapability, true);
+        await lockPlugin(tx, key[0], 'image');
         await checkSources(tx, key, source.assetIds);
         reply.code(201);
       }
@@ -203,7 +203,7 @@ export function registerProductImagePlans(app, db, providers, shops) {
       if (plan.confirmedAt) throw new ApiError(409,'IMAGE_PLAN_CONFIRMED','This plan has already been confirmed');
       if (plan.revision === request.body.revision + 1 && stableJson(plan.layout) === stableJson(layout)) return describe(tx, key, plan);
       if (plan.revision !== request.body.revision) throw new ApiError(409,'IMAGE_PLAN_CHANGED','Reload the edited image plan');
-      await requireFeature(tx, request.context, 'image', generationCapability, true);
+      await lockPlugin(tx, key[0], 'image');
       const saved = await row(tx, `UPDATE product_image_plans SET layout=$4::jsonb,revision=revision+1,updated_at=now()
         WHERE ${ownedPlan} RETURNING ${planFields}`, [...key,JSON.stringify(layout)]);
       return describe(tx, key, saved);
@@ -225,7 +225,7 @@ export function registerProductImagePlans(app, db, providers, shops) {
       }
       // Acquire the wallet before the plugin and asset locks, using the task submission lock order.
       await row(tx, 'SELECT balance FROM wallets WHERE workspace_id=$1 AND account_id=$2 FOR UPDATE', key.slice(0,2));
-      await requireFeature(tx, request.context, 'image', generationCapability, true);
+      await lockPlugin(tx, key[0], 'image');
       await checkSources(tx, key, plan.source.assetIds);
       for (const index of plan.layout.images.keys()) {
         await queueImage(tx, providers, shops, context, plan, index, 1, chosenModel);
