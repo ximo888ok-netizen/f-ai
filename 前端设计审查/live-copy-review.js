@@ -16,10 +16,10 @@ export async function copyReviewPage(ctx) {
     field('禁用短语（每行一条）',textarea('forbiddenPhrases','maxlength="5050"',rules?.forbiddenPhrases.join('\n'))),'保存规则')):'';
   const review=rules?form('copy-review',field('商品标题',input('title','required maxlength="600"')) +
     field('卖点（每行一条）',textarea('sellingPoints','maxlength="20010"')),'校验文案') :
-    notice('这个平台还没有工作区规则。');
+    notice(ctx.manager ? '先保存本平台的工作区规则，即可检查商品标题和卖点。' : '请工作区管理员先设置本平台的文案规则。');
   const platformLinks=Object.entries(platforms).map(([key,label])=>key===platform
     ? '<strong aria-current="page">'+h(label)+'</strong>':link(label,'copy-review/'+key));
-  ctx.html(heading('平台文案校验')+link('返回技能运行','skills') +
+  ctx.html(heading('电商文案与平台校验')+link('创作文案','create/copywriting/copywriting.generate')+link('技能运行','skills') +
     '<div class="live-row">'+platformLinks.join('')+'</div>' +
     grid(editor,panel('文案检查',review+'<div data-copy-result aria-live="polite"></div>')));
   ctx.submit('copy-rules',async data=>{

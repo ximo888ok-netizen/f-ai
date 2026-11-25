@@ -1,6 +1,6 @@
 @media screen {
   :root[data-theme] {
-    --page-gutter: clamp(14px, 2.5vw, 36px);
+    --page-gutter: clamp(14px, 2.6vw, 38px);
     --panel-gap: clamp(12px, 1.4vw, 20px);
     --panel-padding: clamp(14px, 1.6vw, 22px);
     --control-height: 40px;
@@ -20,7 +20,7 @@
   :root[data-theme] .topline #crumb label { margin: 0; }
 
   :root[data-theme] :is(.work, .merchant-layout) {
-    padding: var(--space-4) var(--page-gutter) var(--space-6);
+    padding: clamp(20px, 2.1vw, 32px) var(--page-gutter) var(--space-6);
   }
 
   .merchant-layout {
@@ -36,9 +36,9 @@
     margin-block-end: 0;
   }
 
-  .live-grid:has(> .live-panel) {
-    align-items: stretch;
-  }
+  .live-grid:has(> .live-panel) { align-items: stretch; }
+  .live-grid:has(> .live-panel .live-form) { align-items: start; }
+  .live-grid + :is(.live-grid, .live-panel, .live-fold) { margin-block-start: var(--panel-gap); }
 
   :is(.live-title, .agent-heading) h1 {
     margin-block: 0;
@@ -123,5 +123,273 @@
     :root[data-theme] .topline { min-block-size: 56px; flex-wrap: wrap; }
     .topActions { flex-wrap: wrap; }
     .agent-home:not(.in-chat) .agent-composer { min-block-size: 184px; }
+  }
+}
+
+@media screen and (forced-colors: none) {
+  :root[data-theme][data-scheme] {
+    --studio-canvas: color-mix(in srgb, var(--palette-bloom) 12%, light-dark(#f0effa, #232a3d));
+    --studio-middle: light-dark(#f4f3fa, #1d2435);
+    --studio-horizon: color-mix(in srgb, var(--palette-sheen) 27%, var(--studio-canvas));
+    --studio-light-pool: color-mix(in srgb, var(--palette-sheen) 20%, var(--studio-canvas));
+    --studio-color-pool: color-mix(in srgb, var(--palette-bloom) 32%, var(--studio-canvas));
+    --studio-solid: light-dark(#faf9ff, #252a40);
+    --studio-sheet: light-dark(rgb(255 255 255 / .61), rgb(39 46 72 / .73));
+    --studio-inset: color-mix(in srgb, var(--studio-accent) 7%, var(--studio-solid));
+    --studio-ink: light-dark(#252640, #f2f2fc);
+    --studio-secondary: light-dark(#5a5d77, #bdc3dd);
+    --studio-action: var(--studio-accent);
+    --studio-on-action: light-dark(#fff, #24203d);
+    --studio-selection: color-mix(in srgb, var(--studio-accent) 13%, var(--studio-solid));
+    --studio-nav-selection: linear-gradient(95deg, color-mix(in srgb, var(--studio-accent) 18%, transparent), color-mix(in srgb, var(--studio-accent) 8%, transparent));
+    --studio-accent: light-dark(var(--palette-pigment), var(--palette-sheen));
+    --studio-chrome: light-dark(rgb(255 255 255 / .54), rgb(38 44 68 / .77));
+    --studio-overlay: light-dark(rgb(250 250 255 / .96), rgb(35 39 61 / .97));
+    --studio-shadow: 0 14px 32px -14px light-dark(#4a44875c, #111525b3);
+    --studio-panel-shadow: 0 5px 24px -14px light-dark(#46448345, #1415269c);
+    --studio-rim: light-dark(#ffffffdf, #e5e4ff26);
+    --studio-panel-border: light-dark(#ffffffd4, #e1ddff26);
+    --studio-panel-filter: blur(22px) saturate(1.18);
+    --studio-field: color-mix(in srgb, var(--studio-inset) 50%, var(--studio-solid));
+    --ink: var(--studio-ink);
+    --sub: var(--studio-secondary);
+    --muted: var(--studio-secondary);
+    --paper: var(--studio-solid);
+    --bg: var(--studio-canvas);
+    --surface: var(--studio-sheet);
+    --control: var(--studio-chrome);
+    --tab: var(--studio-selection);
+    --dialog: var(--studio-overlay);
+    --accent: var(--studio-accent);
+    --mark: var(--studio-accent);
+    --primary: var(--studio-action);
+    --on-primary: var(--studio-on-action);
+    --radius: 16px;
+    --control-radius: 9px;
+    --liquid-border: light-dark(#41417728, #d8d9ff29);
+    --line-strong: light-dark(#77749c, #8187a7);
+    --liquid-tint-light: transparent;
+    --liquid-tint: var(--studio-inset);
+    --liquid-tint-strong: var(--studio-selection);
+    --liquid-field: var(--studio-field);
+    --liquid-focus: var(--studio-accent);
+    --liquid-glow: color-mix(in srgb, var(--studio-accent) 27%, transparent);
+    --liquid-rim: inset 0 1px 0 var(--studio-rim);
+    --liquid-shadow: var(--studio-shadow);
+    --text-title: clamp(1.75rem, 2.3vw, 2.35rem);
+  }
+
+  :root[data-theme="glass"][data-scheme] {
+    --studio-canvas: light-dark(#e9eafa, #242c44);
+    --studio-middle: light-dark(#f0effa, #1d2439);
+    --studio-horizon: light-dark(#d9e6f9, #30334f);
+    --studio-light-pool: light-dark(#d9e7fc, #313955);
+    --studio-color-pool: light-dark(#d3d5fb, #38385c);
+  }
+
+  :root[data-theme] body {
+    font-family: system-ui, "Microsoft YaHei UI", sans-serif;
+    font-size: .875rem;
+    line-height: 1.55;
+    font-optical-sizing: auto;
+  }
+
+  :root[data-theme] body :is(.topline, .app-shell .rail, .merchant-layout > .card.merchant-menu) {
+    background: var(--studio-chrome);
+    border-color: var(--line);
+    box-shadow: inset 0 1px var(--studio-rim);
+    --liquid-optics: var(--studio-panel-filter);
+  }
+
+  :root[data-theme] .topline { min-block-size: 58px; }
+
+  :root[data-theme] :is(.topline, .app-shell .rail)::after {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  :root[data-theme] body :is(.work, .merchant-layout) :is(.card, .live-panel):not(.agent-composer, .merchant-menu) {
+    background: var(--studio-sheet);
+    border-color: var(--studio-panel-border);
+    box-shadow: var(--liquid-rim), var(--studio-panel-shadow);
+    --liquid-optics: var(--studio-panel-filter);
+  }
+
+  :root[data-theme] body :is(.work, .merchant-layout) :is(.card, .live-panel) :is(.card, .live-panel) {
+    --liquid-optics: none;
+  }
+
+  :root[data-theme] :is(.live-desk-stage, .live-main, #merchantContent) {
+    padding-inline: 0;
+  }
+
+  :root[data-theme] :is(.live-desk-stage, .live-main:has(> .live-title:first-child),
+      #merchantContent:has(> .merchant-heading:first-child))::before,
+  :where(.live-main, #merchantContent, .live-grid, .live-desk-stage, .live-desk-lower)
+      > .card.live-panel:not(details)::before,
+  :where(.live-main, #merchantContent, .live-grid, .live-desk-stage, .live-desk-lower)
+      > .card.live-panel:not(details)::after {
+    content: none;
+  }
+
+  :is(.live-desk-stage > .live-home-title, .live-main > .live-title:first-child,
+      #merchantContent > .merchant-heading:first-child) {
+    padding: 0 0 1.25rem;
+  }
+
+  :root[data-theme] :is(.live-title, .live-home-title, .merchant-heading, .heading) h1 {
+    color: var(--ink);
+    -webkit-text-fill-color: currentColor;
+    background: none;
+    font-weight: 680;
+    letter-spacing: -.025em;
+    text-shadow: none;
+  }
+
+  :root[data-theme] :is(.app-shell, .merchant-layout) #nav .navitem:not([aria-current="page"], .active) {
+    border-color: transparent;
+    box-shadow: none;
+  }
+
+  @media (hover: hover) {
+    :root[data-theme] :is(.app-shell, .merchant-layout) #nav .navitem:hover:not([aria-current="page"], .active) {
+      background: var(--studio-inset);
+      filter: none;
+    }
+  }
+
+  :root[data-theme] :is(.app-shell, .merchant-layout) #nav .navitem:is([aria-current="page"], .active) {
+    background: var(--studio-nav-selection);
+    color: var(--studio-accent);
+    border-color: color-mix(in srgb, var(--studio-accent) 16%, transparent);
+    box-shadow: var(--liquid-rim);
+    font-weight: 650;
+  }
+
+  :root[data-theme] :is(#main, #merchantContent, .ui-dialog) :is(.primary, .start):not(:disabled, [aria-disabled="true"]):not([hidden]) {
+    background: var(--liquid-specular, none), var(--studio-action);
+    color: var(--studio-on-action);
+    border-color: transparent;
+    box-shadow: inset 0 1px 0 #ffffff42, 0 4px 12px var(--liquid-glow);
+  }
+
+  :root[data-theme] :is(#main, #merchantContent, .app-shell, .merchant-layout, .merchant-head, .ui-dialog)
+      :is(button, .smallbtn, .navitem, summary):active:not(:disabled, [aria-disabled="true"]) {
+    filter: brightness(.88);
+    transform: none;
+    transition-duration: 0ms;
+  }
+
+  :root[data-theme] :is(button, a, input, textarea, select, summary):focus-visible {
+    outline: 2px solid var(--studio-accent);
+    outline-offset: 2px;
+  }
+
+  :root[data-theme][data-scheme] body :is(dialog[open], .ui-dialog[open]) {
+    color-scheme: inherit;
+    --ink: var(--studio-ink);
+    --sub: var(--studio-secondary);
+    --muted: var(--studio-secondary);
+    --liquid-border: var(--line-strong);
+    background: var(--studio-overlay);
+    border-color: var(--line);
+    box-shadow: var(--studio-shadow);
+    --liquid-optics: var(--studio-dialog-filter, var(--studio-panel-filter));
+  }
+
+  :root[data-theme] :is(dialog, #themeDialog)::backdrop {
+    background: light-dark(#26264342, #171626a6);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  :root[data-theme] .merchant-layout { gap: clamp(14px, 2vw, 28px); }
+  .merchant-layout .merchant-table th { text-align: start; }
+  .merchant-layout .merchant-menu #nav { gap: 2px; }
+
+  :root[data-theme] body :is(.live-form, .live-panel, .merchant-filter, .merchant-menu, .topline, .ui-dialog)
+      :is(input:not([type=radio], [type=checkbox], [type=range], [type=file], [type=hidden]), select, textarea) {
+    background: var(--studio-field);
+    box-shadow: none;
+  }
+
+  :root[data-theme] body :is(.live-form, .live-panel, .merchant-filter, .merchant-menu, .topline, .ui-dialog)
+      :is(input:not([type=radio], [type=checkbox], [type=range], [type=file], [type=hidden]), select, textarea):focus:not([aria-invalid=true], :user-invalid) {
+    border-color: var(--studio-accent);
+    outline-offset: 0;
+    box-shadow: none;
+  }
+
+  :root[data-theme] :is(.live-form > label, .merchant-filter label) {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+  }
+
+  .live-form > label { min-inline-size: 0; }
+  :root[data-theme] :is(.live-form > label, .merchant-filter label) > :is(input, select, textarea) { margin-block-start: 0; }
+  :root[data-theme] .live-form > label:has(> input[type="checkbox"]) {
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: var(--compact-height);
+  }
+
+  :root[data-theme] .live-form > label.live-check { flex-direction: row; justify-content: flex-start; }
+
+  :root[data-theme] :is(.live-table, .merchant-table) {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :root[data-theme] .ui-table-scroll {
+    border: 1px solid var(--line);
+    border-radius: var(--control-radius);
+  }
+
+  :root[data-theme] .ui-table-scroll thead tr:first-child th { border-block-start: 0; }
+  :root[data-theme] :is(.live-table, .merchant-table) thead th {
+    background: color-mix(in srgb, var(--studio-inset) 65%, var(--studio-sheet));
+  }
+
+  :root[data-theme] :is(.live-table, .merchant-table) tbody tr:focus-within td { background: var(--studio-selection); }
+  :root[data-theme] :is(.live-table, .merchant-table) tbody tr:hover td { background: color-mix(in srgb, var(--studio-inset) 60%, transparent); }
+
+  :root[data-theme] [aria-busy="true"]:disabled,
+  :root[data-theme] [aria-busy="true"] button:disabled { opacity: .72; cursor: progress; }
+
+  :root[data-theme] .toast {
+    inset-block-end: max(16px, env(safe-area-inset-bottom));
+    border-color: var(--line);
+    translate: 0 4px;
+  }
+
+  :root[data-theme] .toast.show {
+    translate: 0;
+    background: var(--studio-sheet);
+    color: var(--ink);
+    box-shadow: var(--studio-shadow);
+    backdrop-filter: none;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    :root[data-motion="on"] .toast { transition: opacity 130ms ease-out, translate 160ms cubic-bezier(.23, 1, .32, 1); }
+  }
+
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    :root[data-theme][data-scheme] {
+      --studio-sheet: var(--studio-solid);
+      --studio-chrome: var(--studio-solid);
+      --studio-overlay: var(--studio-solid);
+      --studio-panel-filter: none;
+      --studio-dialog-filter: none;
+      --liquid-border: var(--line-strong);
+    }
+
+    :root[data-theme] body :is(.topline, .app-shell .rail, .merchant-layout > .card.merchant-menu, .ui-dialog[open]) {
+      background: var(--studio-sheet);
+      --liquid-optics: none;
+    }
   }
 }

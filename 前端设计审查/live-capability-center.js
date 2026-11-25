@@ -1,4 +1,5 @@
 import { h, heading, link, notice, path } from './live-ui.js';
+import { studioIcon } from './studio-icons.js';
 
 const tabs = { experts: '专家', skills: '技能', connections: '连接器' };
 
@@ -26,11 +27,12 @@ async function catalogEntries(ctx, tab) {
     }));
 }
 
-function capabilityCard(entry) {
-  const icon = [...entry.name][0];
-  return '<a class="card directory-card" href="#' + h(entry.route) + '"><span class="directory-icon" aria-hidden="true">' +
-    h(icon) + '</span><div><h2>' + h(entry.name) + '</h2>' + notice(entry.description) +
-    '<small>' + h([entry.category, entry.state].filter(Boolean).join(' · ')) + '</small></div><span aria-hidden="true">↗</span></a>';
+function capabilityCard(entry, tab) {
+  const icon = tab === 'connections' ? 'connections' : tab === 'skills' ? 'capabilities' : 'members';
+  return '<a class="card directory-card" href="#' + h(entry.route) + '"><div class="directory-card-head">' +
+    '<span class="directory-icon">' + studioIcon(icon) + '</span><small>' +
+    h([entry.category, entry.state].filter(Boolean).join(' · ')) + '</small></div><h2>' + h(entry.name) +
+    '</h2><div class="directory-card-detail">' + notice(entry.description) + studioIcon('outward') + '</div></a>';
 }
 
 export async function capabilityCenter(ctx) {
@@ -44,7 +46,7 @@ export async function capabilityCenter(ctx) {
     '<div class="directory-toolbar"><nav aria-label="能力类别">' + Object.entries(tabs).map(([id, label]) =>
       '<a class="smallbtn" href="#capabilities/' + id + '"' + (id === tab ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') +
     '</nav><div><input type="search" aria-label="搜索' + tabs[tab] + '" placeholder="搜索' + tabs[tab] + '">' + actions + '</div></div>' +
-    '<div class="directory-grid">' + entries.map(capabilityCard).join('') + '</div><p class="live-muted" data-directory-empty role="status"' +
+    '<div class="directory-grid">' + entries.map(entry => capabilityCard(entry, tab)).join('') + '</div><p class="live-muted" data-directory-empty role="status"' +
     (entries.length ? ' hidden' : '') + '>没有符合条件的' + tabs[tab] + '。</p></section>');
   const search = document.querySelector('.studio-directory input');
   const cards = [...document.querySelectorAll('.directory-card')];

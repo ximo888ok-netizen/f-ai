@@ -7,6 +7,11 @@ export const textarea = (name, attrs = '', value = '') => '<textarea name="' + h
 export const button = (title, attrs = '') => '<button class="primary" ' + attrs + '>' + h(title) + '</button>';
 export const action = (title, name, value = '') => '<button class="plain" type="button" data-' + name + '="' + h(value) + '">' + h(title) + '</button>';
 export const link = (title, route) => '<a class="smallbtn" href="#' + h(route) + '">' + h(title) + '</a>';
+export function generationModeTabs(label, modes, current) {
+  return '<nav class="quick-mode-switch" aria-label="' + h(label) + '">' + modes.map(([id, route, title]) =>
+    '<a class="smallbtn" href="#' + h(route) + '"' + (id === current ? ' aria-current="page"' : '') + '>' +
+    h(title) + '</a>').join('') + '</nav>';
+}
 export const notice = text => '<p class="live-muted">' + h(text) + '</p>';
 export const heading = (title, description = '') => '<div class="live-title"><h1>' + h(title) + '</h1>' + (description ? notice(description) : '') + '</div>';
 export const panel = (title, body) => '<section class="card live-panel"><h2>' + h(title) + '</h2>' + body + '</section>';

@@ -1,3 +1,5 @@
+import { mountGlassField } from './live-spatial.js';
+
 const databaseName = 'fai.studio.wallpaper';
 const storeName = 'preferences';
 const wallpaperKey = 'active';
@@ -77,6 +79,7 @@ function bindWallpaper() {
     activeUrl = file instanceof Blob ? URL.createObjectURL(file) : undefined;
     if (activeUrl) root.style.setProperty('--studio-wallpaper-image', 'url("' + activeUrl + '")');
     else root.style.removeProperty('--studio-wallpaper-image');
+    root.toggleAttribute('data-custom-wallpaper', Boolean(activeUrl));
     if (previous) URL.revokeObjectURL(previous);
     status.textContent = activeUrl ? '已保存到本机' + (file.name ? ' · ' + file.name : '') : '正在使用默认壁纸';
     syncControls();
@@ -134,3 +137,5 @@ function bindWallpaper() {
 
 if (document.getElementById('themeDialog')) bindWallpaper();
 else document.addEventListener('DOMContentLoaded', bindWallpaper, { once: true });
+
+mountGlassField(document.querySelector('.aurora-field'));

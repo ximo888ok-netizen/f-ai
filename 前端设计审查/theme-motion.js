@@ -1,6 +1,6 @@
 /* The sun and moon share a small grid. Only the travelling glass draws it. */
 (() => {
-  const duration = 520;
+  const duration = 270;
   function dots(scheme) {
     const points = [];
     for (let y = -5; y <= 5; y++) {
@@ -19,7 +19,7 @@
     const end = to === 'light' ? light : dark;
     const count = Math.max(start.length, end.length);
     const t = phase * phase * (3 - 2 * phase);
-    const scatter = from === to ? 0 : 2.8 * Math.sin(t * Math.PI);
+    const scatter = from === to ? 0 : 1.25 * Math.sin(t * Math.PI);
     const warmth = to === from ? Number(to === 'light') : to === 'light' ? t : 1 - t;
     context.clearRect(0, 0, 40, 40);
     context.fillStyle = 'rgb(' + [225 - 128 * warmth, 231 - 167 * warmth, 255 - 225 * warmth].join(' ') + ')';
@@ -35,7 +35,7 @@
     const root = document.documentElement;
     const track = dialog.querySelector('.appearanceModes > div');
     const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-    const contrast = matchMedia('(forced-colors: active)');
+    const contrast = matchMedia('(forced-colors: active), (prefers-contrast: more), (prefers-reduced-transparency: reduce)');
     let active;
     const finish = () => active?.finish();
     function play(previous, next, fromScheme, toScheme, paint) {
@@ -62,8 +62,8 @@
       const fromFace = getComputedStyle(thumb).backgroundColor;
       const context = glyph.getContext('2d');
       const rim = scheme => scheme === 'dark'
-        ? 'inset 1px -2px 3px #b8c7ff, -2px 2px 8px #869eff9e'
-        : 'inset -1px -2px 3px #ffdd99, 2px 2px 8px #f3b24e99';
+        ? 'inset 0 1px #c1d7ff78, 0 2px 6px #779cff42'
+        : 'inset 0 1px #fff4ddc0, 0 2px 6px #dda44435';
       thumb.style.boxShadow = rim(fromScheme);
       if (context) drawGlyph(context, fromScheme, toScheme, 0);
       let frame = 0, animation, transition, painted = false;
@@ -90,7 +90,7 @@
           { transform: 'translateX(' + dx + 'px)', backgroundColor: fromFace, boxShadow: rim(fromScheme), opacity: 1 },
           { transform: 'translateX(0)', backgroundColor: toFace, boxShadow: rim(toScheme), opacity: 1, offset: .78 },
           { transform: 'translateX(0)', backgroundColor: toFace, boxShadow: rim(toScheme), opacity: 0 }
-        ], { duration, easing: 'cubic-bezier(.32,.02,.25,1)', fill: 'both' });
+        ], { duration, easing: 'cubic-bezier(.23,1,.32,1)', fill: 'both' });
         function tick() {
           const phase = Math.min(1, (animation.currentTime ?? 0) / duration);
           if (phase > .66) track.dataset.modeFlight = 'settling';

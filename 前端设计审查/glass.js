@@ -28,16 +28,16 @@ const StudioGlass = (() => {
     });
     if (!moving || document.hidden) for (const animation of activeAnimations) animation.cancel();
   }
-  function motion(target, frames, duration) {
-    if (!target || !moving || document.hidden) return;
-    for (const animation of target.getAnimations()) if (animation.id === 'studio-jelly') animation.cancel();
-    const animation = target.animate(frames,{id:'studio-jelly',duration,easing:'ease-in-out'});
-    activeAnimations.add(animation);
-    const clear = () => activeAnimations.delete(animation);
-    animation.onfinish = clear; animation.oncancel = clear;
-  }
-  function rebound(target) {
-    motion(target,[{scale:'1 1'},{scale:'1.016 .981',offset:.18},{scale:'.992 1.009',offset:.68},{scale:'1 1'}],340);
+  function moveThumb(target, animation, x, scale) {
+    animation?.cancel();
+    if (!moving || reduced.matches || document.hidden) return;
+    const shift = target.animate([
+      { transform: `translateX(${x}px) scaleX(${scale})` },
+      { transform: 'none' },
+    ], { id: 'studio-thumb', duration: 185, easing: 'cubic-bezier(.23, 1, .32, 1)' });
+    activeAnimations.add(shift);
+    const clear = () => activeAnimations.delete(shift);
+    shift.onfinish = clear; shift.oncancel = clear;
   }
 
   // Red and green carry edge normals; blue mixes a sharp bevel over the frosted centre.
@@ -103,22 +103,26 @@ const StudioGlass = (() => {
     }
     for(const [id,filter] of lenses) if(!liveLenses.has(id)){filter.remove();lenses.delete(id);}
     for (const group of groups) {
-      const button=group.querySelector(selectedSelector);
+      const selected = group.querySelector('button.sel');
+      const button = selected ?? group.querySelector(selectedSelector);
       let thumb=group.querySelector('.glass-thumb');
       if(!thumb) {
         thumb=document.createElement('i');thumb.className='glass-thumb';thumb.setAttribute('aria-hidden','true');group.prepend(thumb);
       }
       const x=button.offsetLeft,y=button.offsetTop,w=button.offsetWidth,h=button.offsetHeight;
-      Object.assign(thumb.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'});
       const token=[location.pathname,document.body.dataset.page,group.classList[0],button.dataset.hubTab||''].join('|');
-      if(group.querySelector('button.sel'))group.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.classList.contains('sel'))));
       const old=previousThumbs.get(token);
-      if(old && old.name!==button.textContent && old.y===y){
-        motion(thumb,[
-          {transform:'translateX('+(old.x-x)+'px) scaleX('+old.w/w+')'},
-          {transform:'translateX('+((old.x-x)*.16)+'px) scale(1.035,.976)',offset:.48},
-          {transform:'translateX(0) scale(.987,1.012)',offset:.77},{transform:'none'}
-        ],420);
+      const changed = old && (old.x !== x || old.y !== y || old.w !== w || old.name !== button.textContent);
+      const previous = changed ? thumb.getAnimations().find(animation => animation.id === 'studio-thumb') : null;
+      // A second selection begins at the indicator's current painted position.
+      const inFlight = previous ? thumb.getBoundingClientRect() : null;
+      Object.assign(thumb.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'});
+      if (selected) group.querySelectorAll('button').forEach(option => option.setAttribute('aria-pressed', String(option === selected)));
+      if (changed && w && old.name !== button.textContent && old.y === y && !group.matches(':focus-within:has(:focus-visible)')) {
+        const nextLeft = inFlight ? button.getBoundingClientRect().left : 0;
+        moveThumb(thumb, previous, inFlight ? inFlight.left - nextLeft : old.x - x, (inFlight?.width ?? old.w) / w);
+      } else {
+        previous?.cancel();
       }
       previousThumbs.set(token,{x,y,w,name:button.textContent});
     }
@@ -146,13 +150,9 @@ const StudioGlass = (() => {
       try{localStorage.setItem(key,preferred);}catch{}
       syncMotion();
       document.dispatchEvent(new CustomEvent('studio-motion', { detail: preferred }));
-      return;
-    }
-    const button=event.target.closest('button:not(:disabled)');
-    if(button&&!button.closest(segmentSelector) && !button.hasAttribute('data-float-grip')){
-      queueMicrotask(()=>{if(button.isConnected)rebound(button);});
     }
   });
+  document.addEventListener('DOMContentLoaded', syncMotion, { once: true });
   syncMotion();schedule();
-  return {schedule,rebound};
+  return {schedule};
 })();

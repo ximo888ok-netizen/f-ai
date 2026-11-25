@@ -1,7 +1,9 @@
+import { studioEntry } from './studio-entry.js';
+import { studioIcon } from './studio-icons.js';
 import { bindNavigationSearch, findNavigation } from './live-nav-search.js';
 import { bindStudioAppearance } from './studio-appearance.js';
 import { requestStudio, sessionKey, workspaceKey } from './studio-session.js';
-import { field, form, h, input, notice, panel, select } from './live-ui.js';
+import { field, form, h, input, select } from './live-ui.js';
 import { membersPage } from './merchant-team.js';
 import { projectsPage } from './merchant-projects.js';
 import { auditPage, connectionsPage, featuresPage } from './merchant-settings.js';
@@ -51,7 +53,7 @@ async function request(url, { workspace, ...rest } = {}) {
   try {
     return await requestStudio(url, { ...rest, token: login ? null : session, workspaceId: workspace });
   } catch (error) {
-    if (login && error.status === 401) error.message = '邮箱或密码错误。';
+    if (login && error.status === 401) error.message = '账号或密码错误。';
     else error.message = errors[error.code] ?? error.message;
     throw error;
   }
@@ -86,6 +88,7 @@ function makeContext(controller, workspace, args) {
       current.preventDefault();
       if (element.dataset.pending || !active()) return;
       element.dataset.pending = 'true';
+      element.setAttribute('aria-busy', 'true');
       const controls = element.matches('button') ? [element] : [...element.querySelectorAll('button:not(:disabled)')];
       controls.forEach(control => { control.disabled = true; });
       try {
@@ -97,6 +100,7 @@ function makeContext(controller, workspace, args) {
         }
       } finally {
         delete element.dataset.pending;
+        element.removeAttribute('aria-busy');
         controls.forEach(control => { control.disabled = false; });
       }
     });
@@ -125,10 +129,10 @@ function makeContext(controller, workspace, args) {
 
 function login(ctx) {
   menu.hidden = true;
-  ctx.html(sectionTitle('登录商家后台', '使用拥有企业管理权限的账号登录。') +
-    panel('账号登录', form('login',
-      field('邮箱', input('email', 'type="email" required autocomplete="username" maxlength="254"')) +
-      field('密码', input('password', 'type="password" required maxlength="128" autocomplete="current-password"')), '登录')));
+  ctx.html(studioEntry({ title: '登录商家后台', description: '使用拥有企业管理权限的账号登录。', merchant: true,
+    fields: form('login',
+      field('登录账号', input('email', 'type="text" required autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="输入登录账号或邮箱"')) +
+      field('密码', input('password', 'type="password" required maxlength="128" autocomplete="current-password"')), '登录') }));
   ctx.form('login', async data => {
     const result = await ctx.api('/v1/auth/login', { method: 'POST', body: Object.fromEntries(data) });
     if (ctx.active()) { remember(result.token); ctx.reload(); }
@@ -142,7 +146,7 @@ function updateMenu(workspaces, workspace, page) {
   document.querySelector('#merchantRole').textContent = roleNames[workspace.role];
   nav.innerHTML = Object.entries(pages).map(([id, [label]]) =>
     '<a class="navitem' + (id === page ? ' active' : '') + '" href="#' + id + '"' +
-    (id === page ? ' aria-current="page"' : '') + '<span>' + h(label) + '</span></a>').join('') + findNavigation;
+    (id === page ? ' aria-current="page"' : '') + '>' + studioIcon(({ projects: 'data', audit: 'tasks' })[id] ?? id) + '<span>' + h(label) + '</span></a>').join('') + findNavigation;
   menu.hidden = false;
 }
 

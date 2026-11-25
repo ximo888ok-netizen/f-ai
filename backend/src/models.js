@@ -4,7 +4,7 @@ import { catalog, modelAlias } from './catalog.js';
 import { invalid, object, route as httpRoute, text } from './http.js';
 import { requestProviderStream, requestUpstream } from './model-http.js';
 import { streamChat } from './model-stream.js';
-import { generateImage } from './model-image.js';
+import { generateImage, supportsImageQuality } from './model-image.js';
 import { pollMapped, runMapped, validateMappedMedia, validateMapping } from './model-mapping.js';
 import { generateText, textCapabilities, textPrompt } from './model-text.js';
 import { utilityCapabilities, runUtility } from './model-utilities.js';
@@ -105,7 +105,8 @@ export function installModels(providers, definitions, env = process.env) {
     if (streaming && (config.protocol!=='chat-completions' || !capabilities.includes('model.chat'))) {
       throw new Error('Text streaming requires a Chat Completions model with model.chat');
     }
-    const info = { id: config.id, model: config.model, protocol: config.protocol, kind, capabilities: [...new Set(capabilities)], streamText:streaming };
+    const info = { id: config.id, model: config.model, protocol: config.protocol, kind, capabilities: [...new Set(capabilities)],
+      streamText: streaming, imageQuality: supportsImageQuality(config) };
     const signature = createHash('sha256').update(JSON.stringify([base.href,config,entry.keyEnv,...(streaming?[true]:[])])).digest('hex');
     const call = (path,body,extra,binary=false,timeout) => requestUpstream(new URL(path,base), {
       body, headers: { ...headers, ...extra }, repeatable: body === undefined,
@@ -146,6 +147,8 @@ export function registerModels(app, providers, db) {
     tags: ['Models'], summary: 'List configured upstream model aliases for task submission',
     querystring: object({ capabilityId: { type: 'string', enum: [...catalog.keys()] } }, []),
   }, async request => ({
-    items: [...(await modelProviders(db, request.context.workspaceId, providers)).values()].map(provider => provider.info).filter(info => info && (!request.query.capabilityId || info.capabilities.includes(request.query.capabilityId))),
+    items: [...(await modelProviders(db, request.context.workspaceId, providers)).values()].map(provider => provider.info)
+      .filter(info => info && (!request.query.capabilityId || info.capabilities.includes(request.query.capabilityId)))
+      .map(info => ({ ...info, imageQuality: info.imageQuality === true })),
   }));
 }

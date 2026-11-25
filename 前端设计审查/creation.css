@@ -66,3 +66,6 @@ dialog{box-shadow:0 18px 65px #05030ab3}dialog::backdrop{background:#06050adb;ba
 @media(prefers-reduced-motion:reduce){.casePhoto img{transition:none}}
 
 .topActions{display:flex;align-items:center;gap:13px}.localState{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#ada8bb}.localState:before{content:"";width:5px;height:5px;background:#bfa2e0;border-radius:50%}@media(max-width:450px){.localState{display:none}}
+
+:where(.app-shell) #nav{min-height:0;overflow:auto;align-content:start;scrollbar-width:thin;scrollbar-color:#3a3045 transparent;margin-top:25px}
+@media(max-width:600px){:where(.app-shell) #nav{display:flex;flex:1;overflow-x:auto;margin:0;scrollbar-width:none}}

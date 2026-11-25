@@ -86,6 +86,7 @@ async function providerPayload(db, identityDb, task, capability, shops) {
   }
   return {
     capabilityId: capability.id, mode, parameters: providerParameters,
+    ...(task.input.imageQuality ? { imageQuality: task.input.imageQuality } : {}),
     ...(shopReference ? { shopReference } : {}),
     assets: ids.map(id => {
       const asset = assetsById.get(id);

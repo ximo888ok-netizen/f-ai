@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "studio:demo": "node src/local-studio.js",
+    "studio:demo": "node --env-file-if-exists=.env.preview.local src/local-studio.js",
     "migrate": "node src/admin.js migrate",
     "db:backup": "node src/admin.js backup",
     "db:restore": "node src/admin.js restore-backup",

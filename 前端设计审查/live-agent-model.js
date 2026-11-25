@@ -19,6 +19,16 @@ export async function modelCapability(ctx) {
   return models.enabled && models.capabilities.find(c => c.id === 'model.chat' && c.available);
 }
 
+export async function waitForModelTask(ctx, task, timeout = 45000) {
+  let current = task;
+  const deadline = Date.now() + timeout;
+  while (['queued', 'running'].includes(current.state) && Date.now() < deadline) {
+    await waitForPoll(ctx.signal);
+    current = await ctx.api('/v1/tasks/' + encodeURIComponent(task.id));
+  }
+  return current;
+}
+
 export async function interpret(ctx, messages, onTask, modelId) {
   const task = await ctx.api('/v1/tasks', { method: 'POST', body: {
     capabilityId: 'model.chat', mode: 'chat', idempotencyKey: crypto.randomUUID(), ...(modelId ? { modelId } : {}),
@@ -26,12 +36,7 @@ export async function interpret(ctx, messages, onTask, modelId) {
       ...messages.slice(-6).map(m => ({ role: m.role, content: m.text.slice(0, 4000) }))] },
   } });
   onTask(task.id);
-  let current = task;
-  const deadline = Date.now() + 45000;
-  while (['queued', 'running'].includes(current.state) && Date.now() < deadline) {
-    await waitForPoll(ctx.signal);
-    current = await ctx.api('/v1/tasks/' + encodeURIComponent(task.id));
-  }
+  const current = await waitForModelTask(ctx, task);
   if (current.state !== 'succeeded') {
     throw new Error(['queued', 'running'].includes(current.state) ? '模型仍在执行，可在任务记录中查看进度。' : '模型任务未成功，可打开任务记录查看原因。');
   }

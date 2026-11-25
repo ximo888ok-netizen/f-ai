@@ -3,9 +3,14 @@ import { readFile } from 'node:fs/promises';
 import { notFound } from './http.js';
 
 const directory = new URL('../../前端设计审查/', import.meta.url);
-const styles = ['studio.css', 'creation.css', 'commerce.css', 'glass.css', 'workspace.css', 'themes.css', 'theme-palettes.css', 'components.css', 'live.css', 'merchant.css', 'live-depth.css', 'live-spatial.css', 'live-light.css', 'live-agent.css', 'liquid-glass.css', 'liquid-layout.css', 'studio-wallpaper.css', 'workbench-layout.css'];
-const scripts = ['live-light.js', 'live-spatial.js', 'live-navigation.js', 'live-home.js', 'live-agent-home.js', 'live-agent-dialogue.js', 'live-agent-tools.js', 'live-agent-model.js', 'live-asset-preview.js', 'live-task-fields.js', 'live-catalog.js', 'studio-session.js', 'studio-appearance.js', 'studio-errors.js', 'live-ui.js', 'merchant.js', 'merchant-ui.js', 'merchant-team.js', 'merchant-projects.js', 'merchant-settings.js', 'themes.js', 'glass.js', 'theme-motion.js', 'live.js', 'live-workspace.js', 'live-tasks.js', 'live-customer.js', 'live-products.js', 'live-drafts.js', 'live-operations.js', 'operations-file.js', 'live-psd.js', 'live-connectors.js',
+const styles = ['studio.css', 'creation.css', 'glass.css', 'themes.css', 'theme-palettes.css', 'components.css', 'live.css', 'merchant.css', 'live-depth.css', 'live-spatial.css', 'live-light.css', 'live-agent.css', 'liquid-glass.css', 'liquid-layout.css', 'studio-wallpaper.css', 'workbench-layout.css', 'image-generation/style.css', 'live-video-prompt.css', 'live-video-quick.css', 'live-video-director.css', 'studio-foundation.css', 'studio-entry.css', 'studio-workflows.css'];
+const scripts = ['studio-icons.js', 'studio-entry.js', 'studio-workflows.js', 'live-spatial.js', 'live-navigation.js', 'live-home.js', 'live-agent-home.js', 'live-agent-dialogue.js', 'live-agent-tools.js', 'live-agent-model.js', 'live-asset-preview.js', 'live-task-fields.js', 'live-catalog.js', 'studio-session.js', 'studio-appearance.js', 'studio-errors.js', 'live-ui.js', 'merchant.js', 'merchant-ui.js', 'merchant-team.js', 'merchant-projects.js', 'merchant-settings.js', 'themes.js', 'glass.js', 'theme-motion.js', 'live.js', 'live-workspace.js', 'live-tasks.js', 'live-customer.js', 'live-products.js', 'live-drafts.js', 'live-operations.js', 'operations-file.js', 'live-psd.js', 'live-connectors.js',
   'live-popover.js', 'live-account-menu.js', 'live-capability-center.js', 'live-data-center.js', 'live-agent-controls.js',
+  'image-generation/index.js', 'image-generation/files.js', 'image-generation/options.js',
+  'image-generation/results.js', 'image-generation/prompt-favorites.js', 'image-generation/agent.js',
+  'live-video-prompt.js', 'live-video-prompt-view.js', 'live-video-prompt-options.js', 'live-video-prompt-media.js',
+  'live-video-quick.js', 'live-video-quick-view.js', 'live-video-quick-media.js',
+  'live-video-workflow.js', 'live-video-director.js', 'live-video-director-view.js', 'live-video-director-plan.js',
   'live-rights.js', 'live-skills.js', 'live-copy-review.js', 'live-files.js', 'live-media.js', 'live-media-controls.js',
   'live-image-studio.js', 'live-storyboards.js', 'live-task-stream.js', 'live-knowledge-tools.js', 'live-experts.js', 'merchant-credit-limit.js', 'merchant-readiness.js', 'live-copy-suggestions.js', 'live-record-tools.js', 'live-task-intake.js', 'live-task-edit.js', 'live-onboarding.js', 'live-text-delivery.js', 'live-nav-search.js', 'live-commerce-report.js', 'live-settings.js', 'live-task-trace.js', 'live-voice.js', 'liquid-glass.js', 'studio-wallpaper.js'];
 const types = new Map([
@@ -19,17 +24,20 @@ export function registerStudio(app) {
   const page = file => async (_request, reply) => reply
     .header('content-security-policy', security).header('referrer-policy', 'no-referrer')
     .type('text/html; charset=utf-8').send(await readFile(new URL(file, directory)));
-  app.get('/', { schema }, page('打开设计稿.html'));
+  app.get('/', { schema }, page('ai.html'));
+  app.get('/ai.html', { schema }, page('ai.html'));
   app.get('/merchant', { schema }, page('商家管理后台.html'));
   app.get('/studio/assets/:name', { schema }, async (request, reply) => {
     const { name } = request.params;
-    if (!['aurora.webp', 'optic-wave.webp', 'studio-wallpaper.webp'].includes(name)) throw notFound('Studio artwork');
+    if (!['optic-wave.webp', 'leather.webp', 'citrus.webp', 'audio.webp'].includes(name)) throw notFound('Studio artwork');
     return reply.type('image/webp').send(await readFile(new URL('assets/' + name, directory)));
   });
-  app.get('/studio/:name', { schema }, async (request, reply) => {
-    const { name } = request.params;
+  const resource = prefix => async (request, reply) => {
+    const name = prefix + request.params.name;
     const type = types.get(name);
     if (!type) throw notFound('Studio resource');
     return reply.type(type).send(await readFile(new URL(name, directory)));
-  });
+  };
+  app.get('/studio/:name', { schema }, resource(''));
+  app.get('/studio/image-generation/:name', { schema }, resource('image-generation/'));
 }

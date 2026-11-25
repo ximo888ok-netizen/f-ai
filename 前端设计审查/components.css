@@ -559,6 +559,26 @@
   overscroll-behavior: contain;
 }
 
+#navigationSearch .live-row {
+  display: grid;
+  gap: 2px;
+}
+
+:root[data-theme] #navigationSearch a.smallbtn {
+  justify-content: flex-start;
+  min-block-size: 36px;
+  text-align: start;
+  color: var(--ink);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme] #navigationSearch a.smallbtn:is(:hover, :focus-visible) {
+  background: var(--studio-selection, var(--tab));
+  color: var(--accent);
+}
+
 #themeDialog.ui-dialog {
   padding: 0;
 }

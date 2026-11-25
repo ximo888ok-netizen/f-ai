@@ -1,5 +1,7 @@
 import { bindRecordSearch } from './live-record-tools.js';
 import { bindStudioAppearance } from './studio-appearance.js';
+import { commerceHome, productionSection } from './studio-workflows.js';
+import { studioEntry } from './studio-entry.js';
 import { dashboard } from './live-home.js';
 import { agentHome } from './live-agent-home.js';
 import { workspaceNavigation } from './live-navigation.js';
@@ -9,7 +11,7 @@ import { dataCenter } from './live-data-center.js';
 import { requestStudio, sessionKey as tokenKey, workspaceKey } from './studio-session.js';
 import { describeError } from './studio-errors.js';
 export { describeError } from './studio-errors.js';
-import { action, field, form, h, heading, input, notice, panel, select } from './live-ui.js';
+import { action, field, form, h, heading, input, notice, select } from './live-ui.js';
 export * from './live-ui.js';
 
 import { workspacePages } from './live-workspace.js';
@@ -27,9 +29,11 @@ import { mediaPage } from './live-media.js';
 
 const main = document.querySelector('#main');
 bindRecordSearch(main);
+document.querySelector('[data-about]').onclick = () => document.querySelector('#studio-about').showModal();
 const roleNames = { owner: '所有者', admin: '管理员', member: '成员' };
 const pages = {
-  home: ['首页', agentHome],
+  home: ['电商工作台', commerceHome],
+  chat: ['AI 对话', agentHome],
   capabilities: ['能力中心', capabilityCenter],
   data: ['资料库', dataCenter],
   desk: ['生产工作台', dashboard],
@@ -62,7 +66,7 @@ const pages = {
 };
 const updateNavigation = workspaceNavigation(pages);
 const updateAccount = bindAccountMenu(error => toast(describeError(error)));
-const workspaceAliases = { welcome: 'home', assistant: 'schedules', image: 'create/image', video: 'create/video',
+const workspaceAliases = { workbench: 'home', 'home/new': 'chat/new', welcome: 'home', assistant: 'schedules', image: 'create/image', video: 'create/video',
   copy: 'create/copywriting', service: 'customer', ops: 'shops',
   'desk-mainimg': 'create/image/image.main-image', 'desk-skuimg': 'media/images',
   'desk-detailimg': 'media/images', 'desk-retouch': 'media/images',
@@ -122,14 +126,31 @@ function setIdentity(data, selected = workspace?.id ?? sessionStorage.getItem(wo
   else sessionStorage.removeItem(workspaceKey);
 }
 
-function updateHeader(route, title, ctx) {
-  updateNavigation(route, Boolean(identity));
+function updateHeader(route, ctx) {
+  updateNavigation(route, ctx);
+  const credit = document.querySelector('[data-shell-credit]');
+  const inbox = document.querySelector('[data-shell-inbox]');
+  credit.hidden = inbox.hidden = !identity;
+  if (identity) {
+    const number = credit.querySelector('#topCreditText');
+    number.textContent = '…';
+    const badge = inbox.querySelector('.badge-dot');
+    badge.hidden = true;
+    ctx.api('/v1/credits/wallet').then(wallet => {
+      if (ctx.active()) number.textContent = wallet.available.toLocaleString('zh-CN');
+    }).catch(() => { if (ctx.active()) number.textContent = '查看'; });
+    ctx.api('/v1/notifications?limit=1').then(info => {
+      if (!ctx.active()) return;
+      badge.hidden = !info.unread;
+      inbox.setAttribute('aria-label', '消息中心，' + info.unread + ' 条未读');
+    }).catch(() => { if (ctx.active()) inbox.setAttribute('aria-label', '打开消息中心'); });
+  }
   updateAccount(ctx, roleNames[workspace?.role]);
   document.querySelector('#queueLink').hidden = !identity;
   const merchantLink = document.querySelector('#merchantLink');
   merchantLink.hidden = workspace?.kind !== 'enterprise' || !['owner', 'admin'].includes(workspace.role);
   document.querySelector('#crumb').innerHTML = workspace ? field('工作区', select('workspace',
-    identity.workspaces.map(entry => [entry.id, entry.name]), workspace.id, 'id="workspace-selector"')) : h(title);
+    identity.workspaces.map(entry => [entry.id, entry.name]), workspace.id, 'id="workspace-selector"')) : '账号访问';
   document.querySelector('#workspace-selector')?.addEventListener('change', async event => {
     setIdentity(identity, event.target.value);
     if (route !== 'home' || location.hash !== '#home') location.hash = 'home';
@@ -137,12 +158,12 @@ function updateHeader(route, title, ctx) {
   });
 }
 
-function viewContext(controller, routeArgs) {
+function viewContext(controller, routeArgs, section) {
   const selected = workspace;
   const session = identity;
   const active = () => !controller.signal.aborted;
   const ctx = {
-    args: routeArgs, workspace: selected, account: session?.account, active, signal: controller.signal,
+    args: routeArgs, section, workspace: selected, account: session?.account, active, signal: controller.signal,
     navigation: Object.fromEntries(Object.entries(pages).map(([id,[label]])=>[label,id])),
     manager: selected?.role === 'owner' || selected?.role === 'admin',
     enterprise: selected?.kind === 'enterprise',
@@ -172,12 +193,14 @@ function viewContext(controller, routeArgs) {
       evt.preventDefault();
       if (node.dataset.pending || !active()) return;
       node.dataset.pending = 'true';
+      node.setAttribute('aria-busy', 'true');
       const disabled = [...(node.matches('form') ? node.querySelectorAll('button[type=submit],button:not([type])') : node.matches('button') ? [node] : [])].filter(control => !control.disabled);
       disabled.forEach(control => { control.disabled = true; });
       try { await handler(node, evt); }
       catch (error) { if (active() && error.name !== 'AbortError') toast(describeError(error)); }
       finally {
         delete node.dataset.pending;
+        node.removeAttribute('aria-busy');
         disabled.forEach(control => { control.disabled = false; });
       }
     })),
@@ -189,13 +212,18 @@ function viewContext(controller, routeArgs) {
 
 function authPage(ctx) {
   const signUp = authMode === 'register';
-  ctx.html(heading('电商生产工作台') + '<div class="live-auth">' + panel(signUp ? '注册账号' : '登录',
-    form('auth', field('邮箱', input('email', 'type="email" required autocomplete="username" maxlength="254"')) +
-      field('密码', input('password', 'type="password" required minlength="10" maxlength="128" autocomplete="' + (signUp ? 'new-password' : 'current-password') + '"')) +
+  ctx.html(studioEntry({
+    title: signUp ? '创建账号' : '登录工作台',
+    description: signUp ? '创建个人或企业工作区，开始制作商品内容。' : '使用你的工作区账号继续。',
+    fields: form('auth', field(signUp ? '邮箱' : '登录账号', input('email', (signUp ? 'type="email" placeholder="you@example.com"' : 'type="text" placeholder="输入登录账号或邮箱" autocapitalize="none" spellcheck="false"') + ' required autocomplete="username" maxlength="254"')) +
+      field('密码', input('password', 'type="password" required maxlength="128" ' + (signUp ? 'minlength="10" autocomplete="new-password"' : 'autocomplete="current-password"') + ' placeholder="' + (signUp ? '至少 10 个字符' : '输入密码') + '"')) +
       (signUp ? field('显示名', input('displayName', 'required maxlength="100"')) +
         field('账号类型', select('type', [['personal','个人'], ['enterprise','企业']], 'personal')) +
         '<div id="enterprise-name" hidden>' + field('企业工作区名称', input('workspaceName', 'maxlength="100"')) + '</div>' : ''),
-    signUp ? '注册并登录' : '登录') + action(signUp ? '已有账号' : '创建账号', 'auth-mode')) + '</div>');
+    signUp ? '注册并登录' : '登录'),
+    alternate: '<div class="entry-alternate">' + (signUp ? '已有账号？' : '还没有账号？') +
+      action(signUp ? '返回登录' : '创建账号', 'auth-mode') + '</div>',
+  }));
   ctx.click('auth-mode', () => { authMode = signUp ? 'login' : 'register'; ctx.reload(); });
   ctx.on('[name=type]', 'change', node => {
     const container = document.querySelector('#enterprise-name');
@@ -217,11 +245,18 @@ async function render() {
   const controller = new AbortController();
   currentRender = controller;
   const fragment = location.hash.slice(1);
-  const [requested, ...args] = (Object.hasOwn(workspaceAliases, fragment) ? workspaceAliases[fragment] : fragment).split('/');
+  let target = Object.hasOwn(workspaceAliases, fragment) ? workspaceAliases[fragment] : fragment;
+  const [entry, ...tail] = target.split('/');
+  const embedded = { customer: 'customer-service', commerce: 'operations', 'copy-review': 'copywriting' };
+  if (Object.hasOwn(embedded, entry)) target = ['desk', embedded[entry], ...tail].join('/');
+  if (!target) target = 'home';
+  if (target === 'desk') target = 'desk/image';
+  if (target !== fragment && identity) history.replaceState(history.state, '', '#' + target);
+  const [requested, ...args] = target.split('/');
   const route = Object.hasOwn(pages, requested) ? requested : 'home';
   const [label, page] = pages[route];
-  const ctx = viewContext(controller, args);
-  updateHeader(route, label, ctx);
+  const ctx = viewContext(controller, args, productionSection(route, args));
+  updateHeader(route, ctx);
   if (!identity || !workspace) { authPage(ctx); return; }
   ctx.html(heading(label) + notice('正在读取工作区…'));
   try { await page(ctx); }
@@ -238,11 +273,13 @@ async function start() {
   try {
     await request('/ready', { auth: false });
     connection.textContent = '服务已连接';
+    connection.dataset.connected = 'yes';
     if (token) {
       setIdentity(await request('/v1/auth/me', { tenant: false }));
     }
   } catch (error) {
     connection.textContent = error.code === 'UNAUTHENTICATED' ? '服务已连接' : '连接异常';
+    connection.dataset.connected = error.code === 'UNAUTHENTICATED' ? 'yes' : 'no';
     if (error.code !== 'UNAUTHENTICATED') toast(describeError(error));
   }
   await render();

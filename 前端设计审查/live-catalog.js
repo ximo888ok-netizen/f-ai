@@ -32,12 +32,16 @@ export function creationStart(plugins, ctx) {
     link('浏览完整工具库', 'library');
 }
 
-export function capabilityList(plugin, ctx, localTools) {
+export function capabilityLinks(plugin, ctx) {
   const options = [...plugin.capabilities].sort((a, b) => Number(b.available) - Number(a.available));
-  const entry = cap => catalogLink(cardTitle(cap), capLink(cap), displayStatus(plugin, cap, ctx) + ' · ' + cap.cost + ' 积分');
+  return options.map(cap => catalogLink(cardTitle(cap), capLink(cap), displayStatus(plugin, cap, ctx) + ' · ' + cap.cost + ' 积分'));
+}
+
+export function capabilityList(plugin, ctx, localTools) {
+  const links = capabilityLinks(plugin, ctx);
   return heading(plugin.name) + (localTools ? '<div class="live-row">' + localTools + '</div>' : '') +
-    panel('制作功能', '<div class="live-catalog-grid">' + options.slice(0, 3).map(entry).join('') + '</div>') +
-    (options.length > 3 ? catalogGroup('更多功能（' + (options.length - 3) + '）', options.slice(3).map(entry).join('')) : '');
+    panel('制作功能', '<div class="live-catalog-grid">' + links.slice(0, 3).join('') + '</div>') +
+    (links.length > 3 ? catalogGroup('更多功能（' + (links.length - 3) + '）', links.slice(3).join('')) : '');
 }
 
 export async function library(ctx) {

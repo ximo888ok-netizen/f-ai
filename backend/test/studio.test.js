@@ -38,29 +38,46 @@ after(async () => {
 
 test('Studio entry only serves real app code and current theme components', async () => {
   const entry = await send('GET', '/');
+  const namedEntry = await send('GET', '/ai.html');
+  assert.equal(namedEntry.statusCode, 200);
+  assert.equal(entry.body, namedEntry.body);
+  assert.match(entry.body, /id="native-glass-design"/);
+  assert.match(entry.body, /id="native-directory-template"/);
   assert.equal(entry.statusCode, 200);
   assert.match(entry.body, /\/studio\/live\.js/);
   assert.match(entry.body, /\/studio\/components\.css/);
   assert.match(entry.body, /\/studio\/workbench-layout\.css/);
+  assert.match(entry.body, /\/studio\/image-generation\/style\.css/);
   assert.doesNotMatch(entry.body, /src="studio\.js"/);
   assert.match(entry.headers['content-security-policy'], /connect-src 'self'/);
   const merchant = await send('GET', '/merchant');
   assert.equal(merchant.statusCode, 200);
   for (const { body } of [entry, merchant]) {
-    assert.match(body, /href="\/studio\/liquid-glass\.css"/);
-    assert.match(body, /href="\/studio\/liquid-layout\.css"/);
+    assert.match(body, /\/studio\/studio-foundation\.css/);
+    assert.match(body, /\/studio\/studio-entry\.css/);
+    assert.match(body, /\/studio\/liquid-glass\.css/);
+    assert.match(body, /\/studio\/liquid-layout\.css/);
     assert.match(body, /type="module" src="\/studio\/liquid-glass\.js"/);
-    assert.match(body, /href="\/studio\/studio-wallpaper\.css"/);
+    assert.match(body, /\/studio\/studio-wallpaper\.css/);
     assert.match(body, /type="module" src="\/studio\/studio-wallpaper\.js"/);
   }
   for (const [file, contentType] of [
     ['liquid-glass.css', 'text/css; charset=utf-8'],
     ['liquid-layout.css', 'text/css; charset=utf-8'],
     ['workbench-layout.css', 'text/css; charset=utf-8'],
+    ['image-generation/style.css', 'text/css; charset=utf-8'],
+    ['image-generation/index.js', 'text/javascript; charset=utf-8'],
     ['liquid-glass.js', 'text/javascript; charset=utf-8'],
     ['studio-wallpaper.css', 'text/css; charset=utf-8'],
     ['studio-wallpaper.js', 'text/javascript; charset=utf-8'],
-    ['assets/studio-wallpaper.webp', 'image/webp'],
+    ['assets/optic-wave.webp', 'image/webp'],
+    ['assets/leather.webp', 'image/webp'],
+    ['assets/citrus.webp', 'image/webp'],
+    ['assets/audio.webp', 'image/webp'],
+    ['studio-workflows.css', 'text/css; charset=utf-8'],
+    ['studio-icons.js', 'text/javascript; charset=utf-8'],
+    ['studio-entry.js', 'text/javascript; charset=utf-8'],
+    ['studio-workflows.js', 'text/javascript; charset=utf-8'],
   ]) {
     const asset = await send('GET', '/studio/' + file);
     assert.equal(asset.statusCode, 200, file);
@@ -70,12 +87,15 @@ test('Studio entry only serves real app code and current theme components', asyn
     'live-popover.js', 'live-account-menu.js', 'live-capability-center.js', 'live-data-center.js', 'live-agent-controls.js',
     'live-operations.js', 'operations-file.js', 'live-customer.js', 'live-skills.js', 'live-copy-review.js',
     'live-rights.js', 'live-files.js', 'live-media.js', 'live-media-controls.js', 'live-image-studio.js',
+    'image-generation/files.js', 'image-generation/options.js', 'image-generation/results.js',
+    'image-generation/prompt-favorites.js', 'image-generation/agent.js',
     'live-storyboards.js', 'live-agent-home.js', 'live-agent-dialogue.js', 'live-agent-tools.js',
     'live-agent-model.js', 'live-agent.css', 'live-settings.js', 'live-knowledge-tools.js', 'live-experts.js',
-    'live-task-edit.js', 'live-task-intake.js', 'merchant-credit-limit.js', 'live-record-tools.js', 'live-commerce-report.js', 'live-copy-suggestions.js', 'live-nav-search.js', 'components.css', 'assets/aurora.webp']) {
+    'live-task-edit.js', 'live-task-intake.js', 'merchant-credit-limit.js', 'live-record-tools.js', 'live-commerce-report.js', 'live-copy-suggestions.js', 'live-nav-search.js', 'components.css']) {
     assert.equal((await send('GET', '/studio/' + file)).statusCode, 200, file);
   }
   assert.equal((await send('GET', '/studio/studio.js')).statusCode, 404);
+  assert.equal((await send('GET', '/studio/image-generation/studio.js')).statusCode, 404);
 });
 
 test('product records, category assignment, import rollback, export and tenant isolation', async () => {

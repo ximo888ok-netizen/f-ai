@@ -1,0 +1,34 @@
+#studio .app-content:has(.studio-entry) { display: grid; align-items: center; }
+.studio-entry {
+  display: grid; grid-template-columns: minmax(0,1.15fr) minmax(300px,.85fr); align-items: center;
+  gap: clamp(28px,6vw,100px); width: min(1160px,100%); margin: 20px auto; padding: clamp(12px,2.7vw,40px);
+}
+.entry-art { position: relative; isolation: isolate; overflow: hidden; min-height: clamp(420px,63vh,660px); border-radius: 24px;
+  border: 1px solid var(--edge); background: var(--frost-surface); box-shadow: var(--studio-panel-shadow); }
+.entry-art img { position: absolute; width: 94%; max-width: none; right: -23%; top: 13%; rotate: -23deg; filter: contrast(var(--orb-contrast)) brightness(var(--orb-gain)); }
+.entry-caption { position: relative; z-index: 1; width: fit-content; margin: 7%; }
+.entry-caption span,.commerce-key [lang=en] { font: 600 12px/1.5 Inter,"Segoe UI",sans-serif; letter-spacing: .12em; color: var(--sub); }
+#studio .entry-caption h1 { margin: 8px 0; font-size: clamp(30px, 3vw, 47px); line-height: 1.2; color: var(--ink); letter-spacing: -.04em; }
+.entry-tools { position: absolute; left: 6%; right: 6%; bottom: 5%; margin: 0; padding: 12px 14px; list-style: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--edge); border-radius: 14px;
+  background: var(--frost-surface); backdrop-filter: var(--studio-panel-filter); }
+.entry-tools li { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; }
+#studio .studio-entry .live-auth { width: 100%; max-width: 440px; margin: 0; }
+#studio .entry-form.card { margin: 0; padding: clamp(24px,3vw,42px); background: var(--frost-surface); border: 1px solid var(--edge); border-radius: 22px; box-shadow: var(--studio-panel-shadow); }
+#studio .entry-form::before,#studio .entry-form::after { content: none; }
+#studio .entry-form h2 { font-size: clamp(24px,2.5vw,34px); font-weight: 600; margin: 0; line-height: 1.28; }
+.entry-intro { margin: 8px 0 26px; color: var(--sub); }
+#studio .entry-form .live-form { gap: 15px; }
+#studio .entry-form .live-form label { gap: 6px; font-size: 14px; }
+#studio .entry-form .live-form :is(input,select) { min-height: 44px; font-size: 16px; padding-inline: 12px; }
+#studio .entry-form .live-form button.primary { width: 100%; margin-top: 5px; min-height: 44px; }
+.entry-alternate { margin-top: 16px; text-align: center; color: var(--sub); }
+#studio .entry-alternate button { color: var(--accent); border: 0; background: transparent; }
+#studio .merchant-layout:has(.studio-entry) { display: block; }
+@media (max-width:760px) {
+  .studio-entry { grid-template-columns: minmax(0,1fr); max-width: 470px; margin: 0 auto; padding: 3px; gap: 12px; }
+  .entry-art { min-height: 158px; }.entry-art img { width: 65%; top: -25%; right: -8%; }
+  .entry-caption { margin: 14px 18px; }.entry-tools { bottom: 9px; left: 10px; right: 10px; padding: 6px 10px; }
+  .entry-tools li { font-size: 12px; }.entry-tools svg { width: 14px; }
+  #studio .app-content:has(.studio-entry) { align-items: start; }
+}

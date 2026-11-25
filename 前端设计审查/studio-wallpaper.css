@@ -1,15 +1,22 @@
 @media screen and (forced-colors: none) {
   :root[data-theme] {
-    --studio-wallpaper-image: url("assets/studio-wallpaper.webp");
-    --studio-wallpaper-scrim: linear-gradient(#111d2d36, #0815256b);
+    --studio-wallpaper-image:
+      radial-gradient(ellipse at 92% 42%, var(--studio-color-pool) 0, transparent 55%),
+      radial-gradient(ellipse at 22% 10%, var(--studio-light-pool) 0, transparent 56%),
+      linear-gradient(118deg, var(--studio-canvas) 0%, var(--studio-middle) 53%, var(--studio-horizon));
   }
 
-  :root[data-theme][data-scheme="light"] {
-    --studio-wallpaper-scrim: linear-gradient(#f5faffb3, #eef5fbc0);
+  :root[data-theme][data-custom-wallpaper] {
+    --studio-wallpaper-scrim: linear-gradient(180deg, var(--bg) 4%, color-mix(in srgb, var(--bg) 94%, transparent) 42%, color-mix(in srgb, var(--bg) 86%, transparent));
+  }
+
+  :root[data-theme][data-custom-wallpaper]:has(.agent-home:not(.in-chat), .live-auth) {
+    --studio-wallpaper-scrim: linear-gradient(145deg, color-mix(in srgb, var(--bg) 88%, transparent), color-mix(in srgb, var(--bg) 68%, transparent));
   }
 
   :root[data-theme] .aurora-field {
-    background: var(--studio-wallpaper-scrim), var(--studio-wallpaper-image) center / cover no-repeat, var(--bg);
+    background: var(--studio-wallpaper-scrim, linear-gradient(transparent, transparent)),
+      var(--studio-wallpaper-image) center / cover no-repeat, var(--bg);
   }
 }
 

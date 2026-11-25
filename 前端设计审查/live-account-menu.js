@@ -27,7 +27,7 @@ export function bindAccountMenu(onError) {
   });
   panel.querySelector('[data-account-appearance]').addEventListener('click', () => {
     panel.hidePopover();
-    document.querySelector('.topActions [data-theme-open]').click();
+    document.querySelector('[data-theme-open]').click();
   });
   logout.addEventListener('click', async () => {
     if (!current?.account) return;
@@ -45,7 +45,11 @@ export function bindAccountMenu(onError) {
     current = ctx;
     if (panel.matches(':popover-open')) panel.hidePopover();
     trigger.hidden = !ctx.account;
-    name.textContent = trigger.textContent = ctx.account?.displayName ?? '';
+    trigger.dataset.initial = Array.from(ctx.account?.displayName ?? '')[0] ?? '';
+    name.textContent = ctx.account?.displayName ?? '';
+    trigger.querySelector('.account-avatar').textContent = trigger.dataset.initial;
+    trigger.querySelector('.account-name').textContent = ctx.workspace?.name ?? '';
+    trigger.querySelector('.account-sub').textContent = [name.textContent, role].filter(Boolean).join(' · ');
     scope.textContent = ctx.workspace ? ctx.workspace.name + ' · ' + role : '';
     balance.textContent = '';
   };

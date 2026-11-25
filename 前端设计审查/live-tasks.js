@@ -1,3 +1,4 @@
+import { renderImageTool, bindImageTool } from './live-image-studio.js';
 import { bindTextDelivery, textDelivery } from './live-text-delivery.js';
 import { taskIntake } from './live-task-intake.js';
 import { editContext, restoreInputs, editSummary, journalPanel, bindJournal } from './live-task-edit.js';
@@ -83,12 +84,17 @@ async function create(ctx, args = ctx.args) {
   const edit=await editContext(ctx,capability,args);
   if (!ctx.active()) return;
   const description = '本次任务 ' + capability.cost + ' 积分 · 当前可用 ' + wallet.available + ' 积分';
-  ctx.html(title + (chat ? localTools : '') + editSummary(edit) + panel(description, form('task', fields,
-    capability.requiresConfirmation ? '生成变更预览' : chat ? '发送消息' : '提交任务')) +
-    '<div id="shop-confirmation"></div>' + link('返回能力列表', 'create/' + plugin.id));
-
-  const taskForm=document.querySelector('[data-form=task]');
-  restoreInputs(taskForm,edit);taskIntake(taskForm,capability);
+  const taskFields = form('task', fields, capability.requiresConfirmation ? '生成变更预览' : chat ? '发送消息' : '提交任务');
+  if (plugin.id === 'image') {
+    renderImageTool(ctx, capability, description, editSummary(edit), taskFields);
+  } else {
+    ctx.html(title + (chat ? localTools : '') + editSummary(edit) + panel(description, taskFields) +
+      '<div id="shop-confirmation"></div>' + link('返回能力列表', 'create/' + plugin.id));
+  }
+  const taskForm = document.querySelector('[data-form=task]');
+  restoreInputs(taskForm, edit);
+  taskIntake(taskForm, capability);
+  if (plugin.id === 'image') bindImageTool(ctx, capability, taskForm);
   ctx.on('[name=productRecord]', 'change', node => {
     const product = products.find(entry => entry.id === node.value);
     if (product) document.querySelector('[name="params.product"]').value = [product.name, product.sku, product.description].join('\n').slice(0, 4000);

@@ -116,7 +116,7 @@ export const contracts = new Map([
   ['/v1/assets', { GET: { 200: collection(asset) }, POST: { 201: asset } }],
   ['/v1/assets/:id', { GET: { 200: shape({ ...asset.properties, sha256: {type:'string',pattern:'^[a-f0-9]{64}$'} }) }, DELETE: { 204: none } }],
   ['/v1/models', { GET: { 200: collection(shape({ id: string, model: string, protocol: string, kind: string,
-    capabilities: items(string), streamText: bool })) } }],
+    capabilities: items(string), streamText: bool, imageQuality: bool })) } }],
   ['/v1/plugins', { GET: { 200: shape({ items: items(plugin), models: plugin }) } }],
   ['/v1/plugins/:id/state', { PUT: { 200: shape({ id: string, enabled: bool }) } }],
   ['/v1/customer-service/conversations', { GET: { 200: collection(conversation) }, POST: { 201: conversation } }],

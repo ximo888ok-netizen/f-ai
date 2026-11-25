@@ -42,7 +42,7 @@ import { registerStoryboards } from './video-storyboards.js';
 import { registerCopywritingReview } from './copywriting-review.js';
 
 export async function buildApp({
-  db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(),
+  db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(), previewAdmin = false,
   cloudAssets = new Map(), feishu = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false, releases = featureReleases(process.env.FAI_FEATURE_RELEASES_JSON),
 }) {
   const app = Fastify({
@@ -116,7 +116,7 @@ export async function buildApp({
   app.get('/openapi.json', { schema: { hide: true } }, async () => app.swagger());
 
   registerStudio(app);
-  registerAuth(app, db);
+  registerAuth(app, db, previewAdmin);
   app.decorate('verifyFeature', (context, plugin) => {
     const capability = catalog.get(plugin);
     return requireFeature(workspaceDb, context, capability?.pluginId ?? plugin, capability?.id);

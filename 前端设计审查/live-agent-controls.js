@@ -6,7 +6,7 @@ import { describeError } from './studio-errors.js';
 export function agentControls(ctx) {
   const role = { owner: '所有者', admin: '管理员', member: '成员' }[ctx.workspace.role] ?? ctx.workspace.role;
   return '<div class="agent-bar"><button type="button" class="smallbtn composer-add" popovertarget="composer-context" aria-label="添加上下文">＋</button>' +
-    '<button type="button" class="smallbtn agent-attach" hidden></button>' +
+    '<button type="button" class="smallbtn agent-attach" hidden><span class="agent-attachment-thumb"></span><span class="agent-attachment-name"></span></button>' +
     '<section id="composer-context" class="studio-popover composer-popover" popover aria-label="添加上下文">' +
     '<div class="popover-heading"><strong>添加上下文</strong></div>' +
     '<button type="button" data-context-upload>上传本地图片</button><button type="button" data-context-pick>引用素材库图片</button>' +

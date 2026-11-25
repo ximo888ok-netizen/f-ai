@@ -1,5 +1,5 @@
 import { assetPreview } from './live-asset-preview.js';
-import { action, field, form, heading, input, item, link, list, notice, panel, path, retryKey, select, toast } from './live.js';
+import { action, date, field, form, h, heading, input, item, link, list, notice, panel, path, retryKey, select, toast } from './live.js';
 import { downloadFile } from './live-files.js';
 import { assetField, editRows, imageFiles, numeric, rowControls, toggleFields } from './live-media-controls.js';
 
@@ -154,4 +154,59 @@ export async function imageStudio(ctx,id,assetId,navigation) {
     return downloadFile(ctx,'/v1/assets/'+path(assetId)+'/content',
       assetId+(entry.mediaType==='image/jpeg'?'.jpg':'.png'));
   });
+}
+
+export function renderImageTool(ctx, capability, cost, summary, fields) {
+  const template = document.querySelector('#image-studio-template').content.cloneNode(true);
+  template.querySelector('[data-tool-name]').textContent = capability.name;
+  template.querySelector('[data-tool-cost]').textContent = cost;
+  template.querySelector('[data-task-mount]').innerHTML = summary + fields;
+  ctx.html(template.firstElementChild.outerHTML);
+}
+
+export function bindImageTool(ctx, capability, taskForm) {
+  const brief = document.querySelector('[data-brief-mount]');
+  const prompt = taskForm.elements['params.prompt'];
+  taskForm.id = 'image-task';
+  const label = prompt.closest('label');
+  const originalPosition = document.createComment('prompt field');
+  label.before(originalPosition);
+  prompt.setAttribute('form', taskForm.id);
+  prompt.placeholder = '描述商品、主要卖点和画面要求。';
+  function placePrompt() {
+    const guided = taskForm.elements.mode.value === 'chat';
+    if (guided) originalPosition.after(label);
+    else brief.append(label);
+    brief.closest('.brief-panel').hidden = guided;
+  }
+  taskForm.elements.mode.addEventListener('change', placePrompt);
+  placePrompt();
+  prompt.addEventListener('input', () => {
+    if (!taskForm.contains(prompt)) taskForm.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  for (const button of document.querySelectorAll('[data-brief-chip]')) {
+    button.onclick = () => {
+      const value = [prompt.value.trim(),button.dataset.briefChip].filter(Boolean).join('，');
+      if (value.length > prompt.maxLength) { toast('创作要求已达到字数上限。'); return; }
+      prompt.value = value;
+      prompt.dispatchEvent(new Event('input', { bubbles: true }));
+      prompt.focus();
+    };
+  }
+  const results = document.querySelector('[data-tool-results]');
+  ctx.api('/v1/tasks?limit=30').then(({ items }) => {
+    if (!ctx.active()) return;
+    const matching = items.filter(task => task.capabilityId === capability.id).slice(0, 6);
+    const states = { queued: '排队中', running: '生成中', failed: '失败', succeeded: '已完成', cancelled: '已取消' };
+    results.innerHTML = matching.length ? matching.map(task =>
+      '<a class="image-result-tile" href="#tasks/' + path(task.id) + '"><div data-task-image></div><b>' +
+      h(states[task.state] ?? task.state) + '</b><small>' + h(date(task.createdAt)) + '</small></a>').join('') :
+      '<div class="image-result-empty"><strong>暂无生成结果</strong><p>最近 30 个任务中没有此工具的记录。</p></div>';
+    [...results.querySelectorAll('[data-task-image]')].forEach((holder, index) => {
+      const output = matching[index].result;
+      if (output?.assetId && ['image/jpeg','image/png'].includes(output.mediaType)) {
+        void assetPreview(ctx, holder)(output.assetId, capability.name + '成品');
+      }
+    });
+  }).catch(() => { if (ctx.active()) results.textContent = '最近任务读取失败，可在任务记录中重新查看。'; });
 }

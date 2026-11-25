@@ -1,0 +1,54 @@
+.video-director-layout .quick-image-config > h3 { display: none; }
+.director-stage-links, .director-task-links { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
+.director-stage > header { flex-wrap: wrap; gap: var(--space-2); }
+.director-stage .video-quick-progress { grid-template-columns: repeat(auto-fit, minmax(53px, 1fr)); }
+.director-stage .video-quick-progress li { align-content: start; font-size: var(--text-label); }
+.director-stage-content, .director-script { display: grid; gap: var(--space-2); }
+.director-stage-content h4:focus-visible { outline-offset: 3px; }
+.director-fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: var(--space-3);
+}
+.director-fact-grid fieldset {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+}
+.director-fact-grid legend { padding-inline: var(--space-1); font-weight: 650; }
+.director-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--control-radius);
+  cursor: pointer;
+}
+.director-option:has(input:checked) { background: var(--studio-selection, var(--control)); }
+.director-option input { width: auto; margin-block-start: .25em; accent-color: var(--accent); }
+.director-option span { display: grid; gap: var(--space-1); overflow-wrap: anywhere; }
+.director-option small { color: var(--sub); font-size: var(--text-label); }
+.director-direction-list { display: grid; gap: var(--space-2); }
+.director-direction-list .director-option { border: 1px solid var(--line); }
+.director-direction-list .director-option:has(input:checked) { border-color: var(--accent); }
+.director-script { margin: 0; }
+.director-script textarea { resize: vertical; }
+.director-stage-actions { display: grid; gap: var(--space-2); padding-block-start: var(--space-2); border-block-start: 1px solid var(--line); }
+.director-stage-actions .live-row { margin: 0; justify-content: space-between; }
+
+@media (min-width: 881px) {
+  .video-director-layout .quick-image-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 4fr) minmax(0, 5fr);
+    gap: var(--space-1) var(--space-3);
+    align-items: center;
+  }
+  .video-director-layout .quick-image-footer > label { margin: 0; }
+  .video-director-layout .quick-image-footer > :is([role="status"], button) { grid-column: 1 / -1; margin: 0; }
+}

@@ -24,7 +24,7 @@
   --sheen: var(--palette-sheen);
   --bloom: var(--palette-bloom);
 }
-:is([data-theme="glass"], [data-chip="glass"]) { --palette-pigment: #5351ad; --palette-sheen: #adc9ff; --palette-bloom: #9773e8; }
+:is([data-theme="glass"], [data-chip="glass"]) { --palette-pigment: #6446b7; --palette-sheen: #c2acff; --palette-bloom: #9375e1; }
 :is([data-theme="paper"], [data-chip="paper"]) { --palette-pigment: #874638; --palette-sheen: #e8cea2; --palette-bloom: #d8a082; }
 :is([data-theme="jade"], [data-chip="jade"]) { --palette-pigment: #276145; --palette-sheen: #b6dda9; --palette-bloom: #70b298; }
 :is([data-theme="noir"], [data-chip="noir"]) { --palette-pigment: #745922; --palette-sheen: #eee0b9; --palette-bloom: #bd985b; }

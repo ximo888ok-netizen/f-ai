@@ -35,12 +35,8 @@
 .live-title h1{margin:.2rem 0}
 .live-main{max-width:1260px;margin:0 auto;width:100%;min-width:0}
 .live-auth{max-width:520px}
-.app-shell #studioMenu{display:none!important}
 .app-shell .rail .live-shortcuts{display:grid;gap:4px;padding-bottom:12px;margin-bottom:6px;border-bottom:1px solid var(--line)}
-.app-shell .rail .live-nav-section{margin:0;border:0}
-.live-nav-section summary,.live-fold summary{cursor:pointer;color:var(--sub);font-size:13px;font-weight:600}
-.app-shell .rail .live-nav-section summary{padding:8px 9px}
-.app-shell .rail .live-nav-section .navitem{height:auto;min-height:32px;padding:6px 10px 6px 20px;font-size:12px}
+.live-fold summary{cursor:pointer;color:var(--sub);font-size:13px;font-weight:600}
 .live-home-title,.live-task-line,.live-account-strip{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
 .live-home-title{margin-bottom:20px}.live-home-title .live-title{margin:0}
 .live-home-title .primary{text-decoration:none}.live-task-line{padding:8px 0;border-top:1px solid var(--line)}.live-task-line p{margin:2px 0}
@@ -67,10 +63,8 @@ a.navitem,a.brandline{text-decoration:none}
 .live-auth-delete{margin-top:1rem}
 .live-muted{opacity:.8}
 @media(max-width:720px){
-  .app-shell{display:block!important}
   .app-shell .rail{position:static!important;width:auto!important;height:auto!important;min-height:0!important;padding:.45rem .8rem!important;display:flex;flex-direction:row;justify-content:space-between;align-items:center;flex-wrap:wrap}
   .app-shell .rail .brandline span{display:inline}.app-shell .rail .brandline svg{width:25px;height:25px}
-  .app-shell #studioMenu:not([hidden]){display:inline-flex!important}
   .app-shell .rail #nav{display:none;width:100%;max-height:55dvh;overflow:auto;margin:0}
   .app-shell .rail.menu-open #nav{display:block}
   .app-shell .rail #nav .navitem{width:100%;min-height:36px;padding:6px 10px;justify-content:flex-start}

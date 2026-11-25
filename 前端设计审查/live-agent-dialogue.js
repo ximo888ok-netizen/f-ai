@@ -46,7 +46,7 @@ function localIntent(input) {
 
 async function pickImage(ctx, thread, query = '') {
   thread.images = await findImages(ctx, query);
-  if (!thread.images.length) return { text: query ? '没有找到这张图片，可以换个名称再选。' : '素材库里还没有可用的 JPEG 或 PNG 主图。上传后回来输入「选择主图」，可以继续。',
+  if (!thread.images.length) return { text: query ? '没有找到这张图片，可以换个名称再选，或直接上传主图。' : '素材库里还没有可用的主图。可以在当前对话直接上传 JPEG 或 PNG 图片。',
     items: [{ title: '打开素材库', route: 'assets' }] };
   return { text: '选一张商品主图，或回复它的序号。' };
 }
@@ -58,6 +58,14 @@ async function nextDraftStep(ctx, thread) {
   if (!thread.draft.title) return { text: '这份商品草稿叫什么名字？' };
   if (!thread.draft.image) return pickImage(ctx, thread);
   return draftReview(thread.draft);
+}
+
+export function attachImage(ctx, thread, image) {
+  thread.attachment = image;
+  thread.images = null;
+  if (thread.cover) { thread.cover.image = image; return coverReview(thread.cover); }
+  if (thread.draft) { thread.draft.image = image; return nextDraftStep(ctx, thread); }
+  return { text: '已引用「' + image.name + '」。接下来可以说「新建草稿」。' };
 }
 
 export async function respond(ctx, thread, raw, options = {}) {
@@ -75,12 +83,7 @@ export async function respond(ctx, thread, raw, options = {}) {
   if (thread.images?.length) {
     const index = /^(?:选(?:择)?|用)?\s*(?:第)?[1-6一二三四五六](?:个|款|张|号)?[。！]?$/u.test(input) ? ordinal(input) : -1;
     const image = thread.images[index] ?? thread.images.find(a => a.name === input);
-    if (image) {
-      thread.attachment = image; thread.images = null;
-      if (thread.cover) { thread.cover.image = image; return coverReview(thread.cover); }
-      if (thread.draft) { thread.draft.image = image; return nextDraftStep(ctx, thread); }
-      return { text: '已引用「' + image.name + '」。接下来可以说「新建草稿」。' };
-    }
+    if (image) return attachImage(ctx, thread, image);
   }
   if (thread.cover) {
     const job = thread.cover;

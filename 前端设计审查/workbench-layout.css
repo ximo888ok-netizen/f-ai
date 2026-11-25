@@ -1,16 +1,20 @@
 @media screen {
   @media (min-width: 1001px) {
     .app-shell {
-      grid-template-columns: clamp(228px, 18.6vw, 272px) minmax(0, 1fr);
+      grid-template-columns: clamp(218px, 16.5vw, 252px) minmax(0, 1fr);
     }
 
     .app-shell .rail { padding: 18px 14px 12px; }
   }
 
-  .app-shell .rail .live-shortcuts { gap: 5px; }
+  .app-shell .rail .live-shortcuts { gap: 3px; }
+  :root[data-theme] .app-shell .rail :is(.workspace-new, #profile) {
+    justify-content: flex-start;
+    padding-inline: 11px;
+  }
+
   .app-shell .rail .workspace-new {
     min-height: 38px;
-    justify-content: flex-start;
     margin-bottom: 5px;
     background: var(--liquid-tint-strong);
     border-color: var(--line-strong);
@@ -24,20 +28,28 @@
     text-align: start;
   }
 
-  .agent-home { width: min(100%, 800px); }
+  .live-video-generation > .quick-mode-switch {
+    inline-size: min(100%, 24rem);
+    margin-block-end: var(--space-4);
+  }
+
+  .live-video-workflow > .live-form { max-inline-size: 44rem; }
+
+  .agent-home { width: min(100%, 46rem); }
   .agent-home:not(.in-chat) {
     min-height: 0;
-    padding-block-start: clamp(24px, 6vh, 68px);
+    padding-block-start: clamp(2.5rem, 11vh, 8rem);
   }
 
   .agent-home:not(.in-chat) .agent-heading {
-    gap: 11px;
-    margin-block-end: 23px;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-block-end: 1.25rem;
   }
 
   .agent-home .agent-starters {
-    margin: 0 0 12px;
-    justify-content: center;
+    margin: 0 0 1rem;
+    justify-content: flex-start;
   }
 
   :root[data-theme] #main .agent-home .agent-composer {
@@ -124,7 +136,7 @@
     border: 1px solid var(--line-strong);
     border-radius: 17px;
     color: var(--ink);
-    background: light-dark(rgb(235 245 252 / .82), rgb(13 27 43 / .75));
+    background: var(--studio-overlay);
     -webkit-backdrop-filter: blur(18px);
     backdrop-filter: blur(18px);
     box-shadow: var(--liquid-rim), var(--liquid-shadow);
@@ -185,14 +197,12 @@
 
   .directory-grid {
     --directory-columns: 3;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: repeat(var(--directory-columns), minmax(0, 1fr));
     gap: var(--panel-gap);
   }
 
   :root[data-theme] .work a.directory-card {
-    flex: 0 0 calc((100% - var(--panel-gap) * (var(--directory-columns) - 1)) / var(--directory-columns));
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: start;
@@ -206,7 +216,7 @@
   .directory-card h2 { margin: 0 0 4px; font-size: 16px; line-height: 1.25; overflow-wrap: anywhere; }
   .directory-card p { margin: 0 0 5px; font-size: 13px; }
   .directory-card small { color: var(--sub); }
-  .directory-card:hover { outline: 1px solid var(--line-strong); }
+  .directory-card:hover { outline: 1px solid var(--line-strong); outline-offset: -1px; }
   .directory-icon {
     display: grid;
     place-items: center;
@@ -251,7 +261,7 @@
   @media (max-width: 720px) {
     .app-shell .rail .railFoot { display: block !important; max-width: 26vw; }
     .app-shell .rail .railFoot #profile { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .agent-home:not(.in-chat) { padding-block-start: 24px; }
+    .agent-home:not(.in-chat) { padding-block-start: 2rem; }
     .agent-bar .agent-attach { max-width: 42%; }
     .studio-data { grid-template-columns: minmax(0, 1fr); }
     .data-rail nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -263,4 +273,94 @@
   @media (max-width: 520px) {
     .directory-grid { --directory-columns: 1; }
   }
+}
+
+@media screen and (forced-colors: none) {
+  :root[data-theme] .live-main:has(> .live-auth) {
+    inline-size: min(100%, 32rem);
+    margin-block-start: clamp(1rem, 6vh, 4rem);
+  }
+
+  .live-auth [data-auth-mode] { margin-block-start: .75rem; }
+
+  :root[data-theme] .agent-mark {
+    background: var(--studio-selection);
+    border-color: var(--line);
+    border-radius: 12px;
+    color: var(--studio-accent);
+    box-shadow: none;
+  }
+
+  .agent-heading h1 {
+    font-size: clamp(2rem, 3.4vw, 3rem);
+    font-weight: 680;
+    line-height: 1.15;
+    letter-spacing: -.032em;
+  }
+
+  .in-chat .agent-heading h1 { font-size: 1.25rem; }
+
+  :root[data-theme] #main .agent-starters button {
+    min-block-size: 36px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--studio-chrome);
+    color: var(--ink);
+    font-weight: 550;
+  }
+
+  :root[data-theme] body #main .agent-home .agent-composer {
+    background: var(--studio-sheet);
+    border: 1px solid var(--studio-panel-border);
+    border-radius: 20px;
+    box-shadow: var(--liquid-rim), var(--studio-shadow);
+    --liquid-optics: none;
+  }
+
+  :root[data-theme] .agent-composer:focus-within { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+
+  :root[data-theme] .agent-composer::before {
+    padding: 1px;
+    background: radial-gradient(ellipse 210px 55px at var(--mouse-x, 16%) 0,
+      color-mix(in srgb, var(--studio-accent) 56%, var(--studio-rim)), transparent);
+    opacity: 0;
+  }
+
+  :root[data-theme] .agent-composer::after { background: none; box-shadow: none; }
+  :root[data-theme] .agent-composer:focus-within::before { opacity: .42; }
+  :root[data-theme][data-motion="on"] .agent-composer.liquid-highlight::before { opacity: .8; }
+
+  :root[data-theme] .agent-composer .composer-scope { padding-block-start: 7px; }
+  :root[data-theme] #main .agent-composer .agent-send {
+    inline-size: 40px;
+    min-inline-size: 40px;
+    block-size: 40px;
+    min-block-size: 40px;
+    border-radius: 12px;
+  }
+
+  :root[data-theme] #main .agent-composer .agent-send:disabled {
+    background: var(--studio-inset);
+    color: var(--sub);
+    opacity: .7;
+  }
+
+  :root[data-theme] .agent-message.from-user { background: var(--studio-selection); }
+
+  @media (max-width: 720px) {
+    .agent-home:not(.in-chat) .agent-heading { gap: .75rem; }
+    .agent-home .agent-starters { gap: .375rem; }
+  }
+
+  @media (pointer: coarse) {
+    :root[data-theme] #main .agent-composer .agent-send,
+    :root[data-theme] #main .agent-composer .composer-add {
+      min-inline-size: 44px;
+      min-block-size: 44px;
+    }
+  }
+}
+
+@media screen and (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  :root[data-motion="on"] .agent-composer::before { transition: opacity 160ms ease-out; }
 }

@@ -10,9 +10,6 @@
 }
 body{background:var(--bg);color:var(--ink)}
 .aurora-field{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:-1;isolation:isolate;background:radial-gradient(ellipse at 32% 4%,#202d47,transparent 61%),linear-gradient(125deg,#111a2a,#101625 58%,#101224)}
-.aurora-field::before,.aurora-field::after,.deskHero::before,.hero::after{content:"";position:absolute;inset:-15%;pointer-events:none;background:url("assets/aurora.webp") center/100% 100% no-repeat;mix-blend-mode:screen;animation:aurora-drift 19s ease-in-out infinite alternate}
-.aurora-field::before{inset:-18% -12% 10%;opacity:.29}.aurora-field::after{inset:32% -28% -15% 24%;opacity:.19;animation-direction:alternate-reverse;animation-duration:26s}
-@keyframes aurora-drift{0%{transform:translate3d(-3.5%,-4%,0) scale(1.02)}48%{transform:translate3d(3.5%,3%,0) scale(1.09,1.04)}100%{transform:translate3d(-.5%,7%,0) scale(1.02,1.14)}}
 :root[data-motion=off] *,:root[data-motion=off] *::before,:root[data-motion=off] *::after,
 :root[data-visible=no] *,:root[data-visible=no] *::before,:root[data-visible=no] *::after{animation-play-state:paused!important}
 :root[data-motion=off] .casePhoto img{transition:none}
@@ -77,3 +74,5 @@ dialog{background-color:rgba(26,37,56,.94);border-radius:19px;max-height:min(86d
 
 .crumbHome{padding:1px 0;border:0;color:var(--sub);background:none;font-size:12px;white-space:nowrap}.crumbHome:hover{color:white;text-decoration:underline}
 @media(max-width:600px){.crumbHome{display:none}}
+
+.work .card a{overflow-wrap:anywhere}

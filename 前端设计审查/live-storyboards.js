@@ -21,12 +21,15 @@ function readShot(row) {
     caption:value('caption').trim(),prompt:value('prompt').trim()};
 }
 
-export async function storyboards(ctx,id,navigation) {
+export async function storyboards(ctx,id,navigation,deskRoute) {
+  const route = deskRoute ?? 'media/storyboards';
+  const listRoute = deskRoute ? route + '/storyboards' : route;
+  const title = deskRoute ? value => '<h3>'+h(value)+'</h3>' : heading;
   if (!id) {
     const entries=await ctx.all(root);
-    ctx.html(heading('视频分镜')+navigation+link('新建视频分镜','media/storyboards/new')+
+    ctx.html(title('视频分镜')+navigation+link('新建视频分镜',route+'/new')+
       panel('我的分镜',list(entries,entry=>item(entry.title,
-        entry.configuration.shots.length+' 个镜头 · '+date(entry.updatedAt),link('编辑分镜','media/storyboards/'+entry.id)))));
+        entry.configuration.shots.length+' 个镜头 · '+date(entry.updatedAt),link('编辑分镜',route+'/'+entry.id)))));
     return;
   }
   const [fileList,entry,status]=await Promise.all([
@@ -51,8 +54,8 @@ export async function storyboards(ctx,id,navigation) {
     action('查看提示词','storyboard-prompts')+
     (status.available?action('合成并下载 MP4','storyboard-export'):notice('当前部署未启用视频合成。')) +
     action('删除分镜','storyboard-delete')+'<div data-story-prompts aria-live="polite"></div>'):'';
-  ctx.html(heading(entry.title || '新建视频分镜') + navigation +
-    '<div class="live-row">'+link('返回分镜列表','media/storyboards')+link('打开素材库','assets')+'</div>' +
+  ctx.html(title(entry.title || '新建视频分镜') + navigation +
+    '<div class="live-row">'+link('返回分镜列表',listRoute)+link('打开素材库','assets')+'</div>' +
     grid(panel('分镜编辑',editor),saved));
   if (!ctx.active()) return;
   const formNode=document.querySelector('[data-form=storyboard-save]');
@@ -66,7 +69,7 @@ export async function storyboards(ctx,id,navigation) {
       audioAssetId:data.get('audioAssetId') || null,shots,
     }});
     toast('分镜已保存');
-    ctx.go('media/storyboards/'+updated.id);
+    ctx.go(route+'/'+updated.id);
   });
   ctx.click('storyboard-prompts',async ()=>{
     const response=await ctx.api(target+'/prompts');
@@ -80,6 +83,6 @@ export async function storyboards(ctx,id,navigation) {
   ctx.click('storyboard-delete',async ()=>{
     if (!confirm('删掉这份分镜？')) return;
     await ctx.api(target+'?revision='+entry.revision,{method:'DELETE'});
-    ctx.go('media/storyboards');
+    ctx.go(listRoute);
   });
 }

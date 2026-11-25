@@ -1,0 +1,147 @@
+.quick-image-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 410px) minmax(0, 1fr);
+  gap: var(--panel-gap);
+  align-items: stretch;
+}
+
+.quick-image-form {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  max-block-size: clamp(390px, calc(100dvh - 21rem), 760px);
+}
+
+.quick-image-config {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--panel-padding);
+}
+
+.quick-image-config fieldset {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.quick-image-config legend {
+  margin-block-end: var(--space-2);
+  padding: 0;
+  font-size: var(--text-control);
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.quick-image-config .live-row { margin: 0; }
+.quick-mode-switch {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--control-radius) + 4px);
+  background: color-mix(in srgb, var(--studio-inset, var(--paper)) 66%, transparent);
+}
+:root[data-theme] #main .quick-mode-switch a.smallbtn { flex: 1 1 0; min-width: 0; border-color: transparent; }
+:root[data-theme] #main .quick-mode-switch a[aria-current="page"] {
+  background: var(--studio-sheet, var(--liquid-tint-strong));
+  border-color: var(--line);
+  color: var(--accent);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 9%, transparent);
+}
+.quick-image-config .quick-prompt-actions { margin-block-end: 8px; }
+.quick-prompt-item { display: block; width: 100%; margin-block-end: 6px; white-space: normal; text-align: start; overflow-wrap: anywhere; }
+.quick-image-config label:not(.quick-check) { display: grid; gap: 5px; margin: 0; min-inline-size: 0; }
+.quick-image-config :is(textarea, select, input[type="number"], input[name="customStyle"]) { width: 100%; }
+.quick-image-config textarea { resize: vertical; }
+.quick-image-config textarea[readonly] { color: var(--sub); }
+.quick-image-config textarea + label, .quick-image-config label + label:has(textarea) { margin-block-start: var(--space-2); }
+.quick-image-config label.quick-check { display: flex; align-items: center; gap: 6px; }
+
+.quick-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.quick-choices + .quick-fields, .quick-check + div, .quick-choices + div:not([hidden]) { margin-block-start: 8px; }
+.quick-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick-choices label { position: relative; }
+.quick-choices input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.quick-choices label > span {
+  display: grid;
+  place-content: center;
+  min-block-size: 32px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  background: var(--control);
+  color: var(--ink);
+  white-space: nowrap;
+  font-size: var(--text-label);
+}
+
+.quick-choices input:checked + span {
+  border-color: var(--line-strong);
+  box-shadow: var(--liquid-rim);
+  background: var(--liquid-tint-strong);
+  font-weight: 650;
+}
+.quick-choices input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+.quick-image-config input[type="range"] { width: 100%; }
+.quick-scale { display: flex; justify-content: space-between; padding-inline: 3px; font-size: var(--text-label); }
+.quick-image-config p, .quick-image-footer p { margin-block: 5px 0; }
+
+:root[data-theme] #main button.quick-drop {
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  min-block-size: 88px;
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--control-radius);
+  background: var(--liquid-specular, none), var(--studio-inset, var(--control));
+  color: var(--ink);
+}
+:root[data-theme] #main .quick-upload[data-drag-over] .quick-drop {
+  background: var(--studio-selection, var(--control));
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.quick-drop span { color: var(--sub); font-size: var(--text-label); }
+.quick-photos { display: grid; gap: 5px; padding: 0; margin: 0; list-style: none; }
+.quick-photos:not(:empty) { margin-top: 8px; }
+.quick-photos li { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.quick-photos img { width: 34px; height: 34px; object-fit: cover; border-radius: 5px; }
+.quick-photos span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-photos button { min-width: 28px; cursor: pointer; }
+
+.quick-image-footer { padding: 10px var(--panel-padding); border-block-start: 1px solid var(--line); }
+.quick-image-footer .live-row { display: flex; justify-content: space-between; gap: 5px; margin: 0; }
+.quick-image-footer [data-quick-cost] { font-variant-numeric: tabular-nums; }
+.quick-image-footer > button { width: 100%; margin-block-start: 8px; }
+
+.quick-image-stage { min-block-size: min(500px, 52vh); min-width: 0; padding: var(--panel-padding); }
+:root[data-theme] body .work .quick-image-stage.card {
+  background: color-mix(in srgb, var(--studio-inset, var(--paper)) 46%, var(--studio-sheet, var(--paper)));
+}
+.quick-image-stage:has(.quick-image-empty:not([hidden])) { display: flex; flex-direction: column; }
+.quick-image-empty { display: grid; align-content: center; text-align: center; min-height: min(430px, 44vh); }
+.quick-image-empty { flex: 1; }
+.quick-image-empty h3, .quick-result h3 { margin: 0; }
+.quick-image-empty p, .quick-result p { margin: 6px 0; overflow-wrap: anywhere; }
+.quick-image-empty img { width: min(100%, 340px); max-height: 285px; object-fit: contain; margin: 0 auto 12px; border-radius: var(--control-radius); }
+.quick-image-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr)); gap: 12px; }
+.quick-result { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--control-radius); }
+.quick-result-image img { display: block; width: 100%; max-height: 430px; object-fit: contain; }
+.quick-agent-plan h3, .quick-agent-plan h4 { margin: 0; }
+.quick-agent-plan:not([hidden]) { margin-block-end: var(--space-4); }
+.quick-plan-grid { display: grid; gap: var(--space-2); }
+.quick-plan-grid p { white-space: pre-wrap; }
+
+@media (max-width: 880px) {
+  .quick-image-layout { grid-template-columns: minmax(0, 1fr); }
+  .quick-image-form { max-block-size: none; }
+  .quick-image-config { overflow: visible; }
+  .quick-image-stage, .quick-image-empty { min-block-size: 180px; }
+}

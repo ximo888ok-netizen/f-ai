@@ -1,13 +1,14 @@
+import { studioIcon } from './studio-icons.js';
+import { assetPreview } from './live-asset-preview.js';
 import { h } from './live-ui.js';
 import { describeError } from './studio-errors.js';
-import { respond } from './live-agent-dialogue.js';
+import { attachImage, respond } from './live-agent-dialogue.js';
 import { agentControls, bindAgentControls } from './live-agent-controls.js';
 import { uploadMedia } from './live-workspace.js';
 
 const starters = [
-  ['查商品', '查看我的商品'], ['建商品草稿', '新建商品草稿'], ['做方形主图', '做方形主图'], ['看最近任务', '查看最近任务'],
+  ['查商品', '查看我的商品', 'products'], ['建拼多多草稿', '新建商品草稿', 'copywriting'], ['做方形主图', '做方形主图', 'image'], ['看最近任务', '查看最近任务', 'tasks'],
 ];
-const mark = '<svg viewBox="0 0 44 44" aria-hidden="true"><path fill="currentColor" d="M6 33 17 6h23L26 16H17l-3 7h14L8 37H4z"/></svg>';
 function restore(key) {
   try {
     const saved = JSON.parse(sessionStorage.getItem(key));
@@ -57,19 +58,20 @@ export async function agentHome(ctx) {
     archive();
     thread = { messages: [], input: '' };
     persist();
-    window.history.replaceState(window.history.state, '', '#home');
+    window.history.replaceState(window.history.state, '', '#chat');
   }
-  ctx.html('<section class="agent-home" aria-labelledby="agent-title"><div class="agent-heading"><i class="agent-mark">' + mark +
-    '</i><h1 id="agent-title"></h1><div class="agent-thread-tools"><select class="agent-history" aria-label="最近对话" hidden></select>' +
-    '<button type="button" class="plain agent-new" hidden>新对话</button></div></div>' +
-    '<div class="agent-log" role="log" aria-label="对话记录" aria-live="polite"></div><div class="agent-next"></div>' +
-    '<div class="agent-starters" aria-label="快捷任务">' + starters.map(([label, prompt]) => '<button type="button" data-prompt="' + h(prompt) + '">' + label + '</button>').join('') +
-    '</div><form class="agent-composer card"><textarea aria-label="给工作台助手发消息" placeholder="输入想完成的工作，例如：查一下托特包的商品档案" rows="2" maxlength="4000"></textarea>' +
-    agentControls(ctx) + '</form><div class="agent-status" role="status"></div></section>');
+  const layout = document.querySelector('#chat-template').content.cloneNode(true);
+  layout.querySelector('[data-chat-scope]').textContent = ctx.workspace.name + ' · 电商 AI 助手';
+  layout.querySelector('.agent-starters').innerHTML = starters.map(([label, prompt, icon]) =>
+    '<button class="skill-pill" type="button" data-prompt="' + h(prompt) + '">' + studioIcon(icon) + label + '</button>').join('');
+  layout.querySelector('form').insertAdjacentHTML('beforeend', agentControls(ctx));
+  ctx.html(layout.firstElementChild.outerHTML);
   const view = document.querySelector('.agent-home');
   const log = view.querySelector('.agent-log'), next = view.querySelector('.agent-next'), form = view.querySelector('form');
   const input = form.querySelector('textarea'), send = form.querySelector('.agent-send');
   const attachment = form.querySelector('.agent-attach');
+  const renderThumbnail = assetPreview(ctx, attachment.querySelector('.agent-attachment-thumb'));
+  const initialPrompt = input.placeholder;
   const reset = view.querySelector('.agent-new'), status = view.querySelector('.agent-status');
   const history = view.querySelector('.agent-history');
   const controls = bindAgentControls(view, ctx, { onUpload: upload, onPick: () => submit('选择主图') });
@@ -90,13 +92,17 @@ export async function agentHome(ctx) {
     if (thread.draft?.title && thread.draft.image && !thread.images) choices.push(['保存草稿', '保存草稿'], ['更换主图', '更换主图']);
     if (thread.cover?.image && !thread.images) choices.push(['开始出图', '开始出图'], ['更换主图', '更换主图']);
     if (thread.draft || thread.cover || thread.images) choices.push(['取消', '取消']);
-    next.innerHTML = choices.map(([prompt,label]) => '<button class="smallbtn" type="button" data-prompt="' + h(prompt) + '">' + h(label) + '</button>').join('');
+    const emptyLibrary = thread.images?.length === 0;
+    if (emptyLibrary) choices.unshift(['选择主图', '重新选择素材']);
+    next.innerHTML = (emptyLibrary ? '<button class="primary" type="button" data-upload-main>上传主图</button>' : '') +
+      choices.map(([prompt,label]) => '<button class="smallbtn" type="button" data-prompt="' + h(prompt) + '">' + h(label) + '</button>').join('');
     next.hidden = !choices.length;
   }
   function sync() {
     const started = thread.messages.length > 0;
+    input.placeholder = !started ? initialPrompt : thread.draft && !thread.draft.title ? '输入拼多多商品草稿名称' : '继续输入消息…';
     view.classList.toggle('in-chat', started);
-    view.querySelector('h1').textContent = started ? '工作台助手' : '今天想完成什么？';
+    view.querySelector('h1').textContent = started ? '工作台助手' : '寰球 AI，我帮你';
     reset.hidden = !started;
     reset.disabled = busy;
     history.disabled = busy;
@@ -105,7 +111,13 @@ export async function agentHome(ctx) {
     controls.busy(busy);
     attachment.disabled = busy;
     attachment.hidden = !thread.attachment;
-    attachment.textContent = thread.attachment ? '× ' + thread.attachment.name : '';
+    const imageId = thread.attachment?.id ?? '';
+    if (imageId !== (attachment.dataset.imageId ?? '')) {
+      attachment.dataset.imageId = imageId;
+      void renderThumbnail(imageId, '');
+    }
+    attachment.querySelector('.agent-attachment-name').textContent = thread.attachment ? thread.attachment.name + ' ×' : '';
+    attachment.setAttribute('aria-label', thread.attachment ? '移除主图 ' + thread.attachment.name : '移除主图');
     attachment.title = '移除引用的主图';
     attachment.setAttribute('data-attached', '');
     for (const button of next.querySelectorAll('button')) button.disabled = busy;
@@ -147,6 +159,7 @@ export async function agentHome(ctx) {
     }
   });
   view.addEventListener('click', event => {
+    if (!busy && event.target.closest('[data-upload-main]')) view.querySelector('.composer-file').click();
     const button = event.target.closest('[data-prompt]');
     if (button) void submit(button.dataset.prompt);
   });
@@ -172,11 +185,8 @@ export async function agentHome(ctx) {
       data.set('purpose', '对话参考图');
       const { id, name } = await uploadMedia(ctx, data);
       if (!ctx.active()) return;
-      const image = { id, name };
-      thread.attachment = image;
-      if (thread.draft) thread.draft.image = image;
-      if (thread.cover) thread.cover.image = image;
-      thread.images = null;
+      const confirmation = await attachImage(ctx, thread, { id, name });
+      if (thread.messages.length) append({ role: 'assistant', ...confirmation });
       status.textContent = '已加入当前对话 · ' + name;
       buttons(); persist();
     } catch (error) {

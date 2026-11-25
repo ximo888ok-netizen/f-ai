@@ -25,49 +25,6 @@
 :root[data-theme] .aurora-field::before,
 :root[data-theme] .aurora-field::after { content: none; }
 
-.studio-pointer-field { display: none; }
-:root[data-theme] .studio-pointer-field {
-  display: block;
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  contain: paint;
-  border-radius: inherit;
-  pointer-events: none;
-}
-:root[data-theme] .studio-light-host {
-  position: relative;
-  isolation: isolate;
-}
-.studio-light-host > .studio-pointer-field {
-  z-index: -1;
-  opacity: .55;
-}
-:is(.live-desk-stage, .live-desk-stage > .live-panel, .studio-light-surface) > .studio-pointer-field { opacity: .88; }
-.studio-pointer-field::before, .studio-pointer-field::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  transform: translate3d(var(--light-x, 54vw), var(--light-y, 16vh), 0) translate(-50%, -50%);
-}
-.studio-pointer-field::before {
-  width: clamp(360px, 45vw, 680px);
-  height: clamp(270px, 35vw, 480px);
-  background: radial-gradient(ellipse at 39% 46%, #416cf435, transparent 50%),
-              radial-gradient(ellipse at 59% 54%, #7946f743, transparent 60%);
-}
-.studio-pointer-field::after {
-  width: clamp(260px, 32vw, 450px);
-  height: clamp(220px, 28vw, 370px);
-  background: radial-gradient(circle, var(--dot-ink, #b6b1ffb0) .65px, transparent 1px) center / 9px 9px;
-  mask-image: radial-gradient(ellipse, #000 5%, #0009 39%, transparent 72%);
-}
-@media (any-hover: hover) and (any-pointer: fine) and (prefers-reduced-motion: no-preference) {
-  :root[data-motion="on"] .studio-pointer-field::before { transition: transform 160ms ease-out; }
-  :root[data-motion="on"] .studio-pointer-field::after { transition: transform 75ms ease-out; }
-}
-
 :root[data-theme] .brandline > svg { color: var(--brand-ink, #bad6ff); }
 :root[data-theme] #nav .navitem[aria-current="page"] {
   border-color: var(--nav-border, #a2a1e664);
@@ -113,13 +70,10 @@
   background: linear-gradient(90deg, var(--slab-light, #72619b), var(--slab-mid, #302b43) 35%, var(--slab-edge, #221e30) 85%, var(--slab-rim, #8c87b8));
 }
 @media (forced-colors: active) {
-  :root[data-theme] .studio-pointer-field, .studio-light-surface::before { display: none; }
+  :root[data-theme] .studio-light-surface::before { display: none; }
   :root[data-theme] :is(.live-home-title, .demo-copy) h1 {
     background: none;
     color: CanvasText;
     -webkit-text-fill-color: currentColor;
   }
-}
-@media print {
-  :root[data-theme] .studio-pointer-field { display: none; }
 }

@@ -7,6 +7,7 @@ import { ApiError, choice, invalid, notFound, object, route, text } from './http
 const derive = promisify(scrypt);
 const emailSchema = { ...text(254, 3), format: 'email' };
 const passwordSchema = text(128, 10);
+const previewAdminEmail = 'admin@preview.invalid';
 const tags = ['Identity'];
 const authLimit = { rateLimit: { max: 15, timeWindow: '1 minute' } };
 
@@ -44,7 +45,23 @@ async function createSession(db, account) {
   };
 }
 
-export function registerAuth(app, db) {
+async function insertWorkspaceAccount(connection, { email, passwordHash, displayName, type, workspaceName }) {
+  const account = await row(connection, 'INSERT INTO accounts (id, email, password_hash, display_name, account_type) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, display_name, account_type', [randomUUID(), email, passwordHash, displayName, type]);
+  const workspaceId = randomUUID();
+  await connection.query('INSERT INTO workspaces (id, kind, name) VALUES ($1, $2, $3)', [workspaceId, type, workspaceName]);
+  await connection.query("INSERT INTO memberships (workspace_id, account_id, role) VALUES ($1, $2, 'owner')", [workspaceId, account.id]);
+  await connection.query('INSERT INTO wallets (workspace_id, account_id) VALUES ($1, $2)', [workspaceId, account.id]);
+  return account;
+}
+
+export async function seedPreviewAdmin(db, password) {
+  const passwordHash = await hashPassword(password);
+  await db.transaction(connection => insertWorkspaceAccount(connection, {
+    email: previewAdminEmail, passwordHash, displayName: 'admin', type: 'enterprise', workspaceName: '创意工作室',
+  }));
+}
+
+export function registerAuth(app, db, previewAdmin = false) {
   app.decorateRequest('account', null);
   app.decorateRequest('sessionHash', null);
   app.decorateRequest('context', null);
@@ -82,11 +99,9 @@ export function registerAuth(app, db) {
     const passwordHash = await hashPassword(password);
     try {
       const result = await db.transaction(async connection => {
-        const account = await row(connection, 'INSERT INTO accounts (id, email, password_hash, display_name, account_type) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, display_name, account_type', [randomUUID(), email, passwordHash, display, type]);
-        const workspaceId = randomUUID();
-        await connection.query('INSERT INTO workspaces (id, kind, name) VALUES ($1, $2, $3)', [workspaceId, type, workspaceName?.trim() || display]);
-        await connection.query("INSERT INTO memberships (workspace_id, account_id, role) VALUES ($1, $2, 'owner')", [workspaceId, account.id]);
-        await connection.query('INSERT INTO wallets (workspace_id, account_id) VALUES ($1, $2)', [workspaceId, account.id]);
+        const account = await insertWorkspaceAccount(connection, {
+          email, passwordHash, displayName: display, type, workspaceName: workspaceName?.trim() || display,
+        });
         return createSession(connection, account);
       });
       reply.code(201);
@@ -97,10 +112,13 @@ export function registerAuth(app, db) {
     }
   });
 
+  const standardLogin = object({ email: emailSchema, password: passwordSchema });
   route(app, 'POST', '/v1/auth/login', {
-    auth: false, tags, config: authLimit, summary: 'Create a session', body: object({ email: emailSchema, password: passwordSchema }),
+    auth: false, tags, config: authLimit, summary: 'Create a session',
+    body: previewAdmin ? { anyOf: [standardLogin, object({ email: { const: 'admin' }, password: text(128) })] } : standardLogin,
   }, async request => {
-    const account = await row(db, 'SELECT * FROM accounts WHERE email = $1', [normalizeEmail(request.body.email)]);
+    const email = previewAdmin && request.body.email === 'admin' ? previewAdminEmail : normalizeEmail(request.body.email);
+    const account = await row(db, 'SELECT * FROM accounts WHERE email = $1', [email]);
     if (!(await checkPassword(request.body.password, account?.password_hash)) || !account) throw invalidCredentials();
     return createSession(db, account);
   });

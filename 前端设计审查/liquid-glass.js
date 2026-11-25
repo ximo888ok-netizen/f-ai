@@ -1,6 +1,7 @@
 // Compile from the repository root with tsc --strict --target ES2022 --module ES2022 前端设计审查/liquid-glass.ts
 const surfaceSelector = '.topline, .app-shell .rail, .card, .live-panel, dialog, .ui-dialog, .composerShell';
 const glassSelector = surfaceSelector + ', button, a:is(.smallbtn, .primary, .plain, .start), .uploadButton, .navitem, #queueLink';
+const highlightSelector = '.topline, .agent-composer, .primary, .workspace-new, .quick-drop';
 const filterId = 'fai-liquid-refraction';
 const root = document.documentElement;
 let initialized = false;
@@ -32,23 +33,29 @@ function markSurfaces(container) {
 }
 function bindMouseHighlight() {
     const motion = matchMedia('(any-hover: hover) and (any-pointer: fine) and (prefers-reduced-motion: no-preference) and (forced-colors: none)');
+    const contrast = matchMedia('(prefers-contrast: more), (prefers-reduced-transparency: reduce)');
     let target = null;
     let active = null;
     let clientX = 0;
     let clientY = 0;
     let frame = null;
+    function clearActive() {
+        active?.classList.remove('liquid-highlight');
+        active?.style.removeProperty('--mouse-x');
+        active?.style.removeProperty('--mouse-y');
+        active = null;
+    }
     function clear() {
         if (frame !== null)
             cancelAnimationFrame(frame);
         frame = null;
         target = null;
-        active?.classList.remove('liquid-highlight');
-        active = null;
+        clearActive();
     }
     function paint() {
         frame = null;
-        if (target !== active)
-            active?.classList.remove('liquid-highlight');
+        if (target !== active || !target?.isConnected)
+            clearActive();
         active = target?.isConnected ? target : null;
         if (!active)
             return;
@@ -58,20 +65,27 @@ function bindMouseHighlight() {
         active.classList.add('liquid-highlight');
     }
     document.addEventListener('pointermove', event => {
-        if (event.pointerType !== 'mouse' || !motion.matches || root.dataset.motion === 'off') {
+        if (event.pointerType !== 'mouse' || !motion.matches || contrast.matches || root.dataset.motion === 'off') {
             clear();
             return;
         }
-        const surface = event.target instanceof Element ? event.target.closest('.liquid-glass') : null;
-        target = surface instanceof HTMLElement && !surface.matches(':disabled, [aria-disabled="true"]') ? surface : null;
+        const surface = event.target instanceof Element ? event.target.closest(highlightSelector) : null;
+        if (!(surface instanceof HTMLElement) || surface.matches(':disabled, [aria-disabled="true"]')) {
+            clear();
+            return;
+        }
+        target = surface;
         clientX = event.clientX;
         clientY = event.clientY;
         frame ??= requestAnimationFrame(paint);
     }, { passive: true });
     root.addEventListener('pointerleave', clear);
+    document.addEventListener('scroll', clear, { capture: true, passive: true });
+    window.addEventListener('hashchange', clear);
     window.addEventListener('blur', clear);
     document.addEventListener('visibilitychange', clear);
     motion.addEventListener('change', clear);
+    contrast.addEventListener('change', clear);
     new MutationObserver(clear).observe(root, { attributeFilter: ['data-motion'] });
 }
 export function initLiquidGlass() {

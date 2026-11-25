@@ -65,10 +65,11 @@ async function submit(db, providers, shops, context, input, parentId = null) {
 
 export async function submitInTransaction(connection, providers, shops, context, input, parentId = null) {
   const { workspaceId, accountId } = context;
-  const { capabilityId: id, projectId, mode, parameters, idempotencyKey, confirmationId } = input;
+  const { capabilityId: id, projectId, mode, parameters, idempotencyKey, confirmationId, imageQuality } = input;
   const capability = catalog.get(id);
   const storedInput = { mode, parameters };
   if (input.modelId !== undefined) storedInput.modelId = input.modelId;
+  if (imageQuality !== undefined) storedInput.imageQuality = imageQuality;
   const hash = digest(stableJson({ id, projectId: projectId ?? null, storedInput, parentId, confirmationId: confirmationId ?? null }));
   // The workspace plugin lock prevents submit/disable races. A per-wallet lock also
   // serializes requests that reuse an idempotency key across different plugins.
@@ -84,6 +85,9 @@ export async function submitInTransaction(connection, providers, shops, context,
   const availableProviders = await modelProviders(connection, workspaceId, providers);
   const providerId = providerFor(availableProviders, capability, input.modelId, id==='model.chat' && parameters.stream===true);
   const provider = taskProvider(availableProviders, providerId);
+  if (imageQuality !== undefined && (id !== 'image.main-image' || !provider.info?.imageQuality)) {
+    throw invalid('The selected model does not support independent main image quality');
+  }
   provider.validate?.(capability, parameters);
   if (provider.taskConfiguration) storedInput.providerConfiguration=provider.taskConfiguration(parameters);
   if (id === 'model.chat' && parameters.guidanceIds?.length) {
@@ -191,7 +195,8 @@ export function registerTasks(app, db, providers, shops) {
     tags, summary: 'Submit a priced and idempotent plugin task',
     body: {
       ...object({
-        capabilityId, modelId: modelIdSchema, mode: choice('chat', 'workflow'), parameters: freeObject, idempotencyKey: keySchema, projectId: uuid, confirmationId: uuid, parentId: uuid,
+        capabilityId, modelId: modelIdSchema, mode: choice('chat', 'workflow'), parameters: freeObject, idempotencyKey: keySchema,
+        projectId: uuid, confirmationId: uuid, parentId: uuid, imageQuality: choice('low', 'medium', 'high'),
       }, ['capabilityId', 'mode', 'parameters', 'idempotencyKey']),
       allOf: capabilityRules,
     },
