@@ -7,6 +7,8 @@
 
 AI 客服、AI 运营和电商文案的 Python 环境、模型参数及店铺授权见[外部插件接入](./INTEGRATIONS.md)。
 
+图片与视频工作台的技能版本、本地脚本、云端执行服务和供应商授权见[媒体技能部署](./media-runtime/README.md)。
+
 ## 本地启动
 
 需要 Node.js 24、npm 和可访问的 PostgreSQL。为联调建一个独立数据库，然后在此目录执行。
@@ -116,7 +118,7 @@ npm start
 
 ## 联调插件任务
 
-GET /v1/plugins 返回五个业务插件和 44 项能力的目录。读取 enabled、available、parameters 和可选的 endpoint。带 endpoint 的能力使用它自己的 API，其余能力统一走 /v1/tasks。enabled 是工作区级开关，Windows 本机开关由宿主管理。
+GET /v1/plugins 返回五个业务插件及其能力目录。读取 enabled、available、parameters 和可选的 endpoint。带 endpoint 的能力使用它自己的 API，其余能力统一走 /v1/tasks。enabled 是工作区级开关，Windows 本机开关由宿主管理。
 
 新钱包余额为 0。联调数据库的操作员可用下面的命令加积分。终端命令的第三个参数为整数金额，最后一个参数为可追溯且唯一的业务参考号。相同参考号与金额重放不会重复入账。
 

@@ -7,6 +7,8 @@ import { getWorkspaces, seedPreviewAdmin } from './auth.js';
 import { provisionCredits } from './wallet.js';
 import { migrate } from './db.js';
 import { createProviders } from './providers.js';
+import { modelDefinitions } from './config.js';
+import { installModels } from './models.js';
 import { startWorker } from './worker.js';
 import { createVideoDelivery } from './video-delivery.js';
 
@@ -22,7 +24,7 @@ const db = new PGlite(stateDir ? join(stateDir,'database') : undefined);
 let app;
 try {
   await migrate(db);
-  const dependencies = { db, providers: createProviders(), shops: new Map() };
+  const dependencies = { db, providers: installModels(createProviders(),modelDefinitions()), shops: new Map() };
   const previewPassword = !stateDir && process.env.FAI_PREVIEW_ADMIN_PASSWORD;
   if (previewPassword) {
     const account = await seedPreviewAdmin(db, previewPassword);

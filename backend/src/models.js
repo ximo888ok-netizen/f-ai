@@ -14,7 +14,7 @@ const protocols = {
   'openai-embeddings': 'embedding', 'cohere-rerank': 'rerank', 'openai-transcription': 'transcription', 'openai-speech': 'speech',
   'chat-completions': 'text', responses: 'text', 'anthropic-messages': 'text', 'gemini-content': 'text',
   'cohere-chat': 'text', 'ollama-chat': 'text', 'openai-images': 'image', 'gemini-image': 'image',
-  'runway-video': 'video', 'ark-video': 'video', 'wan-video': 'video', 'minimax-video': 'video',
+  'runway-video': 'video', 'ark-video': 'video', 'wan-video': 'video', 'wan-frames':'video', 'minimax-video': 'video',
 };
 const idPattern=modelAlias.pattern;
 export const modelIdSchema=modelAlias;
@@ -41,6 +41,14 @@ function validateParameters(config, capability, params) {
   if (config.protocol === 'json-http') return validateMappedMedia(config.mapping, params);
   if (!params.prompt?.trim()) throw invalid('This model requires a prompt');
   const count = params.assetIds?.length ?? 0;
+  if(config.protocol==='ark-video' && capability.id==='video.skill-seedance-film'){
+    if(count>(params.frameMode==='references'?9:2))throw invalid('首尾帧最多两张，多图参考最多九张。');
+    return;
+  }
+  if(config.protocol==='wan-frames'){
+    if(count!==2 || params.ratio || params.prompt.length>800)throw invalid('万相首尾帧需要两张有序图片，画幅沿用首帧，描述最多 800 字。');
+    return;
+  }
   if (config.protocol === 'wan-video' && count) throw invalid('This model route only accepts text input');
   if (config.kind === 'video' && count > 1) throw invalid('This model route accepts at most one first-frame image');
   if (capability.id === 'video.from-image' && count !== 1) throw invalid('Select one first-frame image');
@@ -57,6 +65,8 @@ function validateParameters(config, capability, params) {
 }
 
 function allowed(protocol, kind) {
+  if(protocol==='wan-frames')return ['video.skill-wan-generate'];
+  if(protocol==='ark-video')return ['video.compose','video.from-image','video.skill-seedance-film'];
   if (utilityCapabilities[kind]) return utilityCapabilities[kind];
   if (protocol === 'json-http' && ['image', 'video'].includes(kind)) {
     return [...catalog.values()].filter(capability => capability.pluginId === kind).map(capability => capability.id);

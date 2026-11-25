@@ -14,8 +14,8 @@ const scripts = ['live-agent-integrations.js', 'live-commerce-sdk.js', 'studio-i
   'live-rights.js', 'live-skills.js', 'live-copy-review.js', 'live-files.js', 'live-media.js', 'live-media-controls.js',
   'live-image-studio.js', 'live-storyboards.js', 'live-task-stream.js', 'live-knowledge-tools.js', 'live-experts.js', 'merchant-credit-limit.js', 'merchant-readiness.js', 'live-copy-suggestions.js', 'live-record-tools.js', 'live-task-intake.js', 'live-task-edit.js', 'live-onboarding.js', 'live-text-delivery.js', 'live-nav-search.js', 'live-commerce-report.js', 'live-settings.js', 'live-task-trace.js', 'live-voice.js', 'liquid-glass.js', 'studio-wallpaper.js'];
 const types = new Map([
-  ...[...styles, 'scene-desk.css'].map(name => [name, 'text/css; charset=utf-8']),
-  ...[...scripts, 'desk-shops.js', 'desk-inbox.js', 'desk-channel.js'].map(name => [name, 'text/javascript; charset=utf-8']),
+  ...[...styles, 'scene-desk.css','media-skills.css'].map(name => [name, 'text/css; charset=utf-8']),
+  ...[...scripts, 'desk-shops.js', 'desk-inbox.js', 'desk-channel.js','media-skill-desk.js','media-skill-assets.js','media-skill-output.js'].map(name => [name, 'text/javascript; charset=utf-8']),
 ]);
 const security = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 

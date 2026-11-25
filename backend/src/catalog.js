@@ -1,5 +1,6 @@
 
 import { array, choice, freeObject, integer, object, text, uuid } from './http.js';
+import { mediaSkills } from './media-skills.js';
 
 export const plugins = [
   { id: 'image', name: '商品图片' },
@@ -131,6 +132,16 @@ catalog.set('model.voice-turn',{
   minAssets:1,requiresConsent:false,requiresConfirmation:false,modes:['chat','workflow'],cost:6,
 });
 
+for(const s of mediaSkills) {
+  const fields={prompt:text(3000), platform:choice(...s.channels), ratio:choice('1:1','3:4','4:3','9:16','16:9'),
+    assetIds:{...array(uuid,s.max,s.min),uniqueItems:true}};
+  if(s.alsoNative==='ark-video')fields.frameMode=choice('frames','references');
+  if(s.slots)fields.slots={...array(choice(...s.slots),s.slots.length,s.minOutputs),uniqueItems:true};
+  catalog.set(s.id,{id:s.id,name:s.title,pluginId:s.kind,execution:s.native||s.alsoNative?'gateway':'model:'+s.alias,
+    parameters:object(fields,['prompt','platform',...(s.min?['assetIds']:[])]),
+    minAssets:s.min,mediaSkill:s,requiresConsent:s.consent,requiresConfirmation:false,modes:['workflow'],
+    cost:s.local?1:s.kind==='image'?3:5});
+}
 export const capabilityId = choice(...catalog.keys());
 export const capabilityRules = [...catalog.values()].map(capability => ({
   if: { properties: { capabilityId: { const: capability.id } }, required: ['capabilityId'] },

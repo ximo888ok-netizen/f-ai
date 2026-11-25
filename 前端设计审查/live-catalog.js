@@ -6,7 +6,8 @@ export const getCatalog = async ctx => {
   const directory = await ctx.api('/v1/plugins');
   return [...directory.items, directory.models];
 };
-const capLink = capability => capability.endpoint ? 'customer' : 'create/' + capability.pluginId + '/' + capability.id;
+const capLink = capability => capability.id.startsWith(capability.pluginId+'.skill-') ? 'desk/'+capability.pluginId+'/skills/'+capability.id :
+  capability.endpoint ? 'customer' : 'create/' + capability.pluginId + '/' + capability.id;
 export const displayStatus = (plugin, capability, ctx) => !plugin.enabled ? '工作区已停用' :
   plugin.id === 'operations' && !ctx.manager ? '需要工作区管理员权限' : capability.available ? '可用' : '服务未配置';
 

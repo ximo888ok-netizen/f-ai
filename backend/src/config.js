@@ -5,6 +5,9 @@ import { catalog } from './catalog.js';
 export const isUuid = value => typeof value === 'string' && /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(value);
 const list = value => (value ?? '').split(',').map(item => item.trim()).filter(Boolean);
 
+export function modelDefinitions(env=process.env){
+  return JSON.parse(env.MODEL_PROVIDERS_JSON || (env.MODEL_PROVIDERS_FILE ? readFileSync(env.MODEL_PROVIDERS_FILE,'utf8').replace(/^\uFEFF/,''):'[]'));
+}
 export function config(env = process.env) {
   if (!env.DATABASE_URL) throw new Error('DATABASE_URL is required');
   const port = Number(env.PORT || 8080);
@@ -24,7 +27,7 @@ export function config(env = process.env) {
     }
   }
   if (env.MODEL_PROVIDERS_FILE && env.MODEL_PROVIDERS_JSON) throw new Error('Choose one model configuration source');
-  const models = JSON.parse(env.MODEL_PROVIDERS_JSON || (env.MODEL_PROVIDERS_FILE ? readFileSync(env.MODEL_PROVIDERS_FILE, 'utf8').replace(/^\uFEFF/, '') : '[]'));
+  const models = modelDefinitions(env);
   const capabilities = list(env.GATEWAY_CAPABILITIES);
   if (capabilities.some(id => catalog.get(id)?.execution !== 'gateway')) {
     throw new Error('GATEWAY_CAPABILITIES contains an unsupported capability ID');

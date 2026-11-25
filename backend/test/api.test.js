@@ -11,6 +11,7 @@ import { createProviders, ProviderError } from '../src/providers.js';
 import { dispatchSchedule } from '../src/schedules.js';
 import { provisionCredits } from '../src/wallet.js';
 import { workOnce } from '../src/worker.js';
+import { mediaSkills } from '../src/media-skills.js';
 import { createVideoArchive } from '../src/video-archive.js';
 
 const db = process.env.FAI_TEST_DATABASE_URL ? postgres(process.env.FAI_TEST_DATABASE_URL) : new PGlite();
@@ -159,7 +160,7 @@ test('gateway limits, plugin disablement, retry exhaustion and release', async (
   response(await api('POST', '/v1/tasks', enterprise, taskInput('not-configured', { capabilityId: 'video.compose', parameters: {} })), 503);
   const catalog = response(await api('GET', '/v1/plugins', enterprise), 200).items;
   assert.equal(catalog.length, 5);
-  assert.equal(catalog.flatMap(plugin => plugin.capabilities).length, 44);
+  assert.equal(catalog.flatMap(plugin => plugin.capabilities).length, 44 + mediaSkills.length);
   assert.equal(catalog.find(plugin => plugin.id === 'customer-service').capabilities[0].endpoint, '/v1/customer-service/conversations/{id}/messages');
   response(await api('PUT', '/v1/plugins/copywriting/state', enterprise, { enabled: false }), 200);
   response(await api('POST', '/v1/tasks', enterprise, taskInput('disabled-task')), 409);

@@ -21,6 +21,7 @@ const videoModes = [
   ['prompt', 'desk/video', '提示词成片'],
   ['quick', 'desk/video/quick', '智能快创'],
   ['director', 'desk/video/director', '智能导演'],
+  ['skills','desk/video/skills','视频制作技能'],
 ];
 
 function recentDrafts(drafts) {
@@ -44,6 +45,7 @@ function videoDesk(ctx, plugin, wallet, tools, render, planning, tasks) {
     '<div class="live-video-workflow">' + body + '</div></div>' +
     '<details class="live-fold"><summary>更多视频工具</summary><div class="live-row">' +
     link('视频导出', 'media/video') + '</div>' + tools + '</details>') };
+  if(mode==='skills')return import('./media-skill-desk.js').then(m=>m.mediaSkillDesk(embedded,plugin,wallet,ctx.args[2]));
   if (mode === 'director') {
     const id = ctx.args[2];
     if (!id) return videoDirectorPage(embedded, plugin, wallet, planning, tasks, route + '/storyboards');
@@ -91,6 +93,11 @@ export async function dashboard(ctx) {
     (operations ? onboarding(settings.preferences) : '') + '</div></div>');
   if (current === 'video') return videoDesk(ctx, plugin, wallet, tools, render, planning, tasks.items);
   if (imageGeneration) {
+    if(ctx.args[1]==='skills'){
+      const nav=generationModeTabs('图片生成模式',[['quick','desk/image','快速模式'],['advanced','desk/image/advanced','高级模式'],['agent','desk/image/agent','Agent 生图'],['skills','desk/image/skills','平台图片技能']],'skills');
+      const {mediaSkillDesk}=await import('./media-skill-desk.js');
+      return mediaSkillDesk({...ctx,html:body=>render(nav+body)},plugin,wallet,ctx.args[2]);
+    }
     render(imageGenerationForm(wallet, mainImage, mode, planning) +
       '<details class="live-fold"><summary>更多图片工具</summary>' + tools + '</details>');
     bindImageGeneration(ctx, mainImage, wallet, planning);

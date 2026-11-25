@@ -48,6 +48,11 @@ foreach ($folder in @('src','migrations','integrations')) {
 }
 
 # Include only files served by the workbench.
+$runtime = Join-Path $target 'media-runtime'
+New-Item -ItemType Directory -Force (Join-Path $runtime 'aidge') | Out-Null
+foreach ($file in @('prepare.mjs','Dockerfile','README.md','aidge/SKILL.md','aidge/run.py')) {
+    Copy-Item -LiteralPath (Join-Path $backend "media-runtime/$file") -Destination (Join-Path $runtime $file)
+}
 $studio = '前端设计审查'
 $root = Join-Path $app $studio
 New-Item -ItemType Directory -Path (Join-Path $root 'assets') -Force | Out-Null

@@ -41,12 +41,13 @@ import { registerImageStudio } from './image-studio.js';
 import { registerStoryboards } from './video-storyboards.js';
 import { registerCopywritingReview } from './copywriting-review.js';
 import { installIntegrations, registerIntegrations } from './plugin-integrations.js';
+import { installMediaSkills, registerMediaSkills } from './media-skill-runtime.js';
 import { registerDeskShops } from './desk-shops.js';
 import { taobaoSettings, registerShopAuth } from './shop-authorization.js';
 
 export async function buildApp({
   db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(), previewAdmin = false,
-  integrations = {}, integrationRunner, shopAuth = taobaoSettings(), shopTokenExchange,
+  integrations = {}, integrationRunner, mediaRuntime, shopAuth = taobaoSettings(), shopTokenExchange,
   cloudAssets = new Map(), feishu = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false, releases = featureReleases(process.env.FAI_FEATURE_RELEASES_JSON),
 }) {
   const app = Fastify({
@@ -107,6 +108,7 @@ export async function buildApp({
   const databaseRouter = workspaceDatabaseRouter(db, dedicatedDatabases, requiredMigrations);
   const workspaceDb = databaseRouter.db;
   const runtimes = await installIntegrations(providers, integrations, integrationRunner);
+  const mediaDirectory=await installMediaSkills(providers,mediaRuntime,loopbackOnly);
   app.decorate('workspaceDatabaseRouter', databaseRouter);
   app.decorate('withWorkspaceDatabase', (id, handler) => databaseRouter.run(id, handler));
   app.get('/health', { schema: { tags: ['Health'], summary: 'Check server liveness' } }, async () => ({ status: 'ok' }));
@@ -161,6 +163,7 @@ export async function buildApp({
   registerDeskShops(app, workspaceDb, integrations, shopAuth);
   registerShopAuth(app, workspaceDb, shopAuth, shopTokenExchange);
   registerIntegrations(app, workspaceDb, integrations, runtimes, integrationRunner, shopAuth);
+  registerMediaSkills(app,workspaceDb,providers,mediaDirectory);
   registerModels(app, providers, workspaceDb);
   registerTasks(app, workspaceDb, providers, shops);
   registerSchedules(app, workspaceDb, providers);

@@ -34,6 +34,11 @@ export function taskProvider(providers,id) {
 
 export function matchingProviders(providers, capability) {
   if (capability.execution !== 'gateway') return taskProvider(providers,capability.execution)?.supports(capability) ? [capability.execution] : [];
+  if(capability.mediaSkill){
+    const s=capability.mediaSkill;
+    return [...providers].filter(([,p])=>p.info && p.supports(capability) &&
+      (p.info.id===s.alias || p.info.protocol===(s.native??s.alsoNative))).map(([id])=>id);
+  }
   const matches = [];
   for (const [id, provider] of providers) {
     if (provider.info && provider.supports(capability)) matches.push(id);

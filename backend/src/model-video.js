@@ -14,6 +14,12 @@ export async function startVideo(route, payload, call) {
   const asset = payload.assets[0];
   const image = asset && 'data:' + asset.mediaType + ';base64,' + asset.dataBase64;
   const model = route.model;
+  if(route.protocol==='wan-frames') {
+    const last=payload.assets[1];
+    const data=await call('services/aigc/image2video/video-synthesis',{model,input:{prompt,first_frame_url:image,
+      last_frame_url:'data:'+last.mediaType+';base64,'+last.dataBase64}},{'X-DashScope-Async':'enable'});
+    return new PendingModelJob(data?.output?.task_id);
+  }
   if (route.protocol === 'runway-video') {
     const sizes = { '16:9': '1280:720', '9:16': '720:1280', '1:1': '960:960' };
     const data = await call(image ? 'image_to_video' : 'text_to_video', {
@@ -23,7 +29,9 @@ export async function startVideo(route, payload, call) {
   }
   if (route.protocol === 'ark-video') {
     const content = [{ type: 'text', text: prompt }];
-    if (image) content.push({ type: 'image_url', image_url: { url: image }, role: 'first_frame' });
+    for(const [i,ref] of payload.assets.entries()) content.push({type:'image_url',
+      image_url:{url:'data:'+ref.mediaType+';base64,'+ref.dataBase64},
+      role:payload.parameters.frameMode==='references'?'reference_image':i===0?'first_frame':'last_frame'});
     const data = await call('contents/generations/tasks', { model, content, ratio, duration });
     return new PendingModelJob(data?.id);
   }
@@ -45,7 +53,7 @@ export async function pollVideo(route, id, call) {
     const data = await call('contents/generations/tasks/' + encodeURIComponent(id));
     if (['queued', 'running'].includes(data?.status)) return new PendingModelJob(id);
     if (data?.status === 'succeeded') return success(route, data.content?.video_url);
-  } else if (route.protocol === 'wan-video') {
+  } else if (route.protocol === 'wan-video' || route.protocol === 'wan-frames') {
     const data = await call('tasks/' + encodeURIComponent(id));
     const output = data?.output;
     if (['PENDING', 'RUNNING'].includes(output?.task_status)) return new PendingModelJob(id);
