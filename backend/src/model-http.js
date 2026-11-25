@@ -6,6 +6,15 @@ export class ProviderError extends Error {
   }
 }
 
+export function modelBaseUrl(raw) {
+  const base = new URL(raw);
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname);
+  if ((base.protocol !== 'https:' && !(base.protocol === 'http:' && loopback)) ||
+    base.username || base.password || base.search || base.hash) throw new Error('Invalid model baseUrl');
+  if (!base.pathname.endsWith('/')) base.pathname += '/';
+  return { base, loopback };
+}
+
 // Polling and idempotent gateways can repeat a transport failure. A native
 // creation request with an ambiguous outcome must not be submitted twice.
 async function openUpstream(url,{headers,body,repeatable,timeout}) {

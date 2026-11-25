@@ -24,6 +24,8 @@ import { psdPage } from './live-psd.js';
 import { cloudAssetsPage, feishuPage } from './live-connectors.js';
 import { skillsPage } from './live-skills.js';
 import { copyReviewPage } from './live-copy-review.js';
+import { copyDrafts } from './live-copy-drafts.js';
+import { productImagePlans } from './image-generation/product-plans.js';
 import { rightsPage } from './live-rights.js';
 import { mediaPage } from './live-media.js';
 
@@ -41,11 +43,13 @@ const pages = {
   library: ['工具库', taskPages.library],
   skills: ['技能运行', skillsPage],
   'copy-review': ['平台文案校验', copyReviewPage],
+  'copy-drafts': ['文案草稿', copyDrafts],
   models: ['模型对话', taskPages.conversation],
   media: ['图片与视频处理', mediaPage],
   rights: ['权利通知', rightsPage],
   assets: ['素材库', workspacePages.assets],
   psd: ['分层设计', psdPage],
+  'image-plans': ['商品组图方案', productImagePlans],
   'cloud-assets': ['网盘备份', cloudAssetsPage],
   feishu: ['飞书消息', feishuPage],
   tasks: ['任务记录', taskPages.tasks],

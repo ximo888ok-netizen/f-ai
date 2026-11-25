@@ -1,12 +1,84 @@
 # 后端部署与恢复验收
 
+### GitHub Actions 交付
+
+后端分支的 Backend full regression 工作流在 GitHub 托管运行器执行。两组全量测试及源码部署验收通过后，Windows x64 作业校验三个发行输入的 SHA-256，从同一提交构建离线包，解包后启动服务，复验带 AAC 音轨的视频导出、套图配置、帮助文档、目录权限、数据库切换和备份恢复。通过后可从该次运行的 Artifacts 下载以完整提交号命名的包，保留 30 天。包内含后端归档及两份摘要。运行摘要记录归档和清单的 SHA-256。
+
+运维人员可在目标机用服务账号运行 `npm run --silent ops:directories`，离线环境使用包内 Node 执行 `src/directory-diagnostics.js`。命令对迁移、帮助、已配置的凭证目录做读取检查，在临时目录和已配置的桌面状态目录以独占方式创建探针、写入、读回并清理。全部满足要求时退出 0。管理接口 `GET /v1/diagnostics` 的 `directories` 使用相同检查，返回目录用途和结果码。Windows 实际写权限由文件操作验证。
+
+## 本机独立部署验收
+
+从包含 Git 历史的后端分支运行 `npm run accept:deployment`。命令以当前提交为候选，在新的临时目录离线安装生产依赖，创建回环 PostgreSQL 集群并启动 HTTP 服务。测试账号、素材、积分及数据库均由脚本生成。验收输出候选提交、锁文件摘要、抽测资料编号、归档摘要和结果。
+
+准备 Node.js 24 及 npm、Git、PostgreSQL 服务端及客户端工具。设置 `FAI_QA_PG_BIN` 为包含 `postgres`、`initdb` 和 `pg_ctl` 的完整 PostgreSQL 安装的 bin 目录。如客户端另装，将 `FAI_QA_PG_CLIENT_BIN` 指向包含 `psql`、`pg_dump` 及 `pg_restore` 的目录。设置 `FAI_QA_NPM_CACHE` 为包含当前锁文件生产依赖的 npm 缓存绝对路径。需要预热缓存时，可在单独的新检出目录执行 `npm ci --omit=dev --cache <缓存路径>`。在 Unix 上以可运行 `initdb` 的普通用户执行。
+
+服务通过实际 HTTP 验证登录、成员和项目、企业切库、素材、分层 PSD、客服、任务结算和监控。停写后备份控制库和企业库，将备份恢复到两个新空库，再核对原账号、文件和余额。部署方可将标准输出保存到本机用于对照。[开发计划验收对照](ACCEPTANCE.md)
+
 ## 发布前
+
+### 目标机容量预检
+
+在目标机后端目录执行 `npm run --silent ops:capacity -- <部署卷上已有的目录>`。离线包可直接运行 `../runtime/node.exe src/deployment-capacity.js <目录>`。命令读取操作系统可见的物理核心、逻辑线程、内存和所选卷的总容量，并单独报告剩余空间。计划门槛为 8 个核心、16 个线程、16 GB 内存、500 GB 卷总容量，每 GB 按十亿字节计。
+
+四项达标返回 0，任一指标低于门槛返回 1，缺少必要测量且无已知短板时返回 2。把 JSON 随版本和部署记录保存。虚拟机和容器的结果适用于当前可见拓扑；目标业务负载及连续稳定性需在相应环境单独测量。
+
+### Windows x64 后端离线包
+
+在联网准备机预热本锁文件的 npm 缓存后，从后端目录运行 `npm run release:offline -- <全新交付目录绝对路径>`。构建读取当前 Git 提交中的后端、SDK 和工作台公开运行文件。设置 `FAI_NODE_DIST` 为 Node.js 24 Windows x64 发行目录、`FAI_PG_DIST_ARCHIVE` 为含 pgsql 目录的 EDB Windows x64 二进制 ZIP、`VIDEO_FFMPEG_PATH` 为 LGPL 共享版 ffmpeg.exe 的绝对路径、`FAI_QA_NPM_CACHE` 为 npm 缓存。构建使用锁文件离线安装生产依赖，输出压缩包与 SHA-256。包内 release.json 记录源码提交、依赖版本和许可、运行工具来源、版本及每个原生文件的摘要。
+
+将压缩包传到目标机后，用可信交付记录中的 SHA-256 核验，再对新目录运行 `tar -xf <压缩包> -C <空目录>`。包内 `runtime/postgres/bin` 提供 initdb、pg_ctl、psql 和归档工具。在私有数据目录用 `initdb -D <新库目录> -U <管理员> -A scram-sha-256 -W` 初始化，再用 `pg_ctl -D <库目录> -l <日志文件> -w start` 启动实例。创建应用数据库并配置受保护的 DATABASE_URL，将 FAI_PG_BIN 指向包内 PostgreSQL bin 目录，媒体工具路径指向 runtime/media，编码器与构建匹配。在包内 backend 目录运行 `../runtime/node.exe src/admin.js migrate` 和 `../runtime/node.exe src/server.js`。包内服务从随包文件读取提交编号，无需目标机安装 Node 或运行 npm。
+
+构建机可用独立验收脚本复验完整包。设置 `FAI_QA_OFFLINE_ARCHIVE` 和可信的 `FAI_QA_OFFLINE_SHA256`，运行 `npm run accept:deployment`。脚本在空目录验证摘要和候选提交，用包内运行时初始化临时 PostgreSQL、启动 HTTP 并恢复两库。正式目标机另按相同流程记录验收。
+
+### 离线包复核
+
+**解包后、启动前的复核。** 构建输出中的 `sha256` 对应压缩包，`manifestSha256` 对应包内 `release.json`。归档这两个摘要和完整 Git 提交编号。从独立可信的发布记录取值，用可信 Node 和同版验收脚本运行 `node backend/src/verify-offline-release.js <解包目录> <完整提交号> <清单SHA-256>`。工具复核实际原生文件集合、九项运行工具、依赖锁文件和四份运行时许可文件。整包 SHA-256 覆盖其余源码和静态资源。在 `accept:deployment` 中可用 `FAI_QA_OFFLINE_MANIFEST_SHA256` 指定额外的清单摘要；仅提供可信整包摘要的调用会使用已验证包内的清单。
+
+### 任务日志与候选版本观察
+
+工作区管理者使用 `GET /v1/diagnostics/task-events` 跨任务检索，组合可选的 `taskId`、`level`、`from`、`to` 和分页参数。普通成员使用自己的任务事件接口。
+
+在后端目录运行 `npm run ops:logs -- <工作区UUID> <私有绝对目录> --watch`。部署服务管理器可持续运行该命令；省略 `--watch` 会导出一次。导出器按绑定读取当前企业库，按 UTC 日期生成工作区专属 JSONL。当日重复导出会刷新已提交事件。文件只含时间、级别、事件、任务 ID、事件 ID 和错误码。默认保留七个日历日，可通过 `FAI_LOG_KEEP_DAYS` 设为 1–90 天。业务接口按本人任务、级别和时间检索 `GET /v1/tasks/{id}/events?level=warn&from=...&to=...`。本地目录权限由部署账号管理。
+
+将 `FAI_RELEASE_REVISION` 设置为候选的完整 Git 提交编号，配置 `FAI_PROBE_ORIGIN` 及测试工作区和会话后，运行 `npm run ops:observe -- watch <证据库绝对路径>`。每分钟检查就绪状态、候选版本和已配置的工作区探测。SQLite 证据按候选、来源和工作区隔离，保留实际时间及错误码。`once` 执行一次，`report` 读取记录。失败、时钟倒退或超过两分钟的缺口会重新起算。满七天且最近样本仍新鲜时报告 `qualified: true`。账户、机器配置、核心业务的抽测分母和质量复核随外部验收单记录。
+
+生成只读报告时，使用采集时的提交编号、来源和工作区，运行 `npm run --silent ops:observe -- report <现有证据库绝对路径>`。报告返回范围、当前连续窗口起止、最后心跳、失败原因计数，以及最近 50 条中断记录。读取记录无需会话或网络。观察达到七日时归档当时的报告；后续需要持续观测可定时运行 `once`。
+
+### 从源码部署
 
 使用指定的 Git 提交建立干净的发布目录。安装 Node.js 24，使用 `npm ci --omit=dev` 安装后端依赖。保留 `backend` 和工作台前端目录的相对位置。将数据库连接和可选供应商配置通过部署环境注入。视频处理需要 FFmpeg、FFprobe 和所选编码器。
 
 对每个企业独立库使用与现有绑定一致的别名。发布前停止共享库和独立库的所有写入，包括应用实例、队列和定时任务。备份完成后运行 `npm run migrate`，再运行 `npm start`。用 `/health` 检查进程，用 `/ready` 检查版本和主数据库，用企业管理账号读取 `/v1/workspace/database` 验证独立库路由。环境使用自己的密钥，测试账号和测试物料留在隔离环境。
 
-## 备份数据库组
+## 企业独立库凭证
+
+1. 在代码和数据库备份目录以外准备两个位置。将 `DEDICATED_CREDENTIAL_DIR` 指向保存密文的绝对目录，目录所在文件系统需支持硬链接。将 `DEDICATED_CREDENTIAL_KEYS_FILE` 指向另一处由部署方管理的密钥文件。服务账号只需读取两处，运维账号负责写入。Unix 上将私有目录限为 0700、文件限为 0600，Windows 上用 NTFS ACL 限制访问。密钥应单独备份。
+2. 密钥文件是 UTF-8 JSON 对象，形如 `{"key-a":"<32 个随机字节的标准 Base64 编码>"}`。为每个新密钥编号独立生成 32 个密码学随机字节，由部署密钥工具写入文件。连接串由密钥工具通过管道传给 `npm run --silent db:credential -- seal company-db 1 key-a` 的标准输入。输入一行完整 PostgreSQL URL，其中用户名、密码里的特殊字符须按 URL 编码。命令行参数和 shell 历史只应包含别名、版本和密钥编号。
+3. 在服务和运维进程中设置 `DEDICATED_DATABASES_JSON={"company-db":{"credentialVersion":1}}`。每个版本单独保存，使用 AES-256-GCM 校验密文和所属别名、版本、密钥编号。重复写同一版本会失败。服务启动时读取指定版本，迁移、切库、备份和恢复也使用同一配置。原先使用环境变量引用的部署可以逐库迁移，验证新配置后移除旧连接串。
+4. **换数据库密码**时，先把新连接串封存到未使用的版本。安排维护窗口，停用持有旧连接池的服务、工作进程和其他客户端。在 PostgreSQL 管理会话中用 psql 的 `\password <企业角色>` 修改密码。确认旧密码新建连接被拒、新密码可用后，将配置指向新版本，重启全部实例。用管理员会话检查 `GET /v1/workspace/database` 为 `dedicated/ready`，写入测试商品并核对实际目标库。若轮换中断，保持路由绑定，使用与数据库当前密码匹配的版本恢复服务。[PostgreSQL 密码命令](https://www.postgresql.org/docs/18/app-psql.html)
+5. **换加密密钥**时，把新密钥加入密钥文件，运行 `npm run --silent db:credential -- rewrap company-db 2 3 key-b`，将第 2 版重新加密为第 3 版。切换所有受影响的服务和运维命令并验证后，再从在线密钥文件移除旧密钥。需要保留的历史密文与对应旧密钥分别离线保管。
+
+## 依赖与网络连接清单
+
+发版时运行 `npm run --silent release:inventory` 导出锁文件摘要、生产依赖、版本、许可证和可选平台约束。FFmpeg、FFprobe、编码器、PostgreSQL、Node.js 运行时及 Windows 安装组件应按实际交付二进制另行登记版本、来源与许可证。
+
+### 出站目的地与业务字段
+
+| 连接 | 目的地及默认端口 | 按用途发送的内容 |
+| --- | --- | --- |
+| 数据库 | 部署配置中的控制库与企业库，PostgreSQL 5432 或连接串指定端口 | 认证、企业业务及迁移读写，由数据库角色和工作区路由控制 |
+| 模型或业务网关 | 所配置 HTTPS 接口，通常 443。本机模型可用回环 HTTP 端口 | 所选能力的提示、参数与必要素材，授权的店铺操作另含店铺引用和经确认的变更。服务端附供应商认证 |
+| 双工语音 | 已绑定的实时服务，HTTPS 443 或指定本机端口 | 服务端信令包含语音配置、SDP 和经哈希的成员标识。建立连接后音频与数据通道在客户端和媒体服务间传输 |
+| 视频归档 | `VIDEO_ARCHIVE_ORIGINS` 允许的 HTTPS 来源，默认 443 | 请求供应商返回的视频文件路径与其签名查询参数，下载结果进入当前业务库 |
+| 联网搜索 | `api.exa.ai`，HTTPS 443 | 用户提交的搜索词、结果数量和搜索选项 |
+| 飞书 | `open.feishu.cn`，HTTPS 443 | 应用认证、获授权的消息引用及人工确认的回复 |
+| 模板短信 | `sms.tencentcloudapi.com`，HTTPS 443 | 一个收件号码、签名、模板及其参数、应用 ID、请求 UUID 和 TC3 认证 |
+| 部署告警 | 探测机配置的 Webhook 或飞书机器人地址，HTTPS 443 或配置端口 | 服务标签、事件 ID、时间、状态和诊断代码 |
+| WebDAV | 企业配置的 WebDAV 地址及端口 | 经确认上传的文件字节和远端对象路径，恢复时按路径读取并核对摘要 |
+
+核对实际环境时，应从配置中提取主机与端口，清单中省略密码、令牌、带签名的链接及消息正文。
+
+## 数据库组备份操作
 
 准备与数据库版本兼容的 PostgreSQL 客户端工具。将 `FAI_PG_BIN` 指向包含 `pg_dump` 和 `pg_restore` 的绝对目录。在后端目录运行 `npm run db:backup -- <全新私有目录>`。命令备份配置中的控制库和每个独立库，记录数据库别名、迁移基线、大小与 SHA-256，最后写入 `manifest.json`。数据库连接密码通过工具进程的环境传递。备份含业务数据和登录数据，应存放在受保护的位置。
 
@@ -23,3 +95,23 @@
 记录 Git 提交、数据库版本、适用迁移、测试环境和归档摘要。至少覆盖主库和独立库的样本恢复、重启后数据保留、队列重试与积分一致性，以及隔离权限和错误状态。Windows 安装包内的 `build-info.json` 记录构建来源，旁边的 `.sha256` 校验文件用于交付核对。
 
 七天稳定性观察要在目标环境单独记录。真实店铺、支付和授权渠道需要相应的联调条件。
+
+### 持续观察
+
+服务日志按请求记录 HTTP 方法、路由模板、状态码和耗时。可按时间窗口统计请求总数、5xx 比例和响应耗时，结合部署系统记录的构建版本定位变化。使用日志平台或进程管理器轮换和留存标准输出。
+
+在目标环境之外设置 `FAI_PROBE_ORIGIN` 为服务的 HTTPS 来源，本机测试可使用 HTTP 回环地址。用 `npm run --silent ops:probe` 采样 `/health` 和 `/ready`，每次输出一条 JSON。退出码 0 表示正常，1 表示探测异常，2 表示配置错误。部署方可将此命令接到既有监控平台，按分钟执行、保存时间戳并对非零结果通知值班人员。
+
+需要企业队列告警时，通过运行环境额外提供 `FAI_PROBE_WORKSPACE_ID` 和有效管理员会话 `FAI_PROBE_SESSION`。会话有期限，应随监控凭据轮换。`GET /v1/diagnostics/alerts` 区分已到期运行租约、排队超过两分钟、供应商回查逾期两分钟、计划逾期两分钟，以及过去一小时至少五条已结束任务中失败占比达到 20%。常规供应商等待不会触发租约告警。临时数据库上的验收采样与生产连续观察应分别留档。
+
+短信队列逾期两分钟或存在已过期发送租约时触发 `SMS_QUEUE_DELAY`。近一小时出现 `failed` 或 `uncertain` 的短信时触发 `SMS_SEND_FAILED`，可在对应工作区查询脱敏记录及供应商流水号。
+
+### 告警通知
+
+在独立探测主机上用环境变量配置 `FAI_ALERT_SERVICE`（便于值班人员识别的服务名）、`FAI_ALERT_WEBHOOK_URL` 和 `FAI_ALERT_STATE_FILE`（本机持久磁盘上的绝对文件路径）。提前创建其父目录并授予探测进程读写权限。用现有调度器每分钟执行一次 `npm run --silent ops:probe`。工作台进程停机时，独立探测仍能投递告警。多个独立工作区建议使用各自的服务名。
+
+通用接收端使用 `FAI_ALERT_FORMAT=webhook`，可用 `FAI_ALERT_TOKEN` 配置 Bearer 认证。它接收 JSON 中的 `type`、`issues`、`previousIssues`、`service`、`scope`、`observedAt`、事件 `id` 和故障 `incident`。接收端持久保存事件后返回 2xx，并按 `Idempotency-Key` 去重。飞书群机器人使用 `FAI_ALERT_FORMAT=feishu` 和机器人的 Webhook 地址，启用签名时将密钥注入 `FAI_ALERT_SIGNING_SECRET`。服务同时检查 HTTP 状态和飞书业务回执。[飞书自定义机器人协议](https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot?lang=zh-CN)
+
+同一故障首次产生 `firing`，问题集合变化产生 `updated`，恢复产生 `resolved`。每次探测把状态变化和待发事件一起写入探测机 SQLite。接收失败后从 15 秒开始退避，后续探测按原顺序补发，每次最多处理五条。中断导致接收回执丢失时可能重投，事件 ID 保持一致。飞书通知正文含事件 ID，便于核对重复消息。探测来源、工作区和服务名共同标识一条通知队列。轮换接收地址或凭据后，下一次探测用新配置续发。采样异常、存在待发事件或状态文件不可用时命令返回 1，记录中的 `notification` 给出发送和待发数量或状态错误。
+
+工作区所有者和管理员可通过 `GET /v1/diagnostics/queue` 读取本工作区的排队数、可执行数、执行中任务数、超时租约数、到期计划数和最久可执行任务的等待秒数。排队数包括延迟重试和等待轮询的任务。当前没有可执行任务时，最长等待时间为 `null`。企业独立库不可用时返回工作区数据库错误。接口只提供当前汇总，不包含任务内容或素材。

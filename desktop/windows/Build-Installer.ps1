@@ -47,6 +47,10 @@ foreach ($folder in @('src','migrations')) {
     }
 }
 
+# The versioned help endpoint reads this guide from the source directory.
+$help = New-Item -ItemType Directory -Path (Join-Path $target 'src/help')
+Copy-Item -LiteralPath (Join-Path $backend 'src/help/workbench-v1.md') -Destination $help.FullName
+
 # Include only files served by the workbench.
 $studio = '前端设计审查'
 $root = Join-Path $app $studio

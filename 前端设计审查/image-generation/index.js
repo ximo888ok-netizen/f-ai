@@ -36,7 +36,7 @@ export function imageGenerationForm(wallet, capability, mode, planning) {
   const agent = mode === 'agent';
   const modes = generationModeTabs('图片生成模式', [
     ['quick', 'desk/image', '快速模式'], ['advanced', 'desk/image/advanced', '高级模式'],
-    ['agent', 'desk/image/agent', 'Agent 生图'],
+    ['agent', 'desk/image/agent', 'Agent 生图'], ['plans', 'image-plans', '商品组图方案'],
   ], mode);
   const custom = '<div class="quick-fields" data-quick-custom hidden>' +
     field('宽度', '<input type="number" name="width" min="32" max="1600" step="1" value="1024">') +

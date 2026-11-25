@@ -5,10 +5,10 @@ import { syncWorkspaceIdentity } from './workspace-database.js';
 const byWorkspace = 'workspace_id=$1';
 const related = (column, parent) => column + ' IN (SELECT id FROM ' + parent + ' WHERE workspace_id=$1)';
 const segments = [
-  ['wallets'], ['ledger'], ['projects'], ['project_members'],
+  ['wallets'], ['ledger'], ['realtime_voice_sessions'], ['projects'], ['project_members'],
   ['knowledge_bases'], ['knowledge_grants'], ['knowledge_categories'], ['documents'], ['document_chunks',related('document_id','documents')],
   ['assets'], ['plugin_settings'], ['tasks'], ['task_events',related('task_id','tasks')], ['task_text_chunks',related('task_id','tasks')],
-  ['notifications'], ['account_settings'], ['memory_items'], ['shop_previews'],
+  ['notifications'], ['account_settings'], ['memory_items'], ['memory_changes',related('item_id','memory_items')], ['wechat_messages'], ['shop_previews'],
   ['service_conversations'], ['service_messages'], ['service_replies'], ['schedules'],
   ['studio_categories'], ['studio_products'], ['studio_transfers'],
   ['listing_drafts'], ['listing_draft_images',related('draft_id','listing_drafts')], ['listing_draft_variants',related('draft_id','listing_drafts')],
@@ -17,6 +17,10 @@ const segments = [
   ['asset_cloud_copies'], ['feishu_messages'], ['feishu_replies'], ['rights_notices'], ['rights_notice_events'], ['studio_image_batches'], ['studio_video_storyboards'],
   ['workspace_copywriting_rules'], ['merchant_plugin_members'], ['merchant_connections'],
   ['merchant_events',"workspace_id=$1 AND scope='workspace'"],
+  ['image_platform_templates'], ['image_series_presets'], ['product_image_plans'], ['product_image_attempts'],
+  ['copywriting_drafts'],
+  ['agency_partners'], ['agency_rates'], ['agency_receipts'], ['agency_reversals'],
+  ['sms_messages'],
 ].map(([table, filter = byWorkspace]) => ({table,filter}));
 const identityTables = ['migrations','workspaces','accounts','memberships','sessions','invitations',
   'workspace_database_routes','workspace_identity_events','dedicated_database_identity'];

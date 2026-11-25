@@ -84,7 +84,9 @@ async function create(ctx, args = ctx.args) {
   const edit=await editContext(ctx,capability,args);
   if (!ctx.active()) return;
   const description = '本次任务 ' + capability.cost + ' 积分 · 当前可用 ' + wallet.available + ' 积分';
-  const taskFields = form('task', fields, capability.requiresConfirmation ? '生成变更预览' : chat ? '发送消息' : '提交任务');
+  const preflight = ['image.try-on', 'image.replace-product', 'video.try-on', 'video.replace-product'].includes(capability.id)
+    ? notice('请先在素材详情保存源文件预检。工具需要授权素材时，也需登记授权凭证。') + link('打开素材库预检', 'assets') : '';
+  const taskFields = preflight + form('task', fields, capability.requiresConfirmation ? '生成变更预览' : chat ? '发送消息' : '提交任务');
   if (plugin.id === 'image') {
     renderImageTool(ctx, capability, description, editSummary(edit), taskFields);
   } else {
@@ -94,7 +96,10 @@ async function create(ctx, args = ctx.args) {
   const taskForm = document.querySelector('[data-form=task]');
   restoreInputs(taskForm, edit);
   taskIntake(taskForm, capability);
-  if (plugin.id === 'image') bindImageTool(ctx, capability, taskForm);
+  if (plugin.id === 'image') {
+    const planner = plugins.find(entry => entry.id === 'models')?.capabilities.find(tool => tool.id === 'model.chat');
+    bindImageTool(ctx, capability, taskForm, planner);
+  }
   ctx.on('[name=productRecord]', 'change', node => {
     const product = products.find(entry => entry.id === node.value);
     if (product) document.querySelector('[name="params.product"]').value = [product.name, product.sku, product.description].join('\n').slice(0, 4000);
@@ -206,6 +211,9 @@ async function tasks(ctx) {
       '" target="_blank" rel="noopener noreferrer">打开生成结果</a>';
     else if (output.text !== undefined) {
       outputPanel += result(output.text);
+      if (task.pluginId === 'copywriting' && typeof output.text === 'string' && output.text.trim()) {
+        outputPanel += link('保存为文案草稿', 'copy-drafts/new/' + path(task.id));
+      }
       if(typeof output.text==='string'&&output.text)outputPanel+=textDelivery(output.text,capability?cardTitle(capability):task.capabilityId,ctx.manager?await ctx.all('/v1/knowledge/bases'):[]);
       if (typeof output.text === 'string' && output.text.length && output.text.length <= 8000) {
         outputPanel += link('用作新草稿描述', 'drafts/new/text/' + path(task.id));
@@ -214,14 +222,15 @@ async function tasks(ctx) {
     else outputPanel += result(output);
   }
   const controls = (task.state === 'queued' && task.attempts === 0 ? action('取消任务', 'cancel-task') : '') +
-    (!pending(task) && capability && !capability.requiresConfirmation && capability.available ? action('重新生成', 'regenerate-task') : '');
+    (task.imagePlan ? (task.imagePlan.canRetry ? action('重试此图', 'regenerate-task') : '') :
+      (!pending(task) && capability && !capability.requiresConfirmation && capability.available ? action('重新生成', 'regenerate-task') : ''));
   const parent=task.parentId?link('查看原任务',taskRoute(task.parentId)):'';
-  const revise=!pending(task)&&capability&&!voice?link('修改参数再提交','create/'+capability.pluginId+'/'+capability.id+'/revise/'+path(id)):'';
+  const revise=!task.imagePlan&&!pending(task)&&capability&&!voice?link('修改参数再提交','create/'+capability.pluginId+'/'+capability.id+'/revise/'+path(id)):'';
   const follow=task.capabilityId==='model.chat'&&task.state==='succeeded'&&output?.text?link('继续这段对话','models/follow/'+path(id)):'';
   if (!ctx.active()) return;
   ctx.html(heading(capability ? cardTitle(capability) : task.capabilityId, task.id) +
     panel('执行状态', '<div id="execution-state">' + item(states[task.state], date(task.updatedAt) + ' · ' +
-      task.cost + ' 积分' + (task.featureVersion ? ' · 功能版本 ' + task.featureVersion : '') + (task.errorCode ? ' · ' + task.errorCode : ''), controls+revise+follow+parent) + '</div>' +
+      task.cost + ' 积分' + (task.featureVersion ? ' · 功能版本 ' + task.featureVersion : '') + (task.errorCode ? ' · ' + task.errorCode : ''), controls+revise+follow+parent+(task.imagePlan ? link('查看整组方案', 'image-plans/' + path(task.imagePlan.planId)) : '')) + '</div>' +
       '<div data-task-trace>' + notice('正在读取执行轨迹…') + '</div>'+journalPanel()) +
     (showStream ? replyStreamPanel() : '') + (outputPanel ? panel('实际结果', outputPanel) : '') +
     '<div class="live-row">' + (voice ? link('继续语音问答', 'models/voice') : task.capabilityId === 'model.chat' ? link('返回文字对话', 'models') : '') +

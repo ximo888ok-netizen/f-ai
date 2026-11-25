@@ -12,6 +12,11 @@ import { imageSize } from 'image-size';
 import { buildApp } from '../src/app.js';
 import { migrate,postgres } from '../src/db.js';
 import { createVideoDelivery } from '../src/video-delivery.js';
+import { createProviders } from '../src/providers.js';
+import { reviewPicture } from '../acceptance/fixtures.mjs';
+import { publishFixtureTemplates, verifyPlatformExports } from '../acceptance/image-templates.mjs';
+import { provisionCredits } from '../src/wallet.js';
+import { workOnce } from '../src/worker.js';
 
 const ffmpeg=process.env.FAI_TEST_FFMPEG_PATH;
 const ffprobe=process.env.FAI_TEST_FFPROBE_PATH;
@@ -31,9 +36,9 @@ function format(bytes,dimensions) {
   assert.deepEqual([width,height,type],dimensions);
 }
 
-async function fixture(t,render) {
+async function fixture(t,render,providers) {
   const db=process.env.FAI_TEST_DATABASE_URL?postgres(process.env.FAI_TEST_DATABASE_URL):new PGlite();
-  const app=await buildApp({db,videoDelivery:render});
+  const app=await buildApp({db,videoDelivery:render,providers});
   t.after(async()=>{await app.close();await db.close();});
   await migrate(db);
   async function user(handle) {
@@ -48,8 +53,8 @@ async function fixture(t,render) {
       assert.equal(response.statusCode,status,response.statusCode===status?'':response.body);
       return binary?response.rawPayload:status===204?undefined:response.json();
     };
-    const upload=(bytes,mediaType='image/png')=>request('POST','/v1/assets',201,{
-      name:'fixture',mediaType,source:'Synthetic fixture',purpose:'QA',dataBase64:bytes.toString('base64'),
+    const upload=(bytes,mediaType='image/png',consent={})=>request('POST','/v1/assets',201,{
+      name:'fixture',mediaType,source:'Synthetic fixture',purpose:'QA',dataBase64:bytes.toString('base64'),...consent,
     });
     return {request,upload,workspace,account:account.id};
   }
@@ -61,6 +66,192 @@ async function gen(db,owner,assetId) {
     request_hash,idempotency_key,state,cost,result) VALUES($1,$2,$3,'image.main-image','model:fixture','image',
     '{}','fixture',$4,'succeeded',1,$5)`,[randomUUID(),owner.workspace,owner.account,randomUUID(),JSON.stringify({assetId})]);
 }
+
+test('three workspace specifications produce six decodable exports with the expected subject geometry and colors',async t=>{
+  const {user}=await fixture(t);
+  const {request}=await user('platform-template-artifacts');
+  const api=(method,url,status,body)=>request(method,url,status,body,url.endsWith('/content'));
+  await publishFixtureTemplates(api);
+  assert.deepEqual(await verifyPlatformExports(api,{createCanvas,loadImage}),{platforms:3,sourceFixtures:5,decodedExports:6,updatedCoverExports:1});
+});
+
+test('versioned series presets render six images and recheck private model references',async t=>{
+  const {db,user}=await fixture(t);
+  const owner=await user('series-fixture-owner'), other=await user('series-fixture-other');
+  const product=await owner.upload(picture('#ff0000',64,64));
+  const model=await owner.upload(picture('#0000ff',64,64),'image/png',{
+    consentReference:'synthetic-model',consentExpiresAt:new Date(Date.now()+86400000).toISOString(),
+  });
+  const id=randomUUID(), list='/v1/media/images/series-presets', url=list+'/'+id;
+  const cfg={productAssetId:product.id,modelAssetId:model.id,background:'#ffffff',font:'sans',textColor:'#00ff00',
+    subjectBox:{x:25,y:25,width:50,height:50}};
+  const save={revision:0,name:'Studio set',configuration:cfg};
+  const v1=await owner.request('PUT',url,200,save);
+  assert.equal(v1.revision,1);
+  assert.deepEqual(await owner.request('PUT',url,200,save),v1);
+  assert.deepEqual((await owner.request('GET',list,200)).items,[v1]);
+  await other.request('GET',url+'?revision=1',404);
+  await other.request('PUT',url,400,save);
+  const items=Array.from({length:6},(_,index)=>({key:'SKU-'+index,width:120,height:120,caption:'F-'+index}));
+  const input={id:randomUUID(),seriesPreset:{id,revision:1},items};
+  const batches='/v1/media/images/batches';
+  await other.request('POST',batches,404,input);
+  await owner.request('POST',batches,400,{...input,items:[{...items[0],assetIds:[product.id]}]});
+  const result=await owner.request('POST',batches,201,input);
+  assert.deepEqual(result.seriesPreset,input.seriesPreset);
+  const hashes=new Set();
+  for (const item of result.items) {
+    assert.equal(item.state,'succeeded');
+    const bytes=await owner.request('GET','/v1/assets/'+item.assetId+'/content',200,undefined,true);
+    hashes.add(bytes.toString('base64'));
+    const ctx=createCanvas(120,120).getContext('2d');
+    ctx.drawImage(await loadImage(bytes),0,0);
+    assert.deepEqual([...ctx.getImageData(2,2,1,1).data],[0,0,255,255]);
+    assert.deepEqual([...ctx.getImageData(60,60,1,1).data],[255,0,0,255]);
+    const text=ctx.getImageData(0,95,60,25).data;
+    assert.ok(text.some((value,index)=>index%4===1 && value>80));
+  }
+  assert.equal(hashes.size,6);
+  const edit={...save,revision:1,configuration:{...cfg,modelAssetId:null,font:'chinese',fontSizePercent:12}};
+  const v2=await owner.request('PUT',url,200,edit);
+  assert.equal(v2.revision,2);
+  assert.deepEqual(await owner.request('GET',url+'?revision=1',200),v1);
+  await owner.request('PUT',url,409,{...save,name:'Stale update'});
+  assert.deepEqual(await owner.request('POST',batches,200,input),result);
+  await db.query('UPDATE assets SET consent_expires_at=now() WHERE id=$1',[model.id]);
+  const rejected=await owner.request('POST',batches,201,{...input,id:randomUUID(),items:[items[0]]});
+  assert.deepEqual(rejected.items,[{key:items[0].key,state:'failed',error:'SOURCE_UNAVAILABLE'}]);
+  const fresh=await owner.request('POST',batches,201,{
+    ...input,id:randomUUID(),seriesPreset:{id,revision:2},items:[items[0]],
+  });
+  const ctx=createCanvas(120,120).getContext('2d');
+  ctx.drawImage(await loadImage(await owner.request('GET','/v1/assets/'+fresh.items[0].assetId+'/content',200,undefined,true)),0,0);
+  assert.deepEqual([...ctx.getImageData(2,2,1,1).data],[255,255,255,255]);
+});
+
+test('image review boundaries reject ineligible try-on and replacement without tasks, reservations or debits',async t=>{
+  const providers=createProviders();
+  const sent=[];
+  providers.set('gateway',{supports:c=>['image.try-on','image.replace-product'].includes(c.id),
+    run:async (_task,payload)=>{sent.push(payload.capabilityId);return {text:'accepted synthetic inputs'};}});
+  const {db,user}=await fixture(t,null,providers);
+  const owner=await user('image-source-owner'),outsider=await user('image-source-other');
+  await provisionCredits(db,owner.workspace,owner.account,30,'image-review-budget');
+  const consent={consentReference:'synthetic-drawing',consentExpiresAt:new Date(Date.now()+86400000).toISOString()};
+  const draw=(width,people,covered=0,authorization=consent)=>
+    owner.upload(reviewPicture(width,people,covered),'image/png',authorization);
+  const path=id=>'/v1/media/images/'+id+'/preflight';
+  const inspect=(asset,personCount,occlusionPercent,revision=0,status=200)=>owner.request('PUT',path(asset.id),status,
+    {revision,personCount,occlusionPercent});
+  const wallet=()=>owner.request('GET','/v1/credits/wallet',200);
+  async function state() {
+    const {rows:[counts]}=await db.query(`SELECT (SELECT count(*)::int FROM tasks WHERE workspace_id=$1) AS tasks,
+      (SELECT count(*)::int FROM schedules WHERE workspace_id=$1) AS schedules,
+      (SELECT count(*)::int FROM ledger WHERE workspace_id=$1) AS ledger`,[owner.workspace]);
+    return {...counts,wallet:await wallet()};
+  }
+  const input=(capabilityId,assets)=>({capabilityId,mode:'workflow',parameters:{assetIds:assets.map(a=>a.id)},idempotencyKey:randomUUID()});
+  const submit=(id,assets,status)=>owner.request('POST','/v1/tasks',status,input(id,assets));
+  const person=await draw(1024,1,500),product=await draw(1024,0);
+  const replacement=await owner.upload(createCanvas(1025,1080).toBuffer('image/jpeg'),'image/jpeg',consent);
+  const baseline=await state();
+  assert.deepEqual(baseline,{tasks:0,schedules:0,ledger:1,wallet:{balance:30,reserved:0,available:30}});
+  const pass=await inspect(person,1,5);
+  assert.deepEqual([pass.width,pass.height,pass.eligible,pass.reasons],[1024,1080,true,[]]);
+  assert.equal((await inspect(person,1,5)).revision,1);
+  await inspect(person,1,5.01,0,409);
+  await outsider.request('GET',path(person.id),404);
+  await outsider.request('PUT',path(person.id),404,{revision:1,personCount:0,occlusionPercent:0});
+  assert.equal((await submit('image.try-on',[person,product],422)).error.code,'IMAGE_PREFLIGHT_REQUIRED');
+  await inspect(product,0,0);
+  await inspect(replacement,0,0);
+  const audio=await owner.upload(Buffer.from('ID3-test-fixture'),'audio/mpeg',consent);
+  assert.equal((await submit('image.replace-product',[product,audio],422)).error.code,'IMAGE_TYPE_REQUIRED');
+  await inspect(product,0,1,1,400);
+  assert.equal((await submit('image.try-on',[product,person],422)).error.code,'IMAGE_MODEL_REQUIRED');
+  let shortImage;
+  for (const [width,people,pixels,reason] of [[1023,1,500,'SHORT_SIDE'],[1024,1,501,'OCCLUSION'],[1024,2,0,'PERSON_COUNT']]) {
+    const bad=await draw(width,people,pixels);
+    const result=await inspect(bad,people,pixels/100);
+    assert.equal(result.width,width);
+    assert.deepEqual(result.reasons,[reason]);
+    for (const [id,images] of [['image.try-on',[bad,product]],['image.replace-product',[product,bad]],['image.try-on',[person,product,bad]]]) {
+      const {error}=await submit(id,images,422);
+      assert.equal(error.code,'IMAGE_PREFLIGHT_FAILED');
+      assert.ok(error.message.includes(reason));
+    }
+    if (reason==='SHORT_SIDE') shortImage=bad;
+  }
+  const corrupt=await owner.upload(Buffer.from('89504e470d0a1a0a','hex'),'image/png',consent);
+  assert.equal((await inspect(corrupt,0,0,0,422)).error.code,'IMAGE_DECODE_FAILED');
+  assert.equal((await submit('image.replace-product',[product,corrupt],422)).error.code,'IMAGE_PREFLIGHT_REQUIRED');
+  const expired=await draw(1024,0,0,{...consent,consentExpiresAt:'2020-01-01T00:00:00Z'});
+  await inspect(expired,0,0);
+  assert.equal((await submit('image.replace-product',[product,expired],422)).error.code,'CONSENT_REQUIRED');
+  await owner.request('POST','/v1/schedules',422,{...input('image.try-on',[shortImage,product]),runAt:new Date(Date.now()+60000).toISOString()});
+  assert.deepEqual(await state(),baseline);
+  assert.deepEqual(sent,[]);
+  for (const [id,images] of [['image.try-on',[person,product]],['image.replace-product',[product,replacement]]]) {
+    const task=await submit(id,images,202);
+    await workOnce({db,providers,shops:new Map()});
+    assert.equal((await owner.request('GET','/v1/tasks/'+task.id,200)).state,'succeeded');
+  }
+  assert.deepEqual(sent,['image.try-on','image.replace-product']);
+  const beforeChange=await wallet();
+  const queued=await submit('image.try-on',[person,product],202);
+  await inspect(person,1,5.01,1);
+  await workOnce({db,providers,shops:new Map()});
+  assert.equal((await owner.request('GET','/v1/tasks/'+queued.id,200)).errorCode,'IMAGE_PREFLIGHT_FAILED');
+  assert.deepEqual(await wallet(),beforeChange);
+  assert.equal(sent.length,2);
+});
+
+test('actual video measurements and reviewed scene limits gate try-on and replacement before debit and dispatch',
+  {skip:!(ffmpeg && ffprobe)},async t=>{
+    const providers=createProviders();
+    let dispatched=0;
+    providers.set('gateway',{supports:c=>['video.try-on','video.replace-product'].includes(c.id),
+      run:async ()=>{dispatched++;return {type:'text',text:'local provider accepted the fixture'};}});
+    const {db,user}=await fixture(t,createVideoDelivery({ffmpeg,ffprobe,encoder}),providers);
+    const owner=await user('video-envelope'),other=await user('video-envelope-other');
+    await provisionCredits(db,owner.workspace,owner.account,20,'video-envelope-tests');
+    const consent={consentReference:'synthetic-source',consentExpiresAt:new Date(Date.now()+86400000).toISOString()};
+    const image=await owner.upload(picture('blue'),'image/png',consent);
+    const directory=await mkdtemp(join(tmpdir(),'fai-video-review-'));
+    const file=join(directory,'source.mp4');
+    t.after(async()=>{await unlink(file);await rmdir(directory);});
+    const make=async (size,seconds)=>{
+      await run(ffmpeg,['-y','-v','error','-f','lavfi','-i','color=red:s='+size+':r=10','-t',seconds,'-threads','1','-c:v',encoder,file]);
+      return owner.upload(await readFile(file),'video/mp4',consent);
+    };
+    const video=await make('1280x720','1');
+    const path='/v1/media/videos/'+video.id+'/preflight';
+    const observations={revision:0,shotCount:1,personCount:1,maxFacingAngle:60};
+    const task=(capabilityId,code)=>owner.request('POST','/v1/tasks',code,{capabilityId,mode:'workflow',
+      parameters:{assetIds:[video.id,image.id]},idempotencyKey:randomUUID()});
+    assert.equal((await task('video.try-on',422)).error.code,'VIDEO_PREFLIGHT_REQUIRED');
+    await other.request('PUT',path,404,observations);
+    const measured=await owner.request('PUT',path,200,observations);
+    assert.deepEqual([measured.width,measured.height,measured.durationSeconds,measured.eligible],[1280,720,1,true]);
+    assert.equal((await owner.request('PUT',path,200,observations)).revision,1);
+    const queued=await task('video.try-on',202);
+    const rejected=await owner.request('PUT',path,200,{revision:1,shotCount:2,personCount:2,maxFacingAngle:61});
+    assert.deepEqual(rejected.reasons,['MULTIPLE_SHOTS','PERSON_COUNT','FACING_ANGLE']);
+    await workOnce({db,providers,shops:new Map()});
+    assert.equal((await owner.request('GET','/v1/tasks/'+queued.id,200)).errorCode,'VIDEO_PREFLIGHT_REQUIRED');
+    assert.equal((await owner.request('GET','/v1/credits/wallet',200)).available,20);
+    assert.equal(dispatched,0);
+    await owner.request('PUT',path,200,{...observations,revision:2});
+    await task('video.replace-product',202);
+    await workOnce({db,providers,shops:new Map()});
+    assert.equal(dispatched,1);
+    const unsuitable=await make('320x240','10.1');
+    const low=await owner.request('PUT','/v1/media/videos/'+unsuitable.id+'/preflight',200,observations);
+    assert.deepEqual(low.reasons,['DURATION','RESOLUTION']);
+    await owner.request('PUT','/v1/plugins/video/state',200,{enabled:false});
+    await owner.request('PUT',path,409,{...observations,revision:3});
+    assert.equal((await owner.request('GET',path,200)).revision,3);
+  });
 
 test('image batches persist valid SKU results, render six stacked panels and keep provenance',async t=>{
   const {db,user}=await fixture(t);

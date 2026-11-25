@@ -12,6 +12,7 @@ import { config } from '../src/config.js';
 import { workOnce } from '../src/worker.js';
 import { cutoverWorkspace } from '../src/workspace-cutover.js';
 import { provisionCredits } from '../src/wallet.js';
+import { dispatchSms } from '../src/sms-channel.js';
 
 initializeCanvas(() => { throw new Error('Tests use raw pixels'); },
   (width,height)=>({width,height,data:new Uint8ClampedArray(width*height*4)}));
@@ -131,13 +132,28 @@ test('enterprise cutover handles interruption, preserves business data and fails
   const control=openControl(), target=openDedicated();
   const databases=new Map([['dedicated',target]]);
   const providers=createProviders(), shops=new Map();
-  const app=await buildApp({db:control,dedicatedDatabases:databases,providers,shops});
+  const realtimeVoice=new Map();
+  const sms=new Map();
+  const app=await buildApp({db:control,dedicatedDatabases:databases,providers,shops,realtimeVoice,sms});
   try {
     await migrate(control);
     await migrate(target);
     const enterprise=await register(app,'dedicated-owner@example.test');
     const member=await register(app,'dedicated-member@example.test','personal');
     const {workspace}=enterprise;
+    const smsPath='/v1/channels/sms/messages/'+randomUUID();
+    let smsCalls=0;
+    sms.set(workspace,new Map([['notice',{params:0,fingerprint:'test',send:async()=>{
+      smsCalls++;return {state:'accepted',reference:'fixture:cutover'};
+    }}]]));
+    await json(app,enterprise,'PUT',smsPath,202,{recipient:'+12025550123',template:'notice',values:[]});
+    const copyPath='/v1/copywriting/drafts/'+randomUUID();
+    await json(app,enterprise,'PUT',copyPath,200,{revision:0,title:'Synthetic copy',content:'Shared before cutover'});
+    const agencyReceipt='/v1/agency/receipts/CUTOVER-01';
+    await json(app,enterprise,'PUT','/v1/agency/partners/'+enterprise.account.id,200,{parentId:null});
+    await json(app,enterprise,'PUT','/v1/agency/rates',200,{revision:0,directBps:500,managementBps:50});
+    await json(app,enterprise,'PUT',agencyReceipt,200,{agentId:enterprise.account.id,paidMinor:2200,rateRevision:1,bookedOn:'2026-01-01'});
+    await json(app,enterprise,'PUT',agencyReceipt+'/reversals/REFUND-01',200,{bookedOn:'2026-01-02',amountMinor:200,reason:'refund'});
     const [assetId,bytes]=await logo(app,enterprise);
     const [sharedAsset]=await logo(app,member);
     const design=await json(app,enterprise,'PUT',psdPath+'/'+randomUUID(),200,{
@@ -155,11 +171,19 @@ test('enterprise cutover handles interruption, preserves business data and fails
       shots:[{assetId,durationMs:1000}],
     });
     await provisionCredits(control,workspace,enterprise.account.id,15,'qa-dedicated');
+    const voiceUrl='/v1/voice/realtime/sessions/'+randomUUID();
+    const offerSdp=['v=0','s=cutover','m=audio 9 UDP/TLS/RTP/SAVPF 111','a=ice-ufrag:test',
+      'a=ice-pwd:cutover-fixture','a=fingerprint:sha-256 AA:BB',''].join('\r\n');
+    realtimeVoice.set(workspace,{model:'test',voice:'marin',credits:1,durationSeconds:600,fingerprint:'fixture',
+      open:async () => ({callId:'rtc_cutover',answer:offerSdp}),hangup:async id => id === 'rtc_cutover'});
+    await json(app,enterprise,'PUT',voiceUrl,201,{offerSdp});
     const original=await json(app,enterprise,'POST','/v1/tasks',202,{
       capabilityId:'copywriting.detect-terms',mode:'workflow',parameters:{content:'QA one'},idempotencyKey:'dedicated-test-one',
     });
     assert.equal(await workOnce({db:control,providers,shops}),true);
     const pending=await json(app,enterprise,'POST','/v1/tasks/'+original.id+'/regenerate',202,{idempotencyKey:'dedicated-test-again'});
+    const queue='/v1/diagnostics/queue';
+    assert.equal((await json(app,enterprise,'GET',queue,200)).runnable,1);
 
     const interrupted={query:(...args)=>control.query(...args),transaction:run=>control.transaction(tx=>run({
       query:(sql,args)=>{
@@ -169,6 +193,8 @@ test('enterprise cutover handles interruption, preserves business data and fails
     }))};
     await assert.rejects(cutoverWorkspace(interrupted,target,workspace,'dedicated'),/Simulated interruption/);
     assert.deepEqual(await json(app,enterprise,'GET','/v1/workspace/database',200),{mode:'dedicated',state:'preparing'});
+    await json(app,enterprise,'GET',queue,503);
+    await json(app,enterprise,'GET',voiceUrl,503);
     await json(app,enterprise,'POST','/v1/projects',503,{name:'Must not fall back'});
     const onSource=await row(control,'SELECT count(*)::int AS count FROM assets WHERE workspace_id=$1',[workspace]);
     assert.equal(onSource.count,1);
@@ -176,7 +202,22 @@ test('enterprise cutover handles interruption, preserves business data and fails
     assert.equal(staged.count,1);
     assert.equal((await cutoverWorkspace(control,target,workspace,'dedicated')).state,'active');
     assert.equal((await cutoverWorkspace(control,target,workspace,'dedicated')).alreadyActive,true);
+    assert.equal(await dispatchSms({db:control,sms}),false);
+    assert.equal(await dispatchSms({db:target,identityDb:control,sms}),true);
+    assert.equal((await json(app,enterprise,'GET',smsPath,200)).state,'accepted');
+    assert.equal(smsCalls,1);
+    const statement=await json(app,enterprise,'GET','/v1/agency/statements?month=2026-01',200);
+    assert.equal(statement.items[0].netMinor,'100');
+    assert.equal((await json(app,enterprise,'GET',copyPath,200)).content,'Shared before cutover');
+    await json(app,enterprise,'PUT',copyPath,200,{revision:1,title:'Synthetic copy',content:'Dedicated edit'});
+    assert.equal((await row(target,'SELECT content FROM copywriting_drafts WHERE workspace_id=$1',[workspace])).content,'Dedicated edit');
     assert.deepEqual(await json(app,enterprise,'GET','/v1/workspace/database',200),{mode:'dedicated',state:'ready'});
+    assert.equal((await json(app,enterprise,'GET',voiceUrl,200)).state,'active');
+    assert.equal((await json(app,enterprise,'DELETE',voiceUrl,200)).state,'closed');
+    assert.equal((await row(control,'SELECT count(*)::int AS count FROM realtime_voice_sessions WHERE workspace_id=$1',[workspace])).count,0);
+    assert.equal((await row(target,'SELECT state FROM realtime_voice_sessions WHERE workspace_id=$1',[workspace])).state,'closed');
+    assert.equal((await json(app,enterprise,'GET',queue,200)).runnable,1);
+    assert.equal((await json(app,member,'GET',queue,200)).runnable,0);
     assert.equal((await json(app,enterprise,'GET','/v1/projects/'+project.id,200)).name,project.name);
     assert.equal((await json(app,enterprise,'GET',psdPath+'/'+design.id,200)).subjectAssetId,assetId);
     const migratedNotice=await json(app,enterprise,'GET','/v1/rights/notices/'+notice.id,200);
@@ -199,6 +240,7 @@ test('enterprise cutover handles interruption, preserves business data and fails
     const routed=await app.workspaceDatabaseRouter.workerDatabase('dedicated');
     assert.equal(await workOnce({db:routed,identityDb:control,providers,shops}),true);
     assert.equal((await json(app,enterprise,'GET','/v1/tasks/'+pending.id,200)).state,'succeeded');
+    assert.equal((await json(app,enterprise,'GET',queue,200)).oldestRunnableSeconds,null);
     const hosted=await send(app,member,'GET','/v1/assets/'+sharedAsset+'/content');
     assert.equal(hosted.statusCode,200);
     await json(app,member,'GET','/v1/assets/'+assetId+'/content',404);

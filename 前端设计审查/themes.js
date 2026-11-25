@@ -100,7 +100,7 @@
     const options = [
       ['flow-speed', '流动速度', 0, 2.5, .1, 1, '×'],
       ['frost-radius', '模糊半径', 0, 40, 1, 24, 'px'],
-      ['frost-opacity', '玻璃浓度', .15, .88, .01, .5, ''],
+      ['frost-opacity', '玻璃浓度', .15, .88, .01, .56, ''],
       ['frost-saturation', '背景饱和度', 100, 220, 1, 165, '%'],
     ];
     const material = document.createElement('fieldset');

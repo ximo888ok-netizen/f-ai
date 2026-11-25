@@ -1,6 +1,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { row, rows } from './db.js';
+import { customerScope } from './contracts.js';
 import { ensureKnowledgeCategory, lockKnowledgeBase, registerKnowledgeCategories } from './knowledge-categories.js';
 import { ApiError, array, choice, invalid, notFound, object, page, paginate, requireEnterprise, route, text, uuid } from './http.js';
 
@@ -8,9 +9,18 @@ const idParams = object({ id: uuid });
 const knowledgeTags = ['Knowledge'];
 const manager = context => context.role !== 'member';
 const baseFields = 'id, name, created_at AS "createdAt"';
-const documentFields = 'id, name, category, created_at AS "createdAt"';
+const documentFields = 'id, name, category, customer_scope AS "customerScope", created_at AS "createdAt"';
 const documentParams = object({ id: uuid, documentId: uuid });
-const documentPatch = object({ name:text(200),category:text(100,0),content:text(200000) },[]);
+const documentPatch = object({ name:text(200),category:text(100,0),content:text(200000),customerScope },[]);
+
+async function documentScope(db,workspaceId,scope) {
+  if (!scope) return null;
+  if (scope.general) return {general:true};
+  const product=await row(db,'SELECT id FROM studio_products WHERE workspace_id=$1 AND id=$2 FOR KEY SHARE',
+    [workspaceId,scope.productId]);
+  if (!product) throw notFound('Product');
+  return {productId:product.id};
+}
 
 function requiredText(value) {
   const trimmed = value.trim();
@@ -123,7 +133,7 @@ export function registerWorkspace(app, db) {
 
   route(app, 'POST', '/v1/knowledge/bases/:id/documents', {
     manager: true, tags: knowledgeTags, summary: 'Ingest and index a UTF-8 text document', params: idParams,
-    body: object({ name: text(200), category: text(100), content: text(200000) }, ['name', 'content']),
+    body: object({ name: text(200), category: text(100), content: text(200000), customerScope }, ['name', 'content']),
   }, async (request, reply) => {
     const { id } = request.params;
     const { workspaceId } = request.context;
@@ -133,8 +143,9 @@ export function registerWorkspace(app, db) {
       await lockKnowledgeBase(connection,workspaceId,id);
       const category = request.body.category?.trim() ?? '';
       await ensureKnowledgeCategory(connection,workspaceId,id,category);
-      const document = await row(connection, `INSERT INTO documents (id,workspace_id,base_id,name,category,content)
-        VALUES ($1,$2,$3,$4,$5,$6) RETURNING ${documentFields}`,[randomUUID(),workspaceId,id,name,category,content]);
+      const scope=await documentScope(connection,workspaceId,request.body.customerScope);
+      const document = await row(connection, `INSERT INTO documents (id,workspace_id,base_id,name,category,content,customer_scope)
+        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING ${documentFields}`,[randomUUID(),workspaceId,id,name,category,content,scope]);
       await indexDocument(connection,document.id,content);
       return document;
     });
@@ -147,7 +158,7 @@ export function registerWorkspace(app, db) {
   }, async request => {
     const { id, documentId } = request.params;
     await accessibleBase(db, request.context, id);
-    const document = await row(db, 'SELECT id, name, category, content, created_at AS "createdAt" FROM documents WHERE workspace_id = $1 AND base_id = $2 AND id = $3', [request.context.workspaceId, id, documentId]);
+    const document = await row(db, `SELECT ${documentFields},content FROM documents WHERE workspace_id=$1 AND base_id=$2 AND id=$3`, [request.context.workspaceId, id, documentId]);
     if (!document) throw notFound('Document');
     return document;
   });
@@ -164,8 +175,11 @@ export function registerWorkspace(app, db) {
     const category = patch.category?.trim() ?? null;
     const content = patch.content === undefined ? null : requiredText(patch.content);
     await lockKnowledgeBase(tx,workspaceId,id);
-    const updated = await row(tx,`UPDATE documents SET name=COALESCE($4,name),category=COALESCE($5,category),content=COALESCE($6,content)
-      WHERE workspace_id=$1 AND base_id=$2 AND id=$3 RETURNING ${documentFields}`,[workspaceId,id,documentId,name,category,content]);
+    const scope=await documentScope(tx,workspaceId,patch.customerScope);
+    const updated = await row(tx,`UPDATE documents SET name=COALESCE($4,name),category=COALESCE($5,category),content=COALESCE($6,content),
+      customer_scope=CASE WHEN $7 THEN $8::jsonb ELSE customer_scope END
+      WHERE workspace_id=$1 AND base_id=$2 AND id=$3 RETURNING ${documentFields}`,
+      [workspaceId,id,documentId,name,category,content,patch.customerScope!==undefined,scope]);
     if (!updated) throw notFound('Document');
     await ensureKnowledgeCategory(tx,workspaceId,id,updated.category);
     if (content !== null) {

@@ -84,6 +84,7 @@ uniform vec3 uHighlight;
 uniform vec3 uCaustic;
 uniform float uSpecular;
 uniform float uRidgeDark;
+uniform float uLightCompression;
 float hash(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
   p += dot(p, p + 45.32);
@@ -151,8 +152,9 @@ void main() {
   vec3 col = mix(uBaseDeep, uBaseMid, smoothstep(0.16, 0.84, h * 0.72 + diff1 * 0.35));
   col = mix(col, uHighlight, smoothstep(0.32, 0.92, diff1 * 0.65 + diff2 * 0.28) * 0.58);
   col *= (1.0 - uRidgeDark * (1.0 - smoothstep(0.08, 0.55, h)));
-  col += uHighlight * (specBroad * uSpecular * 0.55 + specRim * uSpecular * 0.28);
-  col += uCaustic * (specSharp * uSpecular * 0.62 + causticBand * uSpecular * 0.26);
+  vec3 lightAdd = uHighlight * (specBroad * uSpecular * 0.55 + specRim * uSpecular * 0.28)
+    + uCaustic * (specSharp * uSpecular * 0.62 + causticBand * uSpecular * 0.26);
+  col += mix(lightAdd, lightAdd * max(vec3(0.0), vec3(0.97) - col), uLightCompression);
   float vig = (1.0 - smoothstep(0.25, 1.38, length(vUv - 0.5) * 1.45));
   col = mix(uBaseDeep * 0.96, col, 0.84 + 0.16 * vig);
   float dither = (hash(gl_FragCoord.xy + fract(uTime)) - 0.5) / 255.0;
@@ -177,10 +179,10 @@ export function mountGlassField(host) {
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) { gl.deleteProgram(program); return; }
   gl.useProgram(program);
   host.prepend(canvas);
-  const uniforms = Object.fromEntries(['uRes','uTime','uMouse','uBaseDeep','uBaseMid','uHighlight','uCaustic','uSpecular','uRidgeDark']
+  const uniforms = Object.fromEntries(['uRes','uTime','uMouse','uBaseDeep','uBaseMid','uHighlight','uCaustic','uSpecular','uRidgeDark','uLightCompression']
     .map(name => [name, gl.getUniformLocation(program, name)]));
   const colors = {
-    white: [[.745,.788,.842],[.875,.902,.934],[.985,.992,1],[1,1,1],.52,.16],
+    white: [[.700,.745,.800],[.840,.875,.915],[.950,.965,.980],[.930,.940,.975],.30,.18],
     gray: [[.165,.184,.212],[.275,.302,.34],[.54,.58,.635],[.78,.82,.875],.46,.22],
     black: [[.028,.036,.048],[.075,.092,.118],[.245,.285,.345],[.52,.58,.66],.48,.26],
   };
@@ -208,6 +210,7 @@ export function mountGlassField(host) {
       for (const [i, name] of ['uBaseDeep','uBaseMid','uHighlight','uCaustic'].entries()) gl.uniform3fv(uniforms[name], c[i]);
       gl.uniform1f(uniforms.uSpecular, c[4]);
       gl.uniform1f(uniforms.uRidgeDark, c[5]);
+      gl.uniform1f(uniforms.uLightCompression, c === colors.white ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     if (moving) frame = requestAnimationFrame(draw);

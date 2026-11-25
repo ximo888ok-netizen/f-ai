@@ -1,5 +1,6 @@
+import { waitForModelTask } from './live-agent-model.js';
 import { assetPreview } from './live-asset-preview.js';
-import { action, date, field, form, h, heading, input, item, link, list, notice, panel, path, retryKey, select, toast } from './live.js';
+import { action, date, field, form, h, heading, input, item, link, list, notice, panel, path, retryKey, select, toast, uid } from './live.js';
 import { downloadFile } from './live-files.js';
 import { assetField, editRows, imageFiles, numeric, rowControls, toggleFields } from './live-media-controls.js';
 
@@ -164,7 +165,7 @@ export function renderImageTool(ctx, capability, cost, summary, fields) {
   ctx.html(template.firstElementChild.outerHTML);
 }
 
-export function bindImageTool(ctx, capability, taskForm) {
+export function bindImageTool(ctx, capability, taskForm, planner) {
   const brief = document.querySelector('[data-brief-mount]');
   const prompt = taskForm.elements['params.prompt'];
   taskForm.id = 'image-task';
@@ -192,6 +193,43 @@ export function bindImageTool(ctx, capability, taskForm) {
       prompt.dispatchEvent(new Event('input', { bubbles: true }));
       prompt.focus();
     };
+  }
+  const helper = document.querySelector('[data-brief-assist]');
+  if (planner?.available) {
+    const status = document.querySelector('[data-brief-assist-status]');
+    helper.hidden = false;
+    helper.textContent = 'AI 帮写 · ' + planner.cost + ' 积分';
+    let attempt;
+    ctx.click('brief-assist', async () => {
+      const text = prompt.value.trim();
+      if (!text) throw new Error('先输入商品与画面的基本要求。');
+      if (attempt?.text !== text) attempt = { text, key: uid() };
+      attempt.task ??= await ctx.api('/v1/tasks', { method: 'POST', body: {
+        capabilityId: planner.id, mode: 'workflow', idempotencyKey: attempt.key,
+        parameters: { messages: [
+          { role: 'system', content: '你是电商图片策划师。精炼图片创作要求，保留用户提供的事实，禁止补造数值、认证或承诺。只返回改写后的要求。' },
+          { role: 'user', content: text },
+        ] },
+      } });
+      if (!ctx.active()) return;
+      status.innerHTML = link('查看帮写任务', 'tasks/' + path(attempt.task.id));
+      attempt.task = await waitForModelTask(ctx, attempt.task, 30000);
+      if (!ctx.active()) return;
+      if (['queued', 'running'].includes(attempt.task.state)) {
+        toast('帮写仍在进行，再次点击可继续查看同一任务。');
+        return;
+      }
+      const output = attempt.task.result?.text;
+      attempt = undefined;
+      if (typeof output !== 'string' || !output.trim()) throw new Error('帮写暂未完成，请在任务记录查看详情。');
+      if (prompt.value.trim() !== text || output.length > prompt.maxLength) {
+        toast('帮写已完成，可从任务记录查看完整内容。');
+        return;
+      }
+      prompt.value = output.trim();
+      prompt.dispatchEvent(new Event('input', { bubbles: true }));
+      prompt.focus();
+    });
   }
   const results = document.querySelector('[data-tool-results]');
   ctx.api('/v1/tasks?limit=30').then(({ items }) => {

@@ -63,7 +63,7 @@ export function workspaceNavigation(pages) {
     const imageTool = route === 'create' && ctx.args[0] === 'image';
     document.querySelector('#sidebarImageMode').classList.toggle('active', imageTool);
     document.querySelector('#sidebarMainMode').classList.toggle('active', !imageTool);
-    const navState = selected || ({ library:'plugins', data:'knowledge', resources:'knowledge', capabilities:'experts', skills:'experts' })[route];
+    const navState = route === 'library' && ctx.args[0] === 'experts' ? 'experts' : selected || ({ library:'plugins', data:'knowledge', resources:'knowledge', capabilities:'experts', skills:'experts' })[route];
     for (const item of nav.querySelectorAll('[data-nav]')) {
       if (item.dataset.nav === 'workbench') item.href = '#home';
       const current = (item.dataset.nav === 'workbench' ? 'desk' : item.dataset.nav) === navState;

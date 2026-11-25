@@ -10,6 +10,8 @@ import { modelIdSchema } from './models.js';
 import { providerFor } from './providers.js';
 import { keySchema, stableJson, submitInTransaction } from './tasks.js';
 import { accessibleProject } from './merchant-projects.js';
+import { taskAssets } from './assets.js';
+import { needsImageReview } from './image-preflight.js';
 
 const tags = ['Schedules'];
 const schedulable = [...catalog.values()].filter(capability => !capability.requiresConfirmation && ['local', 'gateway'].includes(capability.execution));
@@ -44,16 +46,20 @@ export function registerSchedules(app, db, providers) {
       throw invalid('runAt must be in the next 366 days');
     }
     const capability = byId.get(input.capabilityId);
-    await requireFeature(db, request.context, capability.pluginId, capability.id);
-    const available = await modelProviders(db, request.context.workspaceId, providers);
-    const providerId = providerFor(available, capability, input.modelId);
-    available.get(providerId).validate?.(capability, input.parameters);
-    await accessibleProject(db, request.context, input.projectId, true);
-    const schedule = await row(db, [
-      'INSERT INTO schedules (id, workspace_id, account_id, idempotency_key, run_at, request, request_hash, state)',
-      "VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')",
-      'ON CONFLICT (workspace_id, account_id, idempotency_key) DO NOTHING RETURNING ' + fields,
-    ].join(' '), [randomUUID(), ...args, parsed, input, hash]);
+    const schedule = await db.transaction(async tx=>{
+      await requireFeature(tx, request.context, capability.pluginId, capability.id, true);
+      await accessibleProject(tx, request.context, input.projectId, true, true);
+      if (needsImageReview(capability)) await taskAssets(tx,request.context,input.parameters.assetIds ?? [],capability);
+      const available = await modelProviders(tx, request.context.workspaceId, providers);
+      const providerId = providerFor(available, capability, input.modelId,
+        capability.id === 'model.chat' && input.parameters.stream === true);
+      available.get(providerId).validate?.(capability, input.parameters);
+      return row(tx, [
+        'INSERT INTO schedules (id, workspace_id, account_id, idempotency_key, run_at, request, request_hash, state)',
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')",
+        'ON CONFLICT (workspace_id, account_id, idempotency_key) DO NOTHING RETURNING ' + fields,
+      ].join(' '), [randomUUID(), ...args, parsed, input, hash]);
+    });
     if (!schedule) return readExisting();
     reply.code(201);
     return schedule;

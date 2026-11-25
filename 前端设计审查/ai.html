@@ -62,7 +62,7 @@
       /* 实时可调材质参数 (滑块即时覆盖) */
       --default-blur: 24px;
       --default-sat: 165%;
-      --default-alpha: 0.50;
+      --default-alpha: 0.56;
       --blur: var(--default-blur);
       --sat: var(--default-sat);
       --alpha: var(--default-alpha);
@@ -73,21 +73,21 @@
 
       /* 银白玻璃默认主题 (Silver White) */
       color-scheme: light;
-      --canvas-bg: linear-gradient(145deg, #E4E9EF 0%, #F4F7FA 52%, #DCE3EC 100%);
-      --card-rgb: 255, 255, 255;
-      --card-end-rgb: 238, 243, 249;
-      --card-fade: 0.16;
+      --canvas-bg: linear-gradient(145deg, #DCE3EC 0%, #EBEFF4 52%, #D1DAE5 100%);
+      --card-rgb: 248, 250, 253;
+      --card-end-rgb: 231, 237, 244;
+      --card-fade: 0.10;
       --popup-rgb: 252, 254, 255;
-      --popup-alpha-boost: 0.22;
+      --popup-alpha-boost: 0.20;
 
-      --edge: rgba(255, 255, 255, 0.82);
-      --edge-subtle: rgba(15, 23, 34, 0.08);
-      --edge-strong: rgba(15, 23, 34, 0.18);
-      --cut-highlight: rgba(255, 255, 255, 0.94);
-      --cut-side: rgba(255, 255, 255, 0.55);
-      --cut-shade: rgba(15, 23, 42, 0.06);
-      --cast-shadow: rgba(15, 23, 42, 0.08);
-      --cast-shadow-elev: rgba(15, 23, 42, 0.13);
+      --edge: rgba(255, 255, 255, 0.68);
+      --edge-subtle: rgba(15, 23, 34, 0.12);
+      --edge-strong: rgba(15, 23, 34, 0.22);
+      --cut-highlight: rgba(255, 255, 255, 0.58);
+      --cut-side: rgba(255, 255, 255, 0.28);
+      --cut-shade: rgba(15, 23, 42, 0.10);
+      --cast-shadow: rgba(15, 23, 42, 0.12);
+      --cast-shadow-elev: rgba(15, 23, 42, 0.17);
 
       --hq-ink: 15, 23, 34;
       --text-primary: rgba(var(--hq-ink), 0.92);
@@ -112,13 +112,13 @@
       --thumb: #FFFFFF;
       --veil: rgba(226, 232, 240, 0.36);
       --opaque-surface: #EEF2F7;
-      --spotlight: rgba(255, 255, 255, 0.42);
-      --grain-opacity: 0.022;
+      --spotlight: rgba(255, 255, 255, 0.12);
+      --grain-opacity: 0.030;
 
       /* 主题自适应品牌徽章与光学球体滤镜 */
-      --orb-contrast: 0.62;
-      --orb-gain: 1.48;
-      --orb-opacity: 0.92;
+      --orb-contrast: 0.88;
+      --orb-gain: 1.06;
+      --orb-opacity: 0.80;
       --logo-box-start: rgba(255, 255, 255, 0.88);
       --logo-box-end: rgba(214, 224, 236, 0.72);
       --logo-box-stroke: rgba(255, 255, 255, 0.95);
@@ -240,6 +240,9 @@
     :root[data-shadow="off"] {
       --micro-shadow: none;
     }
+
+    :root { --stage-light-start: rgba(255, 255, 255, 0.22); --stage-light-end: rgba(255, 255, 255, 0.08); }
+    :root[data-material="white"] { --stage-light-start: rgba(255, 255, 255, 0.08); --stage-light-end: rgba(255, 255, 255, 0.025); }
 
     /* 物理切边与复合玻璃材质计算 */
     :root {
@@ -1107,7 +1110,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(115deg, rgba(255, 255, 255, 0.22) 0%, transparent 48%, rgba(255, 255, 255, 0.08) 100%);
+      background: linear-gradient(115deg, var(--stage-light-start) 0%, transparent 48%, var(--stage-light-end) 100%);
       pointer-events: none;
       z-index: 0;
     }
@@ -2534,11 +2537,11 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
                 <svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"></path></svg>
                 <span>插件市场</span>
               </a>
-              <a class="nav-item" data-nav="knowledge" href="#data">
+              <a class="nav-item" data-nav="knowledge" href="#resources">
                 <svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
                 <span>知识库</span>
               </a>
-              <a class="nav-item" data-nav="experts" href="#capabilities">
+              <a class="nav-item" data-nav="experts" href="#library/experts">
                 <svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8z"></path></svg>
                 <span>专家 · 技能</span>
               </a>
@@ -2577,6 +2580,8 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
           <a href="#tasks" id="queueLink" hidden>任务记录</a>
           <span id="connection" class="localState" role="status">正在连接</span>
           <a href="#account" class="account-balance" data-account-balance></a>
+          <a href="#account">AI 加油站</a>
+          <a href="#team">去邀约</a>
           <a href="#settings">设置与诊断</a>
           <button type="button" data-account-appearance>外观与壁纸</button>
           <a href="#resources/memory/personal">个人记忆</a>
@@ -2780,7 +2785,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
 
 
             <div class="studio-right">
-              <div class="glass-card brief-panel stagger-card"><h2>创作要求</h2><div data-brief-mount=""></div><div class="prompt-chips"><button type="button" class="smallbtn" data-brief-chip="保持商品外观">+ 保持商品外观</button><button type="button" class="smallbtn" data-brief-chip="突出材质细节">+ 突出材质细节</button><button type="button" class="smallbtn" data-brief-chip="使用简洁背景">+ 使用简洁背景</button></div></div>
+              <div class="glass-card brief-panel stagger-card"><div class="panel-header"><h2>创作要求</h2><button type="button" class="smallbtn" data-brief-assist="" hidden="">AI 帮写</button></div><div data-brief-assist-status="" role="status"></div><div data-brief-mount=""></div><div class="prompt-chips"><button type="button" class="smallbtn" data-brief-chip="保持商品外观">+ 保持商品外观</button><button type="button" class="smallbtn" data-brief-chip="突出材质细节">+ 突出材质细节</button><button type="button" class="smallbtn" data-brief-chip="使用简洁背景">+ 使用简洁背景</button></div></div>
 
               <div class="glass-card result-panel stagger-card"><div class="panel-header"><h2>生成结果</h2><div class="live-row"><a class="smallbtn" href="#psd">PSD 分层设计</a><a class="smallbtn" href="#tasks">任务记录</a></div></div><div data-tool-results="">正在读取最近任务…</div></div>
             </div>
@@ -2823,9 +2828,9 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
     <div class="mat-field">
       <div class="mat-field-label">
         <label for="mat-alpha">玻璃浓度 <small lang="en">Opacity</small></label>
-        <output for="mat-alpha" id="mat-out-alpha">0.50</output>
+        <output for="mat-alpha" id="mat-out-alpha">0.56</output>
       </div>
-      <input id="mat-alpha" type="range" min="0.15" max="0.88" step="0.01" value="0.50">
+      <input id="mat-alpha" type="range" min="0.15" max="0.88" step="0.01" value="0.56">
       <div class="mat-limits" aria-hidden="true"><span>0.15</span><span>0.88</span></div>
     </div>
 

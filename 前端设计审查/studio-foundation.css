@@ -3,7 +3,7 @@
   --page-gutter: 16px; --panel-gap: 16px; --panel-padding: 20px;
   --radius: 20px; --panel-radius: 20px; --control-radius: 10px;
   --text-body: 14px; --text-label: 13px;
-  --frost-radius: 24px; --frost-opacity: .50; --frost-saturation: 165%;
+  --frost-radius: 24px; --frost-opacity: .56; --frost-saturation: 165%;
   --glass-rgb: 250 253 255; --edge: #ffffffda; --ink-edge: #1d344626;
   --studio-canvas: #e6ecf2; --studio-solid: #f1f5f9; --studio-ink: #172332;
   --studio-secondary: #4b5867; --studio-accent: var(--palette-pigment);
@@ -17,7 +17,7 @@
   --studio-panel-shadow: inset 0 1px 0 var(--edge), inset 1px 0 0 #ffffff25, 0 9px 28px -17px #1b293c33;
   --studio-panel-filter: blur(var(--frost-radius)) saturate(var(--frost-saturation));
   --studio-wallpaper-image: radial-gradient(ellipse at 25% 0%, #fbfdff, transparent 60%), linear-gradient(125deg,#c4d1df,#f3f7fb 49%,#d8e1eb 76%,#f6fbff);
-  --orb-contrast: .62; --orb-gain: 1.48;
+  --orb-contrast: .88; --orb-gain: 1.06;
   --key-shadow: 0 1px 2px #ffffffaa;
   accent-color: var(--studio-accent);
 }

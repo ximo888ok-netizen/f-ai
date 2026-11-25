@@ -12,6 +12,7 @@ import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import { registerAssets } from './assets.js';
 import { registerAuth } from './auth.js';
+import { registerAgency } from './agency.js';
 import { contracts, errorContracts } from './contracts.js';
 import { registerCustomerService } from './customer.js';
 import { checkMigrations, migrationFiles } from './db.js';
@@ -24,26 +25,36 @@ import { registerShopOperations } from './shop-operations.js';
 import { registerStudioProducts } from './studio-products.js';
 import { registerSupport } from './support.js';
 import { registerModels } from './models.js';
+import { registerRealtimeVoice } from './realtime-voice.js';
 import { registerTasks } from './tasks.js';
 import { registerWallet } from './wallet.js';
 import { registerWorkspace } from './workspace.js';
 import { registerWorkspaceLibrary } from './workspace-library.js';
 import { registerWorkspaceDiagnostics } from './workspace-diagnostics.js';
+import { registerVersionHelp } from './version-help.js';
 import { registerWebSearch } from './web-search.js';
 import { workspaceDatabaseRouter } from './workspace-database.js';
 import { registerStudioPsd } from './studio-psd.js';
 import { registerCloudAssets } from './cloud-assets.js';
 import { registerFeishuChannel } from './feishu-channel.js';
+import { registerWechatChannels } from './wechat-channel.js';
+import { registerSmsChannel } from './sms-channel.js';
 import { registerVideoDelivery } from './video-delivery.js';
 import { registerRightsNotices } from './rights-notices.js';
 import { registerSkillRuns } from './skill-runs.js';
 import { registerImageStudio } from './image-studio.js';
+import { registerProductImagePlans } from './product-image-plans.js';
+import { registerImagePreflight } from './image-preflight.js';
 import { registerStoryboards } from './video-storyboards.js';
 import { registerCopywritingReview } from './copywriting-review.js';
+import { registerCopywritingDrafts } from './copywriting-drafts.js';
 
 export async function buildApp({
-  db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(), previewAdmin = false,
-  cloudAssets = new Map(), feishu = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false, releases = featureReleases(process.env.FAI_FEATURE_RELEASES_JSON),
+  db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null,
+  dedicatedDatabases = new Map(), previewAdmin = false, packagedStudio = false,
+  cloudAssets = new Map(), feishu = new Map(), wechat = new Map(), sms = new Map(), realtimeVoice = new Map(),
+  videoDelivery = null, customerAnswer = null, loopbackOnly = false,
+  releases = featureReleases(process.env.FAI_FEATURE_RELEASES_JSON),
 }) {
   const app = Fastify({
     logger,
@@ -52,7 +63,12 @@ export async function buildApp({
     bodyLimit: 15000000,
     ajv: { customOptions: { removeAdditional: false } },
   });
-  await app.register(cors, { origin: origins, allowedHeaders: ['authorization', 'content-type', 'x-workspace-id'], exposedHeaders:['x-content-sha256'], methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
+  await app.register(cors, {
+    origin: origins,
+    allowedHeaders: ['authorization', 'content-type', 'x-workspace-id'],
+    exposedHeaders: ['content-disposition', 'x-content-sha256', 'x-request-id'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
   await app.register(rateLimit, {
     global: false,
     errorResponseBuilder: () => new ApiError(429, 'RATE_LIMITED', 'Too many authentication requests'),
@@ -70,11 +86,15 @@ export async function buildApp({
   app.addHook('onRoute', options => {
 
     const response = contracts.get(options.url)?.[options.method] ?? options.schema?.response;
-    if (response && options.schema) options.schema.response = { ...response, ...errorContracts };
+    if (response && options.schema) {
+      options.schema.response = Object.fromEntries(Object.entries({...response,...errorContracts}).map(([status,schema]) => [
+        status, {...schema,headers:{...schema.headers,'x-request-id':{type:'string',description:'Server request identifier'}}},
+      ]));
+    }
   });
 
   app.addHook('onRequest', async (request, reply) => {
-    reply.header('cache-control', 'no-store').header('x-content-type-options', 'nosniff');
+    reply.header('cache-control', 'no-store').header('x-content-type-options', 'nosniff').header('x-request-id', request.id);
     if (loopbackOnly && request.headers.host !== '127.0.0.1:'+request.raw.socket.localPort) {
       throw new ApiError(403,'LOCAL_HOST_REQUIRED','Access the desktop workspace through its local address');
     }
@@ -99,12 +119,20 @@ export async function buildApp({
     error: { code: 'NOT_FOUND', message: 'Route not found', requestId: request.id },
   }));
 
+  app.addHook('onResponse',async (request,reply)=>{
+    request.log.info({method:request.method,route:request.routeOptions.url ?? 'unmatched',
+      status:reply.statusCode,durationMs:Math.round(reply.elapsedTime)},'HTTP request');
+  });
+
   const requiredMigrations = await migrationFiles();
   const databaseRouter = workspaceDatabaseRouter(db, dedicatedDatabases, requiredMigrations);
   const workspaceDb = databaseRouter.db;
   app.decorate('workspaceDatabaseRouter', databaseRouter);
   app.decorate('withWorkspaceDatabase', (id, handler) => databaseRouter.run(id, handler));
   app.get('/health', { schema: { tags: ['Health'], summary: 'Check server liveness' } }, async () => ({ status: 'ok' }));
+  app.get('/version',{schema:{tags:['Health'],summary:'Read the configured release revision'}},async()=>({
+    revision:/^[a-f0-9]{40}$/.test(process.env.FAI_RELEASE_REVISION || '')?process.env.FAI_RELEASE_REVISION:null,
+  }));
   app.get('/ready', { schema: { tags: ['Health'], summary: 'Check the database and migration readiness' } }, async () => {
     try {
       if (!(await checkMigrations(db, requiredMigrations))) throw new Error('Migration missing');
@@ -115,7 +143,8 @@ export async function buildApp({
   });
   app.get('/openapi.json', { schema: { hide: true } }, async () => app.swagger());
 
-  registerStudio(app);
+  registerStudio(app, packagedStudio);
+  registerVersionHelp(app);
   registerAuth(app, db, previewAdmin);
   app.decorate('verifyFeature', (context, plugin) => {
     const capability = catalog.get(plugin);
@@ -140,6 +169,7 @@ export async function buildApp({
   registerListingDrafts(app, workspaceDb);
   registerShopOperations(app, workspaceDb);
   registerWallet(app, workspaceDb);
+  registerAgency(app,workspaceDb);
   registerWorkspace(app, workspaceDb);
   registerWorkspaceLibrary(app, workspaceDb);
   registerSkillRuns(app,workspaceDb,providers,shops);
@@ -148,13 +178,19 @@ export async function buildApp({
   registerWebSearch(app, webSearch);
   registerAssets(app, workspaceDb);
   registerImageStudio(app,workspaceDb);
+  const retryProductImageTask = registerProductImagePlans(app, workspaceDb, providers, shops);
+  registerImagePreflight(app,workspaceDb);
   registerCopywritingReview(app,workspaceDb);
+  registerCopywritingDrafts(app,workspaceDb);
   registerCloudAssets(app,workspaceDb,cloudAssets);
   registerFeishuChannel(app,workspaceDb,feishu);
+  registerWechatChannels(app,workspaceDb,wechat);
+  registerSmsChannel(app,workspaceDb,sms);
   registerSupport(app, workspaceDb);
   registerCustomerService(app, workspaceDb, customerAnswer);
   registerModels(app, providers, workspaceDb);
-  registerTasks(app, workspaceDb, providers, shops);
+  registerRealtimeVoice(app, workspaceDb, realtimeVoice);
+  registerTasks(app, workspaceDb, providers, shops, retryProductImageTask);
   registerSchedules(app, workspaceDb, providers);
   return app;
 }

@@ -1,4 +1,7 @@
 
+import { imagePlanTask } from './product-image-contract.js';
+import { eventCursor } from './task-events.js';
+
 const string = { type: 'string' };
 const date = { type: 'string', format: 'date-time' };
 const uuid = { type: 'string', format: 'uuid' };
@@ -11,6 +14,12 @@ const shape = properties => ({ type: 'object', properties, required: Object.keys
 const items = schema => ({ type: 'array', items: schema });
 const collection = schema => shape({ items: items(schema) });
 const none = { type: 'null', description: 'No content' };
+const fileAttachment = {type:'string',description:'Attachment disposition for the binary download'};
+
+export function assetDownload(description, mediaTypes, headers = {}) {
+  return {description, headers:{'content-disposition':fileAttachment,...headers},
+    content:Object.fromEntries(mediaTypes.map(type => [type,{schema:{type:'string',format:'binary'}}]))};
+}
 
 const account = shape({ id: uuid, email: string, displayName: string, type: enumOf('personal', 'enterprise', 'agent') });
 const workspace = shape({ id: uuid, name: string, kind: enumOf('personal', 'enterprise', 'agent'), role: enumOf('owner', 'admin', 'member') });
@@ -31,7 +40,12 @@ const connectionInfo = shape({ ...connectionState.properties, name: string, canC
 connectionInfo.properties.platform = string;
 const project = shape({ id: uuid, name: string, archivedAt: nullable(date), createdAt: date });
 const base = shape({ id: uuid, name: string, createdAt: date });
-const document = shape({ id: uuid, name: string, category: string, createdAt: date });
+export const customerScope = { anyOf: [
+  { ...shape({ productId: uuid }), additionalProperties: false },
+  { ...shape({ general: { const: true } }), additionalProperties: false },
+  { type: 'null' },
+] };
+const document = shape({ id: uuid, name: string, category: string, customerScope, createdAt: date });
 const asset = shape({
   id: uuid, name: string, mediaType: string, source: string, purpose: string,
   consentReference: nullable(string), consentExpiresAt: nullable(date), sizeBytes: count, createdAt: date,
@@ -39,8 +53,10 @@ const asset = shape({
 const task = shape({
   id: uuid, capabilityId: string, pluginId: string, modelId: nullable(string), featureVersion: nullable(string), projectId: nullable(uuid), parentId: nullable(uuid),
   state: enumOf('queued', 'running', 'succeeded', 'failed', 'cancelled'), cost: count, attempts: count, streamed: bool,
-  result: nullable(anyObject), errorCode: nullable(string), createdAt: date, updatedAt: date,
+  result: nullable(anyObject), errorCode: nullable(string), createdAt: date, updatedAt: date, templateVersion:nullable(count),
 });
+task.properties.imagePlan = nullable(imagePlanTask);
+task.properties.eventCursor = eventCursor;
 const pluginCapability = shape({
   id: string, name: string, pluginId: string, available: bool, cost: count, modes: items(string),
   minAssets: count, requiresConsent: bool, requiresConfirmation: bool, parameters: anyObject,
@@ -50,7 +66,7 @@ const plugin = shape({
   id: string, name: string, enabled: bool, capabilities: items(pluginCapability),
 });
 const draftSummary = { id: uuid, title: string, revision: count, updatedAt: date };
-const listingDraft = shape({ ...draftSummary, category: string, description: string, specification: string, sku: string,
+export const listingDraft = shape({ ...draftSummary, category: string, description: string, specification: string, sku: string,
   priceMinor: nullable(count), stock: nullable(count), images: items(shape({ role: enumOf('main','sku','detail'), assetId: uuid })),
   variants: items(shape({ specification: string, sku: string, priceMinor: nullable(count), stock: nullable(count), assetId: nullable(uuid) })) });
 const operationField = { type:'object', properties: { label:string, type:enumOf('text','money','date','integer','choice'),
@@ -66,17 +82,18 @@ const studioTransfer = shape({ id: uuid, direction: enumOf('import', 'export'), 
 const studioPortableProduct = shape({ sku: string, name: string, description: string, category: string });
 const studioRoi = shape({ revenueMinor: count, productCostMinor: count, contributionMinor: count, roas: { type: 'number' } });
 const notification = shape({ id: string, type: string, data: anyObject, readAt: nullable(date), createdAt: date });
-const memory = shape({ id: uuid, scope: enumOf('personal', 'enterprise'), content: string, createdAt: date });
+const memory = shape({ id: uuid, scope: enumOf('personal', 'enterprise'), content: string, revision: count, createdAt: date });
 const preferences = shape({ preferences: anyObject });
 const conversationState = enumOf('assistant', 'human');
 const conversation = shape({
   id: uuid, accountId: uuid, operatorId: nullable(uuid), subject: string,
   knowledgeBaseIds: items(uuid), state: conversationState, lastSearch: nullable(string),
-  productReference: nullable(string), orderReference: nullable(string), createdAt: date, updatedAt: date,
+  productId: nullable(uuid), productReference: nullable(string), orderReference: nullable(string), createdAt: date, updatedAt: date,
 });
 const message = shape({
   id: string, sender: enumOf('customer', 'assistant', 'operator'), content: string, replyTo: nullable(string), createdAt: date,
-  sources: items(shape({ baseId: uuid, baseName: string, documentId: uuid, documentName: string, ordinal: count, snippet: string })),
+  sources: items({ ...shape({ baseId: uuid, baseName: string, documentId: uuid, documentName: string, ordinal: count, snippet: string, customerScope }),
+    required:['baseId','baseName','documentId','documentName','ordinal','snippet'] }),
 });
 const schedule = shape({
   id: uuid, runAt: date, request: anyObject, state: enumOf('pending', 'submitted', 'failed', 'cancelled'),

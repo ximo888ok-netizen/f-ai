@@ -14,18 +14,20 @@ export async function customerPage(ctx) {
   const [id] = ctx.args;
   if (id === 'replies') { await quickReplies(ctx); return; }
   if (id) { await conversation(ctx, id); return; }
-  const [conversations, bases] = await Promise.all([
-    ctx.all(endpoint + '/conversations'), ctx.all('/v1/knowledge/bases'),
+  const [conversations, bases, products] = await Promise.all([
+    ctx.all(endpoint + '/conversations'), ctx.all('/v1/knowledge/bases'), ctx.all('/v1/studio/products'),
   ]);
   ctx.html(heading('客服工作台') + '<div class="live-row">'+link('权利通知','rights')+
     (ctx.manager ? link('飞书消息','feishu') : '')+'</div>' + grid(panel('新会话', form('new-conversation', field('主题', input('subject', 'required maxlength="160"')) +
+    (products.length ? field('关联商品（选填）', select('productId', [['', '不关联'],
+      ...products.map(product => [product.id, product.sku + ' · ' + product.name])])) : '') +
     field('商品编号（选填）',input('productReference','maxlength="100"')) +
     field('订单编号（选填）',input('orderReference','maxlength="100"')) +
     (bases.length ? field('允许引用的知识库（可多选）', select('baseId', bases.map(base => [base.id, base.name]), undefined, 'multiple')) : ''), '创建会话')),
     panel('会话', list(conversations, row => item(row.subject, row.state === 'human' ? '人工接待' : 'AI 接待',
       link('打开会话', 'customer/' + row.id))))) + link('快捷话术', 'customer/replies'));
   ctx.submit('new-conversation', async data => {
-    const references=Object.fromEntries(['productReference','orderReference']
+    const references=Object.fromEntries(['productId','productReference','orderReference']
       .map(key=>[key,data.get(key)?.trim()]).filter(([,value])=>value));
     const row = await post(ctx, endpoint + '/conversations',
       { subject: data.get('subject'), knowledgeBaseIds: data.getAll('baseId'), ...references });

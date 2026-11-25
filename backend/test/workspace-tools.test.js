@@ -10,6 +10,14 @@ import { provisionCredits } from '../src/wallet.js';
 import { workOnce } from '../src/worker.js';
 import { createExaSearch } from '../src/web-search.js';
 import { ProviderError } from '../src/model-http.js';
+import { probe } from '../src/ops-probe.js';
+import { bindPluginV1 } from '../sdk/workspace-v1.mjs';
+import { manifest,overview } from '../sdk/examples/asset-inbox.mjs';
+import { exportTaskLogs } from '../src/task-log-export.js';
+import { observationSummary } from '../src/ops-observation.js';
+import { mkdtemp,readFile,readdir,rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const db = process.env.FAI_TEST_DATABASE_URL ? postgres(process.env.FAI_TEST_DATABASE_URL) : new PGlite();
 const providers = createProviders();
@@ -63,6 +71,114 @@ before(async () => {
 after(async () => {
   await app?.close();
   await db.close();
+});
+
+test('confirmed memory evolution is versioned, reversible and scoped to each member or enterprise', async () => {
+  for (const scope of ['personal','enterprise']) {
+    const item=await request('POST','/v1/memory',201,owner,{scope,content:'Original QA'});
+    const path='/v1/memory/'+item.id+'/changes', event=path+'/'+randomUUID();
+    const update={action:'update',revision:item.revision,content:'Revised QA'};
+    assert.equal(item.revision,0);
+    await request('GET',path,404,visitor);
+    await request('PUT',event,scope==='personal'?404:403,member,update);
+    const results=await Promise.all([request('PUT',event,200,owner,update),request('PUT',event,200,owner,update)]);
+    assert.deepEqual(results[0],results[1]);
+    const recall='/v1/memory?scope='+scope+'&q=Revised';
+    assert.ok((await request('GET',recall,200,owner)).items.some(i=>i.id===item.id));
+    assert.equal((await request('GET',recall,200,member)).items.some(i=>i.id===item.id),scope==='enterprise');
+    await request('PUT',path+'/'+randomUUID(),409,owner,update);
+    const undo=await request('PUT',path+'/'+randomUUID(),200,owner,{action:'undo',revision:1});
+    assert.equal(undo.revision,2);
+    assert.equal((await request('GET','/v1/memory?scope='+scope,200,owner)).items.find(i=>i.id===item.id).content,'Original QA');
+    await request('PUT',event,200,owner,update);
+    await request('PUT',event,409,owner,{...update,content:'Conflict'});
+    const history=await request('GET',path,200,scope==='enterprise'?member:owner);
+    assert.deepEqual(history.items.map(i=>i.action),['undo','update']);
+    assert.ok(!JSON.stringify(history).includes('Original QA'));
+    await request('DELETE','/v1/memory/'+item.id,204,owner);
+    assert.equal((await db.query('SELECT count(*) AS n FROM memory_changes WHERE item_id=$1',[item.id])).rows[0].n.toString(),'0');
+  }
+});
+
+test('workspace image templates require manager grants, keep immutable revisions and isolate batch rendering',async()=>{
+  const root='/v1/media/images/platform-templates', target=root+'/taobao';
+  const initial={revision:0,width:240,height:320,fit:'contain',format:'png'};
+  await request('PUT',target,403,member,initial);
+  const first=await request('PUT',target,200,owner,initial);
+  assert.equal(first.revision,1);
+  assert.deepEqual(await request('PUT',target,200,owner,initial),first);
+  await request('PUT',target,409,owner,{...initial,width:300});
+  assert.deepEqual((await request('GET',root,200,member)).items,[first]);
+  assert.deepEqual((await request('GET',root,200,visitor)).items,[]);
+  const revisions=await Promise.all([360,480].map((width,index)=>app.inject({method:'PUT',url:target,
+    headers:{authorization:'Bearer '+owner.token,'x-workspace-id':index?owner.workspace.toUpperCase():owner.workspace},payload:{...initial,width,revision:1}})));
+  assert.deepEqual(revisions.map(r=>r.statusCode).sort(),[200,409]);
+  const input={id:randomUUID(),items:[{key:'preview',assetIds:[randomUUID()],platformTemplate:{platform:'taobao',revision:1}}]};
+  const batch='/v1/media/images/batches';
+  await request('POST',batch,404,visitor,input);
+  await request('POST',batch,400,owner,{...input,items:[{...input.items[0],width:800,height:800}]});
+  assert.equal((await request('POST',batch,201,owner,input)).items[0].error,'SOURCE_UNAVAILABLE');
+  await request('PUT','/v1/plugins/image/state',200,owner,{enabled:false});
+  try {await request('PUT',target,409,owner,{...initial,revision:2});}
+  finally {await request('PUT','/v1/plugins/image/state',200,owner,{enabled:true});}
+});
+
+test('versioned sample plugin uses authenticated asset and notification routes and honors revocation', async () => {
+  let allowed=true;
+  const transport=async (method,url,input)=>request(method,url,method==='POST'?201:200,owner,input);
+  const writer=bindPluginV1(transport,{sdkVersion:1,permissions:['assets.write']},()=>true);
+  const asset=await writer.uploadAsset({name:'Plugin QA',mediaType:'image/png',source:'fixture',purpose:'SDK',
+    dataBase64:Buffer.from('89504e470d0a1a0a','hex').toString('base64')});
+  const reader=bindPluginV1(transport,manifest,()=>allowed);
+  assert.ok((await overview(reader)).recentAssets.some(a=>a.id===asset.id));
+  assert.equal((await reader.asset(asset.id)).name,'Plugin QA');
+  assert.equal(reader.uploadAsset,undefined);
+  allowed=false;
+  assert.throws(()=>reader.asset(asset.id),/DENIED/);
+  assert.throws(()=>bindPluginV1(transport,{...manifest,sdkVersion:2},()=>true),/manifest/);
+  assert.throws(()=>bindPluginV1(transport,{...manifest,permissions:['everything']},()=>true),/permission/);
+  await request('GET','/v1/assets/'+asset.id,404,member);
+});
+
+test('committed task logs rotate by UTC date, expire, and exclude business content',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'fai-task-logs-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  await provisionCredits(db,owner.workspace,owner.account.id,1,'event-export-qa');
+  const task=await request('POST','/v1/tasks',202,owner,{capabilityId:'copywriting.detect-terms',mode:'workflow',
+    parameters:{content:'DO-NOT-LOG-QA-SENTINEL'},idempotencyKey:randomUUID()});
+  await request('POST','/v1/tasks/'+task.id+'/cancel',200,owner);
+  const query='/v1/diagnostics/task-events?taskId='+task.id+'&level=info&from=2020-01-01T00:00:00Z';
+  assert.deepEqual((await request('GET',query,200,owner)).items.map(e=>e.event),['cancelled','queued']);
+  await request('GET',query,403,member);
+  assert.deepEqual((await request('GET',query,200,visitor)).items,[]);
+  const now=Date.now(), today=new Date(now).toISOString().slice(0,10);
+  await exportTaskLogs(db,owner.workspace,root,2,now);
+  const directory=join(root,owner.workspace);
+  const file=join(directory,'tasks-'+today+'.jsonl');
+  const yesterday=new Date(now-86400000).toISOString().slice(0,10);
+  await db.query("UPDATE task_events SET created_at=$2 WHERE task_id=$1 AND event='cancelled'",[task.id,yesterday+'T12:00:00Z']);
+  await exportTaskLogs(db,owner.workspace,root,2,now);
+  assert.ok((await readFile(join(directory,'tasks-'+yesterday+'.jsonl'),'utf8')).includes(task.id));
+  const content=await readFile(file,'utf8');
+  assert.ok(!content.includes('DO-NOT-LOG') && !content.includes(owner.token));
+  assert.equal(content.trim().split('\n').map(JSON.parse).filter(r=>r.taskId===task.id && r.level==='info' && r.event==='queued').length,1);
+  await exportTaskLogs(db,owner.workspace,root,2,now);
+  assert.equal(await readFile(file,'utf8'),content);
+  await exportTaskLogs(db,visitor.workspace,root,2,now);
+  for (const name of await readdir(join(root,visitor.workspace))) assert.ok(!(await readFile(join(root,visitor.workspace,name),'utf8')).includes(task.id));
+  await exportTaskLogs(db,owner.workspace,root,2,now+2*86400000);
+  assert.ok(!(await readdir(directory)).includes('tasks-'+today+'.jsonl'));
+});
+
+test('continuous observation earns seven days only with a full uninterrupted candidate window',()=>{
+  const samples=Array.from({length:7*24*60+1},(_,i)=>({ok:true,time:i*60000}));
+  assert.equal(observationSummary(samples.slice(1)).qualified,false);
+  assert.equal(observationSummary(samples).qualified,true);
+  assert.equal(observationSummary(samples,samples.at(-1).time+180000).qualified,false);
+  samples[200].ok=false;
+  assert.equal(observationSummary(samples).qualified,false);
+  samples.splice(400,5);
+  assert.equal(observationSummary(samples).gaps,1);
 });
 
 test('workspace skills and experts are scoped and support chat, state and revisions', async () => {
@@ -164,6 +280,60 @@ test('feedback replay, onboarding progress and diagnostics keep their access bou
   assert.equal(diagnosis.database,'ok');
   assert.match(diagnosis.nodeVersion,/^\d+\./);
   assert.ok(BigInt(diagnosis.memoryBytes)>0n);
+});
+
+test('queue diagnostics separate runnable, delayed and expired work and require workspace management', async () => {
+  const endpoint='/v1/diagnostics/queue';
+  await request('GET',endpoint,401,{workspace:owner.workspace});
+  await request('GET',endpoint,403,member);
+  const user=await request('POST','/v1/auth/register',201,undefined,{
+    email:'queue-health-owner@example.test',password:'test-workspace-tools-42',displayName:'Queue QA',type:'personal',
+  });
+  const account={...user,workspace:user.workspaces[0].id};
+  const empty={queued:0,runnable:0,running:0,expiredLeases:0,dueSchedules:0,oldestRunnableSeconds:null};
+  assert.deepEqual(await request('GET',endpoint,200,account),empty);
+  await provisionCredits(db,account.workspace,account.account.id,10,'queue-health-seed');
+  const submission=()=>({capabilityId:'copywriting.detect-terms',mode:'workflow',
+    parameters:{content:'Queue diagnostic sample'},idempotencyKey:randomUUID()});
+  const [ready,delayed,expired,active]=await Promise.all(Array.from({length:4},()=>request('POST','/v1/tasks',202,account,submission())));
+  await db.query("UPDATE tasks SET available_at=now()-interval '2 minutes' WHERE id=$1",[ready.id]);
+  await db.query("UPDATE tasks SET available_at=now()+interval '1 hour' WHERE id=$1",[delayed.id]);
+  for (const [task,minutes] of [[expired,-1],[active,1]]) {
+    await db.query("UPDATE tasks SET state='running',lease_id=$2,lease_until=now()+($3::integer * interval '1 minute') WHERE id=$1",
+      [task.id,randomUUID(),minutes]);
+  }
+  const runAt=new Date(Date.now()+3600000).toISOString();
+  const due=await request('POST','/v1/schedules',201,account,{...submission(),runAt});
+  await request('POST','/v1/schedules',201,account,{...submission(),runAt});
+  await db.query("UPDATE schedules SET run_at=now()-interval '3 minutes' WHERE id=$1",[due.id]);
+  const {oldestRunnableSeconds,...counts}=await request('GET',endpoint,200,account);
+  assert.deepEqual(counts,{queued:2,runnable:1,running:2,expiredLeases:1,dueSchedules:1});
+  assert.ok(oldestRunnableSeconds>=120 && oldestRunnableSeconds<180);
+  assert.deepEqual(await request('GET',endpoint,200,visitor),empty);
+  await db.query("UPDATE tasks SET provider_job_id='fixture-poll',lease_id=NULL,lease_until=now()-interval '1 second' WHERE id=$1",[expired.id]);
+  assert.equal((await request('GET',endpoint,200,account)).expiredLeases,0);
+  const alerts='/v1/diagnostics/alerts';
+  await request('GET',alerts,403,member);
+  assert.deepEqual((await request('GET',alerts,200,account)).alerts,['QUEUE_DELAY','SCHEDULE_DELAY']);
+  await db.query("UPDATE tasks SET lease_until=now()-interval '5 minutes' WHERE id=$1",[expired.id]);
+  const url=await app.listen({host:'127.0.0.1',port:0});
+  assert.equal((await probe({FAI_PROBE_ORIGIN:url})).ok,true);
+  const sample=await probe({FAI_PROBE_ORIGIN:url,FAI_PROBE_WORKSPACE_ID:account.workspace,FAI_PROBE_SESSION:account.token});
+  assert.deepEqual(sample.issues,['QUEUE_DELAY','PROVIDER_POLL_DELAY','SCHEDULE_DELAY']);
+  assert.equal(sample.ok,false);
+  assert.deepEqual((await request('GET',alerts,200,visitor)).alerts,[]);
+  assert.deepEqual((await probe({FAI_PROBE_ORIGIN:url,FAI_PROBE_WORKSPACE_ID:account.workspace,FAI_PROBE_SESSION:'expired'})).issues,['WORKSPACE_PROBE_FAILED']);
+  await assert.rejects(probe({FAI_PROBE_ORIGIN:'http://example.test'}));
+  for (let i=0;i<6;i++) {
+    await db.query(`INSERT INTO tasks(id,workspace_id,account_id,capability_id,provider_id,plugin_id,input,
+      request_hash,idempotency_key,state,cost,updated_at) VALUES($1,$2,$3,'copywriting.detect-terms','local','copywriting','{}',
+      'fixture',$4,$5,1,now()-($6::integer * interval '1 hour'))`,
+      [randomUUID(),account.workspace,account.account.id,randomUUID(),i<4?'succeeded':'failed',i===5?2:0]);
+  }
+  const degraded=await request('GET',alerts,200,account);
+  assert.equal(degraded.finished,5);
+  assert.equal(degraded.failed,1);
+  assert.ok(degraded.alerts.includes('TASK_FAILURE_RATE'));
 });
 
 test('member notifications track actual role transitions and respect their own preference', async () => {

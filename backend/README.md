@@ -5,6 +5,30 @@
 
 生产发布、数据库备份和恢复演练见[部署与恢复验收](./DEPLOYMENT.md)。
 
+### 套图配置和版本帮助
+
+同一工作区的成员分别管理自己的套图。使用 `PUT /v1/media/images/series-presets/{UUID}` 保存，传入 `name`、`revision` 和 `configuration`。首次传 0，更新传已读版本。相同内容可重发，并发修改冲突返回 409。列表 `GET /v1/media/images/series-presets` 返回各配置的最新版本；要读取旧版本，调用 `GET /v1/media/images/series-presets/{UUID}?revision=1`。
+
+```json
+{
+  "revision": 0,
+  "name": "春季商品图",
+  "configuration": {
+    "productAssetId": "8da50bec-fd98-42e8-ac55-62eee1f93f8b",
+    "modelAssetId": null,
+    "background": "#ffffff",
+    "font": "chinese",
+    "fontSizePercent": 7,
+    "textColor": "#273044",
+    "subjectBox": {"x": 10, "y": 5, "width": 80, "height": 75}
+  }
+}
+```
+
+示例 UUID 需换成自己的商品素材。模特底图可传有有效授权的素材编号。字体可选 `sans` 或 `chinese`，字号按画布短边百分比计算，范围 2–20，默认 7。渲染时先绘制底色和可选模特底图，再将商品放入指定区域，最后绘制可选标题。批次接口 `POST /v1/media/images/batches` 接收 `{id,seriesPreset:{id,revision},items}`。每个条目提供 `key`、尺寸或平台规格、可选 `caption`。使用套图时素材引用、摆放和配色由配置统一供应。每批最多八张，失败条目保留原因。
+
+帮助入口 `GET /v1/help` 返回语言、文档版本、服务提交号、相对 URL 和 SHA-256。前端按 URL 请求 Markdown 正文。离线包附有同一份[工作台操作指南](src/help/workbench-v1.md)。
+
 ## 本地启动
 
 需要 Node.js 24、npm 和可访问的 PostgreSQL。为联调建一个独立数据库，然后在此目录执行。
@@ -45,7 +69,11 @@ npm start
 | 商品档案与收益测算 | 商品、分类、复用、导入导出和操作历史持久化；服务端按输入成本计算广告回报 |
 | 账户、积分、通知和设置 | 钱包和流水、企业分配、消息已读、任务通知开关、主题持久化和数据库诊断 |
 
-模型能力和店铺操作的可用性以运行环境中的配置为准。通用任务接口可以展示实际返回的文件、文本和服务结果。「分层设计」支持工作台自行组合素材并导出 PSD。模型直接生成 PSD、视频编辑与数字人需要对应的处理服务。订阅支付和代理佣金仍待接入。自有 WebDAV 和飞书可在部署方授权配置后使用。Windows 工作台的安装方式见[桌面安装说明](../desktop/windows/README.md)。
+模型能力和店铺操作的可用性以运行环境中的配置为准。通用任务接口可以展示实际返回的文件、文本和服务结果。「分层设计」支持工作台自行组合素材并导出 PSD。模型直接生成 PSD、视频编辑与数字人需要对应的处理服务。企业可以登记已核实的回款并计算代理佣金，订阅支付和自动回款对账仍待接入。自有 WebDAV 和飞书可在部署方授权配置后使用。Windows 工作台的安装方式见[桌面安装说明](../desktop/windows/README.md)。
+
+图片工作台的「商品组图方案」可以编辑逐张要求、确认批量生成、重试失败的单张结果，并把已生成的主图和详情图写入拼多多草稿。素材详情支持图片和 MP4 预检，知识库资料可以按通用客服或指定商品限定引用范围。「AI 加油站」显示实际钱包和流水，「去邀约」对应企业成员邀请。
+
+使用 Chromium 与 FFmpeg 验收工作台时，可以设置 `FAI_TEST_PLAYWRIGHT_PATH`、`FAI_TEST_FFMPEG_PATH` 和 `FAI_TEST_FFPROBE_PATH`，运行 `node --test test/studio-browser.test.js`。测试启动真实 HTTP 服务、数据库和任务执行器，模型输出使用确定性的测试供应商。
 
 ## 商家后台
 
@@ -68,7 +96,7 @@ npm start
 
 服务使用 `DATABASE_URL` 管理账号、登录、成员和路由目录。未配置独立路由的工作区使用共享数据库。独立路由生效后，该企业的商品、素材、文档、任务、积分、台账和设计只访问指定 PostgreSQL；独立库连接异常、版本落后或绑定不符时，业务接口返回 `WORKSPACE_DATABASE_UNAVAILABLE`。管理员可通过 `GET /v1/workspace/database` 查询模式和状态。
 
-1. 由部署方创建一套空的 PostgreSQL 目标数据库。通过部署密钥管理注入连接串，例如 `COMPANY_DATABASE_URL`，再设置 `DEDICATED_DATABASES_JSON={"company-db":"COMPANY_DATABASE_URL"}`。路由表只保存别名和绑定标识。
+1. 由部署方创建空的 PostgreSQL 目标库，为企业角色设置独立密码。按[凭证配置与轮换步骤](DEPLOYMENT.md#企业独立库凭证)加密完整连接串，再设置 `DEDICATED_DATABASES_JSON={"company-db":{"credentialVersion":1}}`。已有部署仍可使用环境变量名引用。路由表只保存别名和绑定标识。
 2. 备份两库，进入维护窗口并停止写入该共享库的应用实例及任务进程。执行 `npm run migrate`，把默认库和已配置目标库升级到同一版本。
 3. 执行 `npm run workspace:cutover -- <workspace-id> company-db --confirm`。命令复制并核对目标库记录数和内容摘要，在目标提交后才移除默认库中的该企业业务记录并激活路由。账号凭证和会话保留在默认库。中途中断时工作区处于 `preparing`，保持维护窗口，使用相同的工作区和目标库重新执行该命令。
 4. 启动服务后，检查工作区数据库状态为 `dedicated / ready`，用获准的测试记录验证目标库读写。后台任务和积分管理命令同样使用路由。
@@ -142,6 +170,31 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 
 后端可以直连文本、图片、视频、语音、向量和重排接口，也可以使用自有网关。部署时按模型配置别名、协议、API 地址及密钥环境变量。前端通过 GET /v1/models 发现模型，提交任务时可传 modelId。输入、结果和配置示例见[模型接入说明](./MODEL_API.md)。
 
+实时通话客户端通过 `GET /v1/voice/realtime/options` 查询当前工作区可用的音色、通话时长和积分。WebRTC 会话的建立、恢复状态和挂断步骤见[实时双工语音](./MODEL_API.md#实时双工语音)。
+
+## 商品套图
+
+套图方案可以由商品名称、要求和当前成员上传的 PNG/JPEG 素材生成初稿。初稿按内置构图模板生成，可修改。真正的出图由部署中支持 `image.main-image` 的模型或业务网关执行，每张按独立任务排队。选择模型时用 `GET /v1/models?capabilityId=image.main-image`。套图需要可保存的 PNG 或 JPEG，模型需返回图片字节。配置业务网关时，可回 `result.dataBase64` 和可选的 `result.mediaType`。仅返回预览 URL 的结果会标为失败并释放积分。
+
+以下路径均以 `/v1/media/images/product-plans` 开头。
+
+| 方法 | 请求 | 结果 |
+| --- | --- | --- |
+| `POST /` | `{id, productName, requirements, assetIds, detailCount}`。客户端生成 UUID，最多 6 张参考图、合计 20 MiB。详情可选 0–7 张 | 201 创建含 1 张主图的初稿。相同 ID 和内容重发返回 200 和现有方案 |
+| `GET /`，`GET /:id` | 列表支持 `limit`、`offset` | 查询自己的方案列表或详情。详情含总状态和各图片的 `position`、`taskId`、`attempt`、`state`、`errorCode` 和可用的 `assetId` |
+| `PUT /:id` | `{revision, designNotes, images:[{role,title,direction}]}`。第一张为 `main`，其余为 `detail` | 保存编辑并递增版本。409 表示版本过期或方案已确认 |
+| `POST /:id/confirm` | `{revision, modelId?}` | 202 锁定方案并预占整组积分入队。余额不足时整组保持草稿。重复确认返回 200 和当前方案 |
+| `POST /:id/images/:position/retry` | `{taskId}`，传该位置失败或已取消的任务 ID | 202 返回新尝试的 `{position,attempt,taskId}`。同一个原任务再次请求时返回 200 和同一个重试任务 |
+| `POST /:id/apply-to-draft` | `{draftId, draftRevision, detailPositions:[1,2,3]}` | 用已生成的第 0 张作为主图，按所选顺序替换详情图，保留草稿的 SKU 图、商品信息和变体。目标需为当前成员已有的拼多多草稿 |
+
+`estimatedCredits` 按方案中图片数量和当前每张任务成本计算。部分完成时可先选已有的成功图片回填。刷新后按方案 ID 恢复状态。
+
+- **任务归属与重试**。任务列表和详情的 `imagePlan` 给出 `planId`、从 0 开始的 `position`、从 1 开始的 `attempt` 和 `latest`。普通任务的该字段为 `null`。当 `canRetry` 为真时，用图片或任务中的 `retryUrl` 提交当前 `taskId`。旧版任务中心的 `POST /v1/tasks/{id}/regenerate` 可重试同一张失败或取消的套图，两个入口共享幂等行为。成功的套图任务返回 409，避免重复生成与扣分。
+- **进度与续读**。对每张图按 `taskId` 调用 `GET /v1/tasks/{id}/events?after=0&limit=30` 可从头按时间顺序读取事件，也可用快照里的 `eventCursor` 从当前状态继续。后续请求带上响应的 `nextCursor`，重连后沿用该值。游标是十进制字符串，空结果沿用请求游标，换到新任务时为新任务单独保存游标。省略 `after` 时保持倒序历史分页。事件中的 `attempt` 是工作线程执行次数，套图图片上的 `attempt` 是该图片的提交次数。事件的 `retryable` 表示查询时该失败或取消的套图任务仍可手动重试。
+- **交付下载**。可用的生成图在方案图片和任务 `imagePlan` 上返回 `aiGenerated: true` 和 `deliveryUrl`。用当前会话和工作区请求该地址，返回带可见 AI 标识和嵌入元数据的二进制附件。尺寸过小的图片会在交付时加边留出标识空间。素材库的 `/content` 用于读取原文件。所有 HTTP 响应可通过 `X-Request-Id` 关联服务端日志。
+
+宿主 SDK 支持 `events(taskId, {after, limit})` 和 `assetDelivery(assetId)`。GitHub Actions 使用合成商品和回环模型适配器验收失败、跨入口重试、进度续读、带标识的下载、积分及草稿回填。
+
 ## 本地商品草稿
 
 「商品档案 → 拼多多草稿」支持主规格和最多 49 个附加规格。先上传图片至素材库，再为附加规格选图。点「检查草稿资料」可看到各规格未填的商家 SKU、售价或库存。
@@ -160,6 +213,28 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 
 运营总览、待办和订单日报分别读取 `/summary`、`/insights`、`/analytics`（均位于指定台账下）。订单日报以订单日期汇总，排除已取消订单，金额缺失的订单单独计数。库存预警比较同一 SKU 的盘点数量和预警线。回复草稿、发货登记和营销计划都只写入台账。
 
+使用 `GET /v1/studio/pinduoduo/books/{book}/report` 按 `from`、`to` 和 `period=day|week|month` 查询台账，`/report/export` 下载同口径 CSV。日期采用上海当地业务日，首尾均计入，一次最多 366 天。周一为一周起点，首尾不足一周或一月时只计查询范围内的记录。订单件数排除取消订单，实付合计只包含已填金额的订单。转化率按 SKU 日记录的支付买家人次之和除以访客人次之和计算，同一访客跨 SKU、跨日可能重复。访客为零时转化率返回 `null`。`records/traffic` 可按日登记搜索、推荐、活动、其他渠道浏览次数，缺失渠道返回 `null`，实际登记零浏览时返回 `"0"`。
+
+## 文案与视频接口
+
+文案任务支持 `inputLanguage`、目标 `language`、`competitorFacts` 和 `sections`。新建文案默认使用模板 2，任务结果中可查 `templateVersion`。旧任务沿用模板 1。调用 `POST /v1/tasks/{id}/regenerate` 时可传 `instructions` 和新的幂等键，生成记录保留原任务 ID。
+
+`PUT /v1/copywriting/drafts/{id}` 接受标题、正文和 `revision`，新建传 0。新建时也可传 `sourceTaskId` 载入本人已完成的文案结果。`GET /v1/copywriting/drafts` 可列出自己的草稿，`GET /v1/copywriting/drafts/{id}/export?revision=2` 下载指定当前版本的 UTF-8 正文。`POST /v1/copywriting/review` 的 `previewReplacements: true` 返回替换预览及按同版规则复检的结果。命中位置按原字段的 UTF-16 下标计数，结束下标不含在命中区间内。
+
+视频换装与商品替换以素材列表中的首个 MP4 为源视频。`PUT /v1/media/videos/{assetId}/preflight` 首次传 `revision: 0`，并填写人工看片得到的 `shotCount`、`personCount`、`maxFacingAngle`。服务端用 FFprobe 读取时长和画面尺寸，要求 1–10 秒、短边 720–1080 像素、单镜头、单人物、朝向夹角至多 60 度。`GET` 同路径返回测量值、人工观察和逐项原因。提交和发送供应商前均复核素材授权和预检结果。
+
+## 企业代理账务
+
+`agent` 类型可注册登录。企业管理员先邀请成员，再通过 `PUT /v1/agency/partners/{accountId}` 批准代理关系。`parentId` 为 `null` 表示一级，二级须指定本企业已批准的一级代理。`PUT /v1/agency/rates` 按版本保存直佣及管理佣金比例，单位为基点，100 基点等于 1%。管理员负责核对原始回款和退款凭证。
+
+`PUT /v1/agency/receipts/{reference}` 登记已核实的人民币实收金额、会计日期、成交代理及费率版本。系统将比例和直接上级记在该笔回款上，只给直接成交者计直佣，二级成交时给其一级上级计管理佣金。`PUT /v1/agency/receipts/{reference}/reversals/{event}` 登记退款、退货或拒付。按同一笔回款的会计日期顺序录入调整，重复凭证可安全重试。佣金按分舍去小数，分次冲减取各次调整前后的应计差额，全额冲减后累计为零。
+
+`GET /v1/agency/statements?month=YYYY-MM` 和 `GET /v1/agency/statements/export?month=YYYY-MM` 返回月度应计额、冲减和净额。普通代理仅看本人，企业管理员可查看全企业。实际收付款、平台回款凭证自动核验及打款由后续支付接入承担。
+
+## 插件联调
+
+`backend/sdk/workspace-v1.mjs` 导出 `workspaceV1(request)`，适用于桌面宿主和 Web 工作台。宿主提供 `request(method,path,payload)`，用当前成员会话及工作区调用 API，并将服务端错误传回调用方。`plugins` 读取可用能力，`submit` 提交任务，`task`、`events`、`cancel`、`regenerate` 读取或操作本人任务。请求重试复用同一幂等键。具体请求和响应可查看服务的 `/openapi.json`。
+
 ## 专家、技能与工作区支持接口
 
 | 功能 | 接口及行为 |
@@ -170,7 +245,7 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 | 成员任务额度 | 企业所有者和管理员使用 `GET/PUT /v1/credits/members/{id}/limit`，成员通过 `GET /v1/credits/limit` 查看自身额度。额度按该工作区历史已消费积分与在途预占累计，`null` 表示不限额。设低额度不会撤销在途任务；取消或失败会释放预占。 |
 | 素材校验 | `GET /v1/assets/{id}` 返回本人素材元数据和 SHA-256，原文件下载响应的 `X-Content-SHA256` 与元数据一致。 |
 | 任务事件 | `GET /v1/tasks/{id}/events` 分页读取本人任务的状态事件，可按 `level`、`from`、`to` 筛选，事件只有状态、级别、尝试次数、时间和错误码。升级前的任务从下一次状态变化开始记录。 |
-| 工作区消息 | 加入工作区与角色实际变更会通知受影响成员。`PATCH /v1/settings` 可用 `memberNotifications` 单独关闭；任务消息沿用 `taskNotifications`。 |
+| 工作区消息 | `PATCH /v1/settings` 通过 `memberNotifications`、`taskNotifications`、`rightsNotifications` 分别设置成员、任务和权利案件提醒。案件进度仍可在权利通知中查阅。 |
 | 引导与反馈 | `PATCH /v1/settings` 保存 `onboardingStep`，取值 0–6。`POST /v1/feedback` 接受客户端 UUID、类型和描述。相同 UUID、相同内容可重试；`GET /v1/feedback` 读取本人记录。 |
 | 诊断 | `GET /v1/diagnostics` 向管理员返回数据库迁移状态、服务进程目录磁盘状态、Node.js 版本、进程运行时长、内存和累计 CPU 时间。 |
 | 网页搜索 | `GET /v1/search/web` 返回是否启用。`POST /v1/search/web` 接受 `query` 和可选的 `limit`，返回标题、原链接及摘要摘录。部署端设置 `EXA_API_KEY` 启用。搜索只向 Exa 转交本次输入的查询词与搜索参数，服务响应按数量和大小限制。 |
@@ -192,6 +267,22 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 `POST /v1/rights/notices` 接受客户端生成的 `id`、工作区内的 `assetId`、`statement` 和 `evidenceReference`。证据引用保存在工作区，后端不会访问其中的链接。提交者、受影响素材所有者和工作区管理者按参与权限读取案件与事件。
 
 使用 `POST /v1/rights/notices/{id}/actions` 提交 `eventId`、案件 `revision`、`action` 和 `explanation`。管理者可转送通知（`forward`）、限制访问（`restrict`）或驳回通知（`dismiss`）。素材所有者可在限制期提交反通知（`counter`），管理者用 `forward-counter` 转给提交者，再维持限制（`uphold`）或恢复访问（`restore`）。事件按版本保存并通过站内消息转送。限制期间，工作台停用对应素材的下载、备份恢复和新处理请求，保留原始字节。若同一素材还有其他有效限制，解除单个案件不会恢复素材访问。已经导出或保存在第三方的副本由实际持有人处理。
+
+## 换装和产品替换的源图预检
+
+上传 PNG 或 JPEG 后，对每张素材调用 `PUT /v1/media/images/{assetId}/preflight`。首次提交例如 `{"revision":0,"personCount":1,"occlusionPercent":5}`。后端解码文件并测量宽高，审核人填写画面人数和服饰遮挡面积百分比。纯商品图填 0 人、0% 遮挡。后续修改传上次返回的版本，版本冲突返回 409，可用同路径的 `GET` 重读。
+
+所有输入图的短边至少为 1024 像素。有人物的图限一人，服饰遮挡最多 5%。`image.try-on` 的 `parameters.assetIds[0]` 是人物图，后续是参考素材。`image.replace-product` 支持两张纯商品图。两个任务均要求至少两张不同的、授权仍有效的素材。某张纯商品图的 `eligible:true` 表示它符合素材条件，用作换装首图时还需满足人物要求。
+
+预检结果含 `width`、`height`、`revision`、`eligible` 和 `reasons`。尺寸过小、人物过多和遮挡超限分别为 `SHORT_SIDE`、`PERSON_COUNT`、`OCCLUSION`。提交任务时，422 错误会指出需补审核、未通过的输入位置与原因，或提示换装首图需有人物。后台派发前复核当前审核结果与授权。可按错误码提示用户修改素材或重做审核。
+
+## 客服知识的商品归属
+
+知识文档创建或编辑时可传 `customerScope`。商品专属资料用 `{"productId":"商品 UUID"}`，通用 FAQ 用 `{"general":true}`。`PATCH` 省略此字段保留归属，显式传 `null` 可撤销客服使用。既有未分配资料仍可通过原知识库接口查阅。要用于自动回答，先由有管理权限的成员确认归属。
+
+创建 `POST /v1/customer-service/conversations` 时传 `productId` 和已授权的 `knowledgeBaseIds`。已有客户端可继续使用 `productReference`，新会话会按当前工作区的完整 SKU 精确匹配并保存商品 ID。以后变更或复用 SKU，已有会话仍绑定原商品。升级时只回填能确认在会话建立前已存在且此后未改动的 SKU。其余未绑定会话只能引用明确标记的通用 FAQ。
+
+客户消息端点返回 `assistant.sources`，新引用含文档、片段和 `customerScope`。没有适用资料时 `assistant` 为 `null`。管理员修改文档归属后，后续检索、模型回复落库和请求重放都会重新检查。已保存的聊天记录可按原权限回看。
 
 ## 本地图片与视频处理
 
@@ -217,8 +308,34 @@ GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维
 
 飞书使用企业自建机器人和加密 HTTP 事件订阅。通过 `FEISHU_BINDINGS_JSON` 配置每个工作区的连接标识、应用 ID、租户标识和三项部署密钥变量名。事件回调使用 `POST /v1/channels/feishu/{connector}/events`。启用 `im.message.receive_v1` 和机器人接收私聊、发送文本的权限。服务验证签名、时间和应用租户，只接收加密的私聊文本，并对重复事件和消息去重。管理员在「客服工作台 → 飞书消息」查看并确认回复，后台显示排队、发送、失败或待核实。服务用同一飞书消息 UUID 重试，超过重试窗口后保留待核实状态。接入依据 [飞书事件加密文档](https://open.feishu.cn/document/server-docs/event-subscription-guide/event-subscription-configure-/encrypt-key-encryption-configuration-case) 和 [发送消息接口](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/im-v1/message/create)。
 
+## 工作区短信通道
+
+服务使用腾讯云 `SendSms` 模板短信接口，按工作区加载 `SMS_BINDINGS_JSON`。每个绑定指定应用 ID、已审核签名、模板别名、供应商模板 ID、参数个数及两个密钥环境变量名。部署示例见 `.env.example`。号码使用 E.164 格式，每次请求一个号码。[腾讯云发送短信](https://cloud.tencent.com/document/api/382/55981) · [签名方法](https://cloud.tencent.com/document/product/382/52072)
+
+| 管理员接口 | 用途 |
+| --- | --- |
+| `GET /v1/channels/sms/options` | 查看本工作区配置的模板别名和参数个数 |
+| `PUT /v1/channels/sms/messages/{uuid}` | 提交 `recipient`、`template` 和有序字符串数组 `values`，返回 202 及队列状态。同一成员用相同 ID 和相同内容重试可取回原记录，内容冲突返回 409 |
+| `GET /v1/channels/sms/messages/{uuid}` | 查询受理状态、尝试次数、错误码和供应商流水号 |
+| `GET /v1/channels/sms/messages` | 分页查看本工作区的脱敏记录 |
+
+`accepted` 表示腾讯云已返回该号码的受理流水号，手机到达情况须以运营商回执为准。明确的短期限流或建立连接前的网络故障最多尝试三次，常规退避为 30 秒和 60 秒，并参考 HTTP 429 的 `Retry-After`。模板被拒或发送权限已撤销时结束为 `failed`。发出请求后断线、回执不匹配或进程在发送途中退出，记录转为 `uncertain`，应按请求 UUID 核对供应商日志。队列在终态清除待发号码及模板参数，查询界面仅返回号码尾四位。[腾讯云短信错误码](https://cloud.tencent.com/document/api/382/52075)
+
 ## 交付范围与验证
 
-当前分支交付可运行的后端首版。图片和视频模型已有原生协议适配，独立数据库路由与分层 PSD 已完成测试环境验证。实际模型生成质量、第三方店铺授权和平台回执仍需实测。购物平台 OAuth、支付与订阅、代理计佣仍待实现或接入。WebDAV 与飞书私聊已通过模拟服务测试，真实部署需配置对应连接。专家和技能库、任务额度、事件日志及工作区支持接口已可用于前端联调。客服默认提供带来源的多轮知识检索回复，也支持部署方显式配置的本机对话模型。42 项是能力目录，第三方能力是否可调用以配置及实际联调为准。
+图片和视频模型已有原生协议适配，独立数据库路由与分层 PSD 已完成测试环境验证。三平台店铺 OAuth、支付订阅及自动核验渠道回款仍待接入。实店发布与对账、供应商实际生成质量、真实飞书和 WebDAV 渠道、独立生产部署及七天观察需在相应环境验收。客服默认提供带来源的多轮知识检索回复，也支持部署方显式配置的本机对话模型。42 项能力的实际可用性可通过当前工作区的插件目录和模型配置查看。
 
 运行 npm test 会使用内存 PostgreSQL（PGlite）执行 API 集成测试。也可把 FAI_TEST_DATABASE_URL 指向空的专用 PostgreSQL 测试库再运行。测试会应用迁移并写入固定测试账号和样例，使用完后可丢弃该测试库。
+## 工作区图片规格
+
+工作区所有者或管理员可以用 `PUT /v1/media/images/platform-templates/{platform}` 确认淘宝（`taobao`）、拼多多（`pinduoduo`）和抖店（`douyin`）的导出规格。首次传 `{"revision":0,"width":800,"height":800,"fit":"contain","format":"png"}`，以后传要更新的版本号。尺寸和格式由工作区按目标商品与类目确认。成员从 `GET /v1/media/images/platform-templates` 读取已发布的最新规格。
+
+在图片批次的条目中加入 `"platformTemplate":{"platform":"pinduoduo","revision":1}` 即按该版本生成。画布宽高、适配方式和文件格式取自模板；返回的条目携带所用版本。另发新版本后，已有批次可以按原请求重试，仍可下载原结果。继续使用通用比例或自定义尺寸的客户端保留现有调用方式。
+
+## 后端插件、消息渠道与记忆接口
+
+受信任的宿主以当前成员会话和工作区构造 `workspaceV1(request)`。给插件使用 `bindPluginV1(request, manifest, isGranted)`，由宿主在每次调用时检查该插件当前是否启用、权限是否仍获准；后端继续验证成员、工作区、业务开关与资源归属。V1 新增素材列表、元数据、二进制下载、上传，以及本人通知列表和标为已读。运输层遇到非 2xx 应抛出 API 错误，下载应返回字节。兼容已有的 V1 任务与事件方法。未知 SDK 主版本或权限在绑定时拒绝。支持的权限以及可运行的只读示例见 [SDK](sdk/workspace-v1.mjs) 和[样例插件](sdk/examples/asset-inbox.mjs)。
+
+记忆只在用户明确提交更改时更新。列表和创建结果含 `revision`，已有记忆从 0 开始。用 `PUT /v1/memory/{id}/changes/{请求UUID}` 提交 `{"revision":0,"action":"update","content":"新内容"}`。撤回最近一次更新时传当前版本和 `"action":"undo"`。同一请求可以重试，过期版本返回 409。个人记忆仅本人可读写，企业记忆由成员读取、管理者修改。历史接口 `GET /v1/memory/{id}/changes` 返回版本、操作者、动作和时间；删除记忆一并删除历史。
+
+微信适配范围为公众号安全模式和企业微信自建应用的文本消息。部署方用 `WECHAT_BINDINGS_JSON` 配置渠道、连接别名、工作区、接收标识、两项密钥的环境变量名和被动回复文本。公众号的 `receiver` 为 AppID、`recipient` 为公众号原始 ID；企业微信的 `channel` 为 `wecom`，两者均填 CorpID，另填 `agentId`。回调地址为 `/v1/channels/{wechat或wecom}/{别名}/callback`。GET 完成绑定验证，POST 验签解密、按企业和消息编号去重、保存接收文本并加密返回配置好的确认消息。管理者可从 `GET /v1/channels/{渠道}/inbox` 查询绑定状态、消息和回复内容；外部是否收到被动回复由渠道端核实。飞书继续使用已有的人工确认回复队列。[企业微信回调示例](https://github.com/sbzhu/weworkapi_python/blob/master/callback/WXBizMsgCrypt.py)
