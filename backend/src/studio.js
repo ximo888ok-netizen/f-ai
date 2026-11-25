@@ -16,6 +16,10 @@ const types = new Map([
   ...styles.map(name => [name, 'text/css; charset=utf-8']),
   ...scripts.map(name => [name, 'text/javascript; charset=utf-8']),
 ]);
+const workbenchPage = 'ai.html';
+const merchantPage = '商家管理后台.html';
+const artwork = ['optic-wave.webp', 'leather.webp', 'citrus.webp', 'audio.webp'];
+export const studioPublicFiles = [workbenchPage, merchantPage, ...types.keys(), ...artwork.map(name => 'assets/' + name)];
 const security = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 
 export function registerStudio(app,packaged=false) {
@@ -24,12 +28,12 @@ export function registerStudio(app,packaged=false) {
   const page = (file, portableName) => async (_request, reply) => reply
     .header('content-security-policy', security).header('referrer-policy', 'no-referrer')
     .type('text/html; charset=utf-8').send(await readFile(new URL(packaged && portableName ? portableName + '.html' : file, directory)));
-  app.get('/', { schema }, page('ai.html'));
-  app.get('/ai.html', { schema }, page('ai.html'));
-  app.get('/merchant', { schema }, page('商家管理后台.html', 'merchant'));
+  app.get('/', { schema }, page(workbenchPage));
+  app.get('/ai.html', { schema }, page(workbenchPage));
+  app.get('/merchant', { schema }, page(merchantPage, 'merchant'));
   app.get('/studio/assets/:name', { schema }, async (request, reply) => {
     const { name } = request.params;
-    if (!['optic-wave.webp', 'leather.webp', 'citrus.webp', 'audio.webp'].includes(name)) throw notFound('Studio artwork');
+    if (!artwork.includes(name)) throw notFound('Studio artwork');
     return reply.type('image/webp').send(await readFile(new URL('assets/' + name, directory)));
   });
   const resource = prefix => async (request, reply) => {

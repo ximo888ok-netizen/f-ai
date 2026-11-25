@@ -159,8 +159,13 @@ try {
 
   let origin = await startService();
   const anonymous = client(origin);
-  assert.match((await anonymous('GET', '/', 200)).toString(), /live\.js/);
-  assert.ok((await anonymous('GET', '/studio/live.js', 200)).length);
+  const workbench = await anonymous('GET', '/', 200);
+  assert.match(workbench.toString(), /id="native-glass-design"/);
+  assert.deepEqual(await anonymous('GET', '/ai.html', 200), workbench);
+  assert.match((await anonymous('GET', '/merchant', 200)).toString(), /\/studio\/merchant\.js/);
+  for (const file of ['live.js', 'studio-entry.js', 'image-generation/product-plans.js', 'image-generation/style.css']) {
+    assert.ok((await anonymous('GET', '/studio/' + file, 200)).length, file);
+  }
   const help=await anonymous('GET','/v1/help',200);
   assert.equal(help.revision,revision);
   const guide=await anonymous('GET',help.url,200);

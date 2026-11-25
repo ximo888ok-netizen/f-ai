@@ -104,7 +104,7 @@ jobs:
   windows-offline:
     name: Build and verify Windows x64 offline backend
     needs: regression
-    if: github.ref == 'refs/heads/feat/backend-native-streams' || github.ref == 'refs/heads/codex/f-ai-glass-integration' || github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/heads/ci/backend-release-') || github.ref == 'refs/heads/feat/backend-native-streams' || github.ref == 'refs/heads/codex/f-ai-glass-integration' || github.ref == 'refs/heads/main'
     runs-on: windows-2022
     timeout-minutes: 35
     steps:

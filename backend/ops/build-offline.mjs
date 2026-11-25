@@ -3,6 +3,7 @@ import { copyFile,cp,mkdir,mkdtemp,readdir,rename,rm,writeFile } from 'node:fs/p
 import { tmpdir } from 'node:os';
 import { basename,dirname,isAbsolute,join,resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { studioPublicFiles } from '../src/studio.js';
 import {
   OFFLINE_FORMAT, OFFLINE_PLATFORM, OFFLINE_TOOLS, RUNTIME_LICENSES, nativeFileInventory, sha256File,
 } from '../src/verify-offline-release.js';
@@ -32,7 +33,7 @@ try {
   run('git',['--git-dir='+gitDir,'--work-tree='+root,'-c','core.autocrlf=false','restore','--source='+revision,'--worktree','--',
     'backend/src','backend/sdk','backend/migrations','backend/package.json',
     'backend/package-lock.json','backend/.env.example','backend/DEPLOYMENT.md','backend/README.md','backend/ACCEPTANCE.md',
-    web],
+    ...studioPublicFiles.map(file => web + '/' + file)],
     repo,{...env,GIT_INDEX_FILE:join(temp,'release.index')});
   // Keep the portable archive paths independent of the target Windows system code page.
   const publicDir=join(backend,'public');
