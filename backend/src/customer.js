@@ -1,13 +1,14 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { searchTerms } from './customer-answer.js';
+import { requireServiceShop } from './desk-shops.js';
 import { row, rows } from './db.js';
 import { ApiError, array, choice, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 
 const tags = ['Customer service'];
 const idParams = object({ id: uuid });
 const conversationFields = [
-  'id', 'account_id AS "accountId"', 'operator_id AS "operatorId"', 'subject', 'state',
+  'id', 'account_id AS "accountId"', 'operator_id AS "operatorId"', 'subject', 'state', 'shop_alias AS "shopId"',
   'knowledge_base_ids AS "knowledgeBaseIds"', 'last_search AS "lastSearch"',
   'product_reference AS "productReference"', 'order_reference AS "orderReference"',
   'created_at AS "createdAt"', 'updated_at AS "updatedAt"',
@@ -125,7 +126,7 @@ async function sendMessage(db,context,id,body,answer) {
   });
 }
 
-export function registerCustomerService(app, db, answer=null) {
+export function registerCustomerService(app, db, answer=null, integrations={}) {
   route(app, 'GET', '/v1/customer-service/conversations', {
     tags, summary: 'List conversations visible to the current member or enterprise operator', querystring: page,
   }, async request => {
@@ -137,11 +138,15 @@ export function registerCustomerService(app, db, answer=null) {
   route(app, 'POST', '/v1/customer-service/conversations', { feature: 'customer-service.conversation',
     tags, summary: 'Create a support conversation with an optional knowledge scope',
     body: object({ subject: text(160), knowledgeBaseIds: array(uuid, 20),
-      productReference: text(100), orderReference: text(100) }, ['subject']),
+      productReference: text(100), orderReference: text(100), shopId:text(64) }, ['subject']),
   }, async (request, reply) => {
     const { workspaceId, accountId } = request.context;
     await enabled(db, workspaceId);
     const baseIds = [...new Set((request.body.knowledgeBaseIds ?? []).map(id=>id.toLowerCase()))];
+    if (request.body.shopId) {
+      if(request.context.role==='member') throw new ApiError(403,'FORBIDDEN','店铺会话由工作区管理员创建。');
+      await requireServiceShop(db,workspaceId,request.body.shopId,integrations);
+    }
     if (baseIds.length) {
       const allowed = await rows(db, [
         'SELECT b.id FROM knowledge_bases b WHERE b.workspace_id = $1 AND b.id = ANY($3::uuid[])',
@@ -150,10 +155,10 @@ export function registerCustomerService(app, db, answer=null) {
       if (allowed.length !== baseIds.length) throw notFound('Knowledge base');
     }
     const created = await row(db, [
-      'INSERT INTO service_conversations (id, workspace_id, account_id, subject, knowledge_base_ids, state, product_reference, order_reference)',
-      "VALUES ($1, $2, $3, $4, $5, 'assistant', $6, $7) RETURNING " + conversationFields,
+      'INSERT INTO service_conversations (id, workspace_id, account_id, subject, knowledge_base_ids, state, product_reference, order_reference, shop_alias)',
+      "VALUES ($1, $2, $3, $4, $5, 'assistant', $6, $7, $8) RETURNING " + conversationFields,
     ].join(' '), [randomUUID(), workspaceId, accountId, nonblank(request.body.subject), baseIds,
-      request.body.productReference?.trim() || null,request.body.orderReference?.trim() || null]);
+      request.body.productReference?.trim() || null,request.body.orderReference?.trim() || null,request.body.shopId ?? null]);
     reply.code(201);
     return created;
   });

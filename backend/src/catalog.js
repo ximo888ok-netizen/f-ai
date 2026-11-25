@@ -74,6 +74,13 @@ const definitions = [
     ['translate', '多语言'], ['selling-points', '卖点与竞品对比'],
   ]],
   ['copywriting', 'local', object({ content: text(20000) }), [['detect-terms', '词语检测']]],
+  ['customer-service', 'model:customer-agent', object({
+    question: text(2000), facts: text(5000),
+  }, ['question']), [['reply-draft', 'Customer-Agent 回复草稿']]],
+  ['copywriting', 'model:ecommerce-content-agent', object({
+    title: text(240), category: text(120), facts: text(4000), platform: choice('taobao','douyin','xiaohongshu'),
+    tone: choice('professional','casual','trendy','luxury','cute'), audience: text(300), sellingPoints: array(text(300), 10),
+  }, ['title','category','facts','platform']), [['content-package', '商品文案内容包']]],
 ];
 
 const serviceEndpoints = {

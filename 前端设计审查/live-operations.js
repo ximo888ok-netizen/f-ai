@@ -1,3 +1,7 @@
+import { bindCommerceSdk } from './live-commerce-sdk.js';
+import { integrationSlot } from './live-agent-integrations.js';
+import { sceneDesk } from './studio-workflows.js';
+import { bindShopPane, shopPane, storesFor } from './desk-shops.js';
 import { commerceReport } from './live-commerce-report.js';
 import { action, field, form, grid, h, heading, input, item, link, list, notice, panel, path, select, textarea, toast } from './live.js';
 import { parseValue, readOperationsCsv, template } from './operations-file.js';
@@ -127,11 +131,20 @@ export async function operationsPage(ctx) {
   if (!ctx.manager) { ctx.html(heading('拼多多运营') + notice('店铺业务台账由工作区所有者或管理员管理。')); return; }
   const [id,kind,view,key] = ctx.args;
   const books = await ctx.all(root + '/books');
-  if (!id) {
-    ctx.html(heading('拼多多运营台账','每家店可单独建账。数据来自工作区成员录入或业务文件导入。') +
-      grid(panel('选择店铺台账',list(books,b => item(b.name,'',link('打开台账','commerce/' + b.id)))) +
-      panel('新建台账',form('book',field('店铺或台账名称',input('name','maxlength="120" required')),'创建台账'))) +
-      link('检查我的商品草稿','drafts/quality') + link('客服工作台','customer'));
+  if (!id || id==='shops') {
+    const directory=await storesFor(ctx);
+    if(!ctx.active())return;
+    const ledger=grid(panel('拼多多店铺台账',list(books,b => item(b.name,'',link('打开台账','commerce/' + b.id)),'还没有台账。创建后可以录入或导入业务记录。')),
+      panel('新建台账',form('book',field('店铺或台账名称',input('name','maxlength="120" required placeholder="输入店铺或台账名称"')),'创建台账'))) +
+      '<div class="scene-related">'+link('检查我的商品草稿','drafts/quality') + link('客服工作台','customer')+'</div>';
+    sceneDesk(ctx,'operations',[
+      {id:'query',label:'店铺数据',icon:'operations',body:'<section class="scene-work" data-commerce-query-pane><p role="status">正在读取店铺授权…</p></section>'},
+      {id:'report',label:'经营日报',icon:'tasks',body:integrationSlot('mcp-cn-commerce')},
+      {id:'books',label:'运营台账',icon:'data',count:books.length,body:ledger},
+      {id:'shops',label:'店铺管理',icon:'desk',count:directory.items.length,body:shopPane(ctx,directory,'commerce')},
+    ],id==='shops'?'shops':'query',link('投放收益测算','roi'));
+    bindShopPane(ctx,directory);
+    void bindCommerceSdk(ctx,directory);
     ctx.submit('book',async f => { const book = await ctx.api(root + '/books',{method:'POST',body:{name:f.get('name')}}); ctx.go('commerce/' + book.id); });
     return;
   }

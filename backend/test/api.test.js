@@ -159,7 +159,7 @@ test('gateway limits, plugin disablement, retry exhaustion and release', async (
   response(await api('POST', '/v1/tasks', enterprise, taskInput('not-configured', { capabilityId: 'video.compose', parameters: {} })), 503);
   const catalog = response(await api('GET', '/v1/plugins', enterprise), 200).items;
   assert.equal(catalog.length, 5);
-  assert.equal(catalog.flatMap(plugin => plugin.capabilities).length, 42);
+  assert.equal(catalog.flatMap(plugin => plugin.capabilities).length, 44);
   assert.equal(catalog.find(plugin => plugin.id === 'customer-service').capabilities[0].endpoint, '/v1/customer-service/conversations/{id}/messages');
   response(await api('PUT', '/v1/plugins/copywriting/state', enterprise, { enabled: false }), 200);
   response(await api('POST', '/v1/tasks', enterprise, taskInput('disabled-task')), 409);

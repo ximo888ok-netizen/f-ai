@@ -70,7 +70,7 @@ const memory = shape({ id: uuid, scope: enumOf('personal', 'enterprise'), conten
 const preferences = shape({ preferences: anyObject });
 const conversationState = enumOf('assistant', 'human');
 const conversation = shape({
-  id: uuid, accountId: uuid, operatorId: nullable(uuid), subject: string,
+  id: uuid, accountId: uuid, operatorId: nullable(uuid), subject: string, shopId: nullable(string),
   knowledgeBaseIds: items(uuid), state: conversationState, lastSearch: nullable(string),
   productReference: nullable(string), orderReference: nullable(string), createdAt: date, updatedAt: date,
 });

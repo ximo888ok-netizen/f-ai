@@ -11,13 +11,18 @@ export function shopGrantExpired(shop) {
   return shop.authorizedUntil != null && Date.parse(shop.authorizedUntil) <= Date.now();
 }
 
-function provisioned({ providers, shops, cloudAssets, feishu }, workspaceId) {
+function provisioned({ providers, shops, cloudAssets, feishu, integrations }, workspaceId) {
   const items = [];
   for (const provider of providers.values()) {
     if (provider.info) items.push({ kind: 'model', id: provider.info.id, name: provider.info.name ?? provider.info.id });
   }
-  for (const shop of shops.values()) {
-    if (shop.workspaceId === workspaceId) items.push({ kind: 'shop', id: shop.id, name: shop.name, platform: shop.platform });
+  const includedShops = new Set();
+  for (const bindings of [shops, integrations?.customer?.shops, integrations?.commerce?.shops]) {
+    for (const shop of bindings?.values() ?? []) {
+      if (shop.workspaceId !== workspaceId || includedShops.has(shop.id)) continue;
+      includedShops.add(shop.id);
+      items.push({ kind: 'shop', id: shop.id, name: shop.name, platform: shop.platform });
+    }
   }
   for (const binding of feishu.values()) {
     if (binding.workspaceId === workspaceId) items.push({ kind: 'feishu', id: binding.id, name: '飞书应用 ' + binding.id, check: binding.check });

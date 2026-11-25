@@ -16,7 +16,7 @@ import { appendTaskText } from './task-stream.js';
 
 const maxAttempts = 3;
 
-async function claim(db) {
+async function claim(db, providers) {
   return db.transaction(async connection => {
     const task = await row(connection, [
       'SELECT * FROM tasks',
@@ -38,10 +38,11 @@ async function claim(db) {
       return { expired: true };
     }
     const lease = randomUUID();
+    const leaseSeconds = Math.max(120, Math.ceil((providers.get(task.provider_id)?.runTimeoutMs ?? 0) / 1000) + 15);
     const claimed = await row(connection, [
       "UPDATE tasks SET state = 'running', attempts = attempts + CASE WHEN provider_job_id IS NULL THEN 1 ELSE 0 END, updated_at = now(),",
-      "lease_id = $2, lease_until = now() + interval '120 seconds' WHERE id = $1 RETURNING *",
-    ].join(' '), [task.id, lease]);
+      "lease_id = $2, lease_until = now() + $3::integer * interval '1 second' WHERE id = $1 RETURNING *",
+    ].join(' '), [task.id, lease, leaseSeconds]);
     if (!claimed.provider_job_id) await logTask(connection, claimed.id, 'running', claimed.attempts);
     return claimed;
   });
@@ -96,7 +97,7 @@ async function providerPayload(db, identityDb, task, capability, shops) {
 }
 
 export async function workOnce({ db, providers, shops, videoArchive, identityDb = db }) {
-  const task = await claim(db);
+  const task = await claim(db, providers);
   if (!task) return false;
   if (task.expired) return true;
   const capability = catalog.get(task.capability_id);

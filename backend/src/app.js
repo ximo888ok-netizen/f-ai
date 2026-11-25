@@ -40,9 +40,13 @@ import { registerSkillRuns } from './skill-runs.js';
 import { registerImageStudio } from './image-studio.js';
 import { registerStoryboards } from './video-storyboards.js';
 import { registerCopywritingReview } from './copywriting-review.js';
+import { installIntegrations, registerIntegrations } from './plugin-integrations.js';
+import { registerDeskShops } from './desk-shops.js';
+import { taobaoSettings, registerShopAuth } from './shop-authorization.js';
 
 export async function buildApp({
   db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(), previewAdmin = false,
+  integrations = {}, integrationRunner, shopAuth = taobaoSettings(), shopTokenExchange,
   cloudAssets = new Map(), feishu = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false, releases = featureReleases(process.env.FAI_FEATURE_RELEASES_JSON),
 }) {
   const app = Fastify({
@@ -102,6 +106,7 @@ export async function buildApp({
   const requiredMigrations = await migrationFiles();
   const databaseRouter = workspaceDatabaseRouter(db, dedicatedDatabases, requiredMigrations);
   const workspaceDb = databaseRouter.db;
+  const runtimes = await installIntegrations(providers, integrations, integrationRunner);
   app.decorate('workspaceDatabaseRouter', databaseRouter);
   app.decorate('withWorkspaceDatabase', (id, handler) => databaseRouter.run(id, handler));
   app.get('/health', { schema: { tags: ['Health'], summary: 'Check server liveness' } }, async () => ({ status: 'ok' }));
@@ -125,7 +130,7 @@ export async function buildApp({
   registerMerchantAudit(app, db, workspaceDb);
   registerMerchantFeatures(app, workspaceDb, providers, releases);
   registerProjects(app, workspaceDb);
-  registerMerchantConnections(app, workspaceDb, { providers, shops, cloudAssets, feishu });
+  registerMerchantConnections(app, workspaceDb, { providers, shops, cloudAssets, feishu, integrations });
   route(app, 'GET', '/v1/merchant/context', {
     manager: true, enterprise: true, database: 'identity', tags: ['Merchant'], summary: 'Read access to the merchant workspace',
   }, request => ({ role: request.context.role, workspaceId: request.context.workspaceId }));
@@ -152,7 +157,10 @@ export async function buildApp({
   registerCloudAssets(app,workspaceDb,cloudAssets);
   registerFeishuChannel(app,workspaceDb,feishu);
   registerSupport(app, workspaceDb);
-  registerCustomerService(app, workspaceDb, customerAnswer);
+  registerCustomerService(app, workspaceDb, customerAnswer, integrations);
+  registerDeskShops(app, workspaceDb, integrations, shopAuth);
+  registerShopAuth(app, workspaceDb, shopAuth, shopTokenExchange);
+  registerIntegrations(app, workspaceDb, integrations, runtimes, integrationRunner, shopAuth);
   registerModels(app, providers, workspaceDb);
   registerTasks(app, workspaceDb, providers, shops);
   registerSchedules(app, workspaceDb, providers);

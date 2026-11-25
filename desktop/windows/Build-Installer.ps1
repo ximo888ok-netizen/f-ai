@@ -39,9 +39,9 @@ $media = Join-Path $app 'media'
 $licenses = Join-Path $payload 'licenses'
 New-Item -ItemType Directory -Path $target,$media,$licenses,(Split-Path -Parent $output) -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $backend 'package.json'),(Join-Path $backend 'package-lock.json') -Destination $target
-foreach ($folder in @('src','migrations')) {
+foreach ($folder in @('src','migrations','integrations')) {
     $subdirectory = New-Item -ItemType Directory -Path (Join-Path $target $folder)
-    $extension = if ($folder -eq 'src') { '*.js' } else { '*.sql' }
+    $extension = if ($folder -eq 'src') { '*.js' } elseif ($folder -eq 'integrations') { '*.py' } else { '*.sql' }
     $tracked | Where-Object { $_ -like "backend/$folder/$extension" } | ForEach-Object {
         Copy-Item -LiteralPath (Join-Path $repo $_) -Destination $subdirectory.FullName
     }

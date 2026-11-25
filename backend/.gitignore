@@ -4,4 +4,5 @@ node_modules/
 !.env.example
 model-providers.local.json
 coverage/
+__pycache__/
 data/
