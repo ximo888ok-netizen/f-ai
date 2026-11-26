@@ -1,0 +1,280 @@
+/* 3-State Monochrome (Black / Gray / White) Dot-Matrix Frosted-Glass Switch
+   100% flicker-free 4-canvas architecture + unified workbench glass material */
+.theme-strip:has(.dm-switch-wrap),
+.glass-presets:has(.dm-switch-wrap),
+.mat-theme:has(.dm-switch-wrap) {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  overflow: visible !important;
+}
+
+.mat-theme:has(.dm-switch-wrap) {
+  display: flex;
+  justify-content: center;
+}
+
+.dm-switch-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: visible;
+}
+
+.dm-switch-wrap.dm-hero {
+  width: 100%;
+  margin: 12px 0 6px;
+}
+
+/* Iconic sculpted squircle-pill geometry matching the original 300x150 (r=46, thumb=134, r=36) proportions */
+.dm-switch-stage {
+  position: relative;
+  width: var(--dm-w, 272px);
+  height: var(--dm-h, 96px);
+  isolation: isolate;
+  overflow: visible;
+}
+
+.dm-switch-wrap.dm-compact .dm-switch-stage {
+  --dm-w: 122px;
+  --dm-h: 36px;
+  --dm-r: 13px;
+  --dm-pad: 3px;
+  --dm-thumb: 30px;
+  --dm-thumb-r: 10px;
+}
+
+.dm-switch-wrap.dm-hero .dm-switch-stage {
+  --dm-w: 272px;
+  --dm-h: 96px;
+  --dm-r: 30px;
+  --dm-pad: 6px;
+  --dm-thumb: 84px;
+  --dm-thumb-r: 23px;
+}
+
+/* Canvas 1: Far studio atmospheric bloom & 3-pass outer plasma glow (behind track) */
+.dm-aura-canvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--dm-w) + 120px);
+  height: calc(var(--dm-h) + 96px);
+  transform: translate3d(-50%, -50%, 0);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dm-switch-wrap.dm-compact .dm-aura-canvas {
+  width: calc(var(--dm-w) + 44px);
+  height: calc(var(--dm-h) + 34px);
+}
+
+/* Stationary recessed glass track: carries the ONLY backdrop-filter (zero moving-layer stutter!) */
+.dm-track {
+  position: relative;
+  width: var(--dm-w);
+  height: var(--dm-h);
+  border-radius: var(--dm-r);
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+  z-index: 5;
+  overflow: hidden;
+  border: 1px solid var(--dm-track-border, rgba(255, 255, 255, 0.14));
+  background: var(--dm-track-bg, linear-gradient(180deg, rgba(8, 11, 17, 0.72) 0%, rgba(14, 18, 26, 0.78) 100%));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 12px 28px -10px var(--cast-shadow, rgba(0, 0, 0, 0.55)),
+    inset 0 2px 9px rgba(0, 0, 0, 0.68),
+    inset 0 -1px 2px rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: var(--card-optics, var(--studio-panel-filter));
+  backdrop-filter: var(--card-optics, var(--studio-panel-filter));
+}
+
+:root[data-material="gray"] .dm-track {
+  --dm-track-border: rgba(255, 255, 255, 0.20);
+  --dm-track-bg: linear-gradient(180deg, rgba(44, 50, 60, 0.66) 0%, rgba(62, 70, 82, 0.72) 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 12px 26px -10px rgba(0, 0, 0, 0.36),
+    inset 0 2px 8px rgba(0, 0, 0, 0.42),
+    inset 0 -1px 2px rgba(255, 255, 255, 0.12);
+}
+
+:root[data-material="white"] .dm-track {
+  --dm-track-border: rgba(246, 249, 253, 0.72);
+  --dm-track-bg: linear-gradient(180deg, rgba(176, 187, 201, 0.58) 0%, rgba(206, 216, 228, 0.64) 100%);
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 34, 0.07),
+    0 10px 24px -10px rgba(15, 23, 42, 0.16),
+    inset 0 2px 7px rgba(15, 23, 42, 0.20),
+    inset 0 -1px 2px rgba(255, 255, 255, 0.68);
+}
+
+.dm-track:focus-visible {
+  outline: 2px solid var(--action, var(--studio-accent, #7BA8D1));
+  outline-offset: 2px;
+}
+
+/* Canvas 2: Soft ambient light spill across recessed glass track floor */
+.dm-floor-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* 3-slot semantic labels embedded softly inside the track floor */
+.dm-slots {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: center;
+  z-index: 7;
+  pointer-events: none;
+}
+
+.dm-slot-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(248, 250, 252, 0.50);
+  pointer-events: none;
+}
+
+.dm-switch-wrap.dm-compact .dm-slot-btn {
+  font-size: 10.5px;
+}
+
+:root[data-material="white"] .dm-slot-btn {
+  color: rgba(15, 23, 34, 0.56);
+}
+
+.dm-slot-btn[aria-pressed="true"] {
+  opacity: 0;
+}
+
+/* GPU-locked sliding frosted-glass thumb: ZERO backdrop-filter, ZERO CSS transitions! */
+.dm-thumb-mover {
+  position: absolute;
+  top: calc(var(--dm-pad) - 1px);
+  left: 0;
+  width: var(--dm-thumb);
+  height: var(--dm-thumb);
+  border-radius: var(--dm-thumb-r);
+  z-index: 10;
+  pointer-events: none;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  perspective: 640px;
+}
+
+.dm-thumb-body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--dm-thumb-r);
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  /* Static physical elevation shadow — never mutated per frame */
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.48),
+    0 2px 7px rgba(0, 0, 0, 0.34);
+}
+
+:root[data-material="white"] .dm-thumb-body {
+  box-shadow:
+    0 8px 20px rgba(15, 23, 42, 0.22),
+    0 2px 6px rgba(15, 23, 42, 0.14);
+}
+
+/* Canvas 3: Full 8-layer frosted glass optics + bead-blasted frost grain + dot-matrix LEDs */
+.dm-thumb-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Canvas 4: 4-layer razor-sharp incandescent plasma perimeter arc hugging exact pill outline */
+.dm-rim-canvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--dm-w) + 52px);
+  height: calc(var(--dm-h) + 52px);
+  transform: translate3d(-50%, -50%, 0);
+  pointer-events: none;
+  z-index: 14;
+}
+
+.dm-switch-wrap.dm-compact .dm-rim-canvas {
+  width: calc(var(--dm-w) + 24px);
+  height: calc(var(--dm-h) + 24px);
+}
+
+.dm-hero-meta {
+  width: var(--dm-w);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-tertiary, var(--sub));
+  padding: 0 2px;
+}
+
+.dm-sound-btn {
+  border: 1px solid var(--edge-subtle, var(--line));
+  background: var(--bg-input, transparent);
+  color: var(--text-secondary, var(--sub));
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11.5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dm-sound-btn:hover {
+  color: var(--text-primary, var(--ink));
+  border-color: var(--edge-strong, var(--line-strong));
+}
+
+@media (max-width: 720px) {
+  .dm-switch-wrap.dm-compact .dm-switch-stage {
+    --dm-w: 106px;
+    --dm-h: 32px;
+    --dm-r: 11px;
+    --dm-pad: 2px;
+    --dm-thumb: 28px;
+    --dm-thumb-r: 9px;
+  }
+  .dm-switch-wrap.dm-compact .dm-slot-btn {
+    font-size: 9.5px;
+  }
+}

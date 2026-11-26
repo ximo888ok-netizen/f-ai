@@ -93,7 +93,7 @@
     const brightness = Object.entries(modes).map(([id, name]) =>
       '<label><input type="radio" name="faiColorMode" value="' + id + '"><span>' + name + '</span></label>').join('');
     dialog.innerHTML = '<header class="ui-dialog-header"><h2 id="themeTitle">外观主题</h2><button class="ui-icon-button themeClose" type="button" aria-label="关闭主题选择">×</button></header>' +
-      '<div class="ui-dialog-body"><fieldset class="appearanceModes"><legend>显示模式</legend><div>' + brightness +
+      '<div class="ui-dialog-body"><div class="mat-theme" role="group" aria-label="黑白灰点阵切换"></div><fieldset class="appearanceModes"><legend>显示模式</legend><div>' + brightness +
       '</div></fieldset><fieldset class="themeGrid"><legend>主题配色</legend>' + choices + '</fieldset></div>' +
       '<form class="ui-dialog-footer" method="dialog"><button class="primary">完成</button></form>';
     dialog.querySelector('#themeTitle').textContent = '玻璃材质与外观';

@@ -60,6 +60,8 @@ test('Studio entry only serves real app code and current theme components', asyn
     assert.match(body, /type="module" src="\/studio\/liquid-glass\.js"/);
     assert.match(body, /\/studio\/studio-wallpaper\.css/);
     assert.match(body, /type="module" src="\/studio\/studio-wallpaper\.js"/);
+    assert.match(body, /\/studio\/dot-matrix-switch\.css/);
+    assert.match(body, /\/studio\/dot-matrix-switch\.js/);
   }
   for (const [file, contentType] of [
     ['liquid-glass.css', 'text/css; charset=utf-8'],
@@ -70,6 +72,8 @@ test('Studio entry only serves real app code and current theme components', asyn
     ['liquid-glass.js', 'text/javascript; charset=utf-8'],
     ['studio-wallpaper.css', 'text/css; charset=utf-8'],
     ['studio-wallpaper.js', 'text/javascript; charset=utf-8'],
+    ['dot-matrix-switch.css', 'text/css; charset=utf-8'],
+    ['dot-matrix-switch.js', 'text/javascript; charset=utf-8'],
     ['assets/optic-wave.webp', 'image/webp'],
     ['assets/leather.webp', 'image/webp'],
     ['assets/citrus.webp', 'image/webp'],

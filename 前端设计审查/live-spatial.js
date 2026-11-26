@@ -186,6 +186,9 @@ export function mountGlassField(host) {
   };
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const forced = matchMedia('(forced-colors: active)');
+  const targetPalette = () => root.dataset.scheme === 'light' ? colors.white : root.dataset.theme === 'noir' ? colors.gray : colors.black;
+  const clonePal = c => [[...c[0]], [...c[1]], [...c[2]], [...c[3]], c[4], c[5]];
+  let current = clonePal(targetPalette());
   let frame = 0, previous = 0, time = 18, x = .5, y = .5;
   function draw(now) {
     frame = 0;
@@ -194,23 +197,32 @@ export function mountGlassField(host) {
     if (!visible) return;
     const speed = Number(root.style.getPropertyValue('--flow-speed') || 1);
     const moving = root.dataset.motion !== 'off' && !reduced.matches && speed > 0;
-    if (!previous || now - previous >= 48 || !moving) {
-      if (moving && previous) time += Math.min(.12, (now - previous) / 1000) * .22 * speed;
+    const target = targetPalette();
+    let maxDiff = 0;
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) maxDiff = Math.max(maxDiff, Math.abs(target[i][j] - current[i][j]));
+    maxDiff = Math.max(maxDiff, Math.abs(target[4] - current[4]), Math.abs(target[5] - current[5]));
+    const blending = maxDiff > 0.002 && !reduced.matches;
+    if (!previous || blending || now - previous >= 48 || !moving) {
+      const dt = previous ? Math.min(.12, (now - previous) / 1000) : 0.016;
+      if (moving && previous) time += dt * .22 * speed;
       previous = now;
+      const rate = blending ? (1 - Math.exp(-9.5 * dt)) : 1;
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) current[i][j] += (target[i][j] - current[i][j]) * rate;
+      current[4] += (target[4] - current[4]) * rate;
+      current[5] += (target[5] - current[5]) * rate;
       const scale = Math.min(.45, 760 / innerWidth);
       const width = Math.max(1, Math.round(innerWidth * scale)), height = Math.max(1, Math.round(innerHeight * scale));
       if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
       gl.viewport(0, 0, width, height);
-      const c = root.dataset.scheme === 'light' ? colors.white : root.dataset.theme === 'noir' ? colors.gray : colors.black;
       gl.uniform2f(uniforms.uRes, width, height);
       gl.uniform1f(uniforms.uTime, time);
       gl.uniform2f(uniforms.uMouse, x, y);
-      for (const [i, name] of ['uBaseDeep','uBaseMid','uHighlight','uCaustic'].entries()) gl.uniform3fv(uniforms[name], c[i]);
-      gl.uniform1f(uniforms.uSpecular, c[4]);
-      gl.uniform1f(uniforms.uRidgeDark, c[5]);
+      for (const [i, name] of ['uBaseDeep','uBaseMid','uHighlight','uCaustic'].entries()) gl.uniform3fv(uniforms[name], current[i]);
+      gl.uniform1f(uniforms.uSpecular, current[4]);
+      gl.uniform1f(uniforms.uRidgeDark, current[5]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
-    if (moving) frame = requestAnimationFrame(draw);
+    if (moving || blending) frame = requestAnimationFrame(draw);
   }
   function refresh() {
     cancelAnimationFrame(frame);
