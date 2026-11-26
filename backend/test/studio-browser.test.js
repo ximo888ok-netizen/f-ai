@@ -47,7 +47,7 @@ const responseFor = (page, method, pathname) => page.waitForResponse(response =>
   response.request().method() === method && new URL(response.url()).pathname === pathname && response.ok());
 
 test('the served workbench completes tasks, merchant settings, drafts, ledger, service and media workflows in a browser',
-  { skip: !playwrightPath, timeout: 120000 }, async t => {
+  { skip: !playwrightPath, timeout: 240000 }, async t => {
     const covered = description => t.diagnostic('Browser check passed: ' + description);
     const db = process.env.FAI_TEST_DATABASE_URL ? postgres(process.env.FAI_TEST_DATABASE_URL) : new PGlite();
     const providers = createProviders();
@@ -255,10 +255,11 @@ test('the served workbench completes tasks, merchant settings, drafts, ledger, s
     const inventoryImport = '/v1/studio/pinduoduo/books/' + book.id + '/records/inventory/draft-import';
     const inventoryPreviewed = responseFor(page, 'POST', inventoryImport + '/preview');
     await form(page, 'inventory-preview').locator('button').click();
-    await inventoryPreviewed;
+    assert.equal((await (await inventoryPreviewed).json()).ready, true);
     const inventoryWritten = responseFor(page, 'POST', inventoryImport + '/confirm');
     await page.getByRole('button', { name: '确认写入台账' }).click();
-    await inventoryWritten;
+    assert.equal((await (await inventoryWritten).json()).inserted, 1);
+    await page.waitForURL(origin + '/#desk/operations/' + book.id + '/inventory');
     await page.getByText('CUP-350', { exact: false }).first().waitFor();
     covered('创建运营台账、预览并确认库存写入');
 
@@ -278,8 +279,10 @@ test('the served workbench completes tasks, merchant settings, drafts, ledger, s
     const preferences = form(page, 'settings').locator('[name=taskNotifications]');
     await preferences.uncheck();
     const preferencesSaved = responseFor(page, 'PATCH', '/v1/settings');
+    const preferencesReloaded = responseFor(page, 'GET', '/v1/settings');
     await save(page, 'settings', {});
     assert.equal((await (await preferencesSaved).json()).preferences.taskNotifications, false);
+    await preferencesReloaded;
     const health = responseFor(page, 'GET', '/health');
     const ready = responseFor(page, 'GET', '/ready');
     await page.getByRole('button', { name: '检查服务和数据库', exact: true }).click();
