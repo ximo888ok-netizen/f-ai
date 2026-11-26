@@ -1,6 +1,6 @@
 import { assetDetails, searchable } from './live-record-tools.js';
 import { settings } from './live-settings.js';
-import { categoryDocs, categoryPage, knowledgeDocument, webSearch } from './live-knowledge-tools.js';
+import { categoryDocs, categoryPage, customerScopeField, knowledgeDocument, readCustomerScope, webSearch } from './live-knowledge-tools.js';
 
 import { action, date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, result, select, textarea, toast, uid } from './live.js';
 import { downloadAsset } from './live-tasks.js';
@@ -56,7 +56,7 @@ async function projects(ctx) {
 
 async function team(ctx) {
   const token = /^[A-Za-z0-9_-]{43}$/.test(ctx.args[0] ?? '') ? ctx.args[0] : '';
-  ctx.html(heading('企业邀请') +
+  ctx.html(heading('企业邀请', '使用由企业管理员生成的一次性邀请码加入工作区。') +
     (ctx.enterprise && ctx.manager ? '<p><a class="smallbtn" href="/merchant#members">在商家后台管理成员</a></p>' : '') +
     panel('接受企业邀请', form('accept', field('一次性邀请码',
       input('token', 'required minlength="43" maxlength="43" autocomplete="off" value="' + h(token) + '"')), '接受邀请')));
@@ -93,14 +93,14 @@ async function resources(ctx) {
   if (documentId === 'categories') return categoryPage(ctx, id);
   if (documentId === 'category') return categoryDocs(ctx, id, ctx.args[2]);
   if (documentId) return knowledgeDocument(ctx, id, documentId);
-  const [bases, docs, roster, grants] = await Promise.all([ctx.all(basesPath), ctx.all(documents), members(ctx),
-    ctx.manager && ctx.enterprise ? ctx.all(endpoint+'/grants') : []]);
+  const [bases, docs, roster, grants, products] = await Promise.all([ctx.all(basesPath), ctx.all(documents), members(ctx),
+    ctx.manager && ctx.enterprise ? ctx.all(endpoint+'/grants') : [], ctx.manager ? ctx.all('/v1/studio/products') : []]);
   const base = bases.find(base => base.id === id);
   const eligible = roster.filter(member => member.role === 'member' && !grants.some(g=>g.accountId===member.id));
   ctx.html(heading(base?.name ?? '知识库') + link('文档分类', 'resources/' + id + '/categories') + panel('已上传文档', list(docs, doc => item(doc.name, doc.category,
     link('阅读', 'resources/' + id + '/' + doc.id) + (ctx.manager ? action('删除', 'delete-document', doc.id) : '')))) +
     (ctx.manager ? grid(panel('添加文本资料', form('add-doc', field('名称', input('name', 'required maxlength="200"')) +
-      field('分类', input('category', 'maxlength="100"')) + field('正文', textarea('content', 'maxlength="200000"')) +
+      field('分类', input('category', 'maxlength="100"')) + customerScopeField(products) + field('正文', textarea('content', 'maxlength="200000"')) +
       field('或读取 UTF-8 文本文件', input('file', 'type="file" accept=".txt,text/plain"')), '保存文档')),
       panel('库设置', form('rename-base', nameField('知识库名称', base?.name), '保存名称') + action('删除知识库', 'delete-base')),
       ...(ctx.enterprise ? [panel('文档访问授权',list(grants,g=>item(roster.find(m=>m.id===g.accountId)?.displayName??g.accountId,'已授权',action('撤销访问','remove-grant',g.accountId)),'暂无单独授权的成员。')+
@@ -109,7 +109,8 @@ async function resources(ctx) {
   ctx.submit('add-doc', async data => {
     const file = data.get('file');
     const content = file.size ? await file.text() : data.get('content');
-    await post(ctx, documents, { name: data.get('name'), category: data.get('category') || undefined, content });
+    await post(ctx, documents, { name: data.get('name'), category: data.get('category') || undefined, content,
+      customerScope: readCustomerScope(data.get('customerScope')) });
     ctx.reload();
   });
   ctx.submit('rename-base', async data => { await patch(ctx, endpoint, body(data)); ctx.reload(); });
@@ -198,8 +199,8 @@ const operations = { credit:'入账', reserve:'预占', release:'释放', settle
 async function account(ctx) {
   const [wallet, ledger, roster, spending] = await Promise.all([ctx.api('/v1/credits/wallet'), ctx.all('/v1/credits/ledger'), members(ctx), ctx.api('/v1/credits/limit')]);
   const recipients = roster.filter(member => member.id !== ctx.account.id);
-  ctx.html(heading('账户与积分') + grid(panel('当前账号', item(ctx.account.displayName, ctx.account.email, action('退出登录', 'logout'))),
-    panel('积分钱包', item(wallet.available + ' 可用积分', '总额 ' + wallet.balance + ' · 预占 ' + wallet.reserved) + notice('累计任务消费 '+spending.spent+' · 额度上限 '+(spending.limit ?? '不限'))),
+  ctx.html(heading('AI 加油站', '查看工作区积分额度、消费与分配记录。') + grid(panel('当前账号', item(ctx.account.displayName, ctx.account.email, action('退出登录', 'logout'))),
+    panel('积分钱包', item(wallet.available + ' 可用积分', '总额 ' + wallet.balance + ' · 预占 ' + wallet.reserved) + notice('累计任务消费 '+spending.spent+' · 额度上限 '+(spending.limit ?? '不限')) + notice('当前部署未配置在线充值。')),
     ...(recipients.length ? [panel('分配积分', form('allocate', pickMember(recipients) +
       field('积分数量', input('amount', 'type="number" min="1" max="1000000" required')), '确认分配'))] : [])) +
     panel('积分流水', list(ledger, entry => item((operations[entry.operation] ?? entry.operation) + ' · ' + entry.amount, date(entry.createdAt) + ' · ' + entry.reference))));
@@ -216,6 +217,7 @@ async function account(ctx) {
 async function inbox(ctx) {
   const [summary, messages] = await Promise.all([ctx.api('/v1/notifications?limit=1'), ctx.all('/v1/notifications')]);
   const types = { 'task.succeeded':'任务成功', 'task.failed':'任务失败', 'task.cancelled':'任务取消',
+    'member.joined':'已加入企业工作区', 'member.role-changed':'工作区角色已变更', 'member.state-changed':'成员状态已变更',
     ...Object.fromEntries(Object.entries(rightsActions).map(([key,label])=>['rights.'+key,label])),
   };
   ctx.html(heading('消息中心', summary.unread + ' 条未读') + link('全部通知','inbox') + link('仅看未读','inbox/unread') +

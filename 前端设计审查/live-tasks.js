@@ -84,7 +84,9 @@ async function create(ctx, args = ctx.args) {
   const edit=await editContext(ctx,capability,args);
   if (!ctx.active()) return;
   const description = '本次任务 ' + capability.cost + ' 积分 · 当前可用 ' + wallet.available + ' 积分';
-  const taskFields = form('task', fields, capability.requiresConfirmation ? '生成变更预览' : chat ? '发送消息' : '提交任务');
+  const preflight = ['image.try-on', 'image.replace-product', 'video.try-on', 'video.replace-product'].includes(capability.id)
+    ? notice('请先在素材详情保存源文件预检。工具需要授权素材时，也需登记授权凭证。') + link('打开素材库预检', 'assets') : '';
+  const taskFields = preflight + form('task', fields, capability.requiresConfirmation ? '生成变更预览' : chat ? '发送消息' : '提交任务');
   if (plugin.id === 'image') {
     renderImageTool(ctx, capability, description, editSummary(edit), taskFields);
   } else {
@@ -94,7 +96,10 @@ async function create(ctx, args = ctx.args) {
   const taskForm = document.querySelector('[data-form=task]');
   restoreInputs(taskForm, edit);
   taskIntake(taskForm, capability);
-  if (plugin.id === 'image') bindImageTool(ctx, capability, taskForm);
+  if (plugin.id === 'image') {
+    const planner = plugins.find(entry => entry.id === 'models')?.capabilities.find(tool => tool.id === 'model.chat');
+    bindImageTool(ctx, capability, taskForm, planner);
+  }
   ctx.on('[name=productRecord]', 'change', node => {
     const product = products.find(entry => entry.id === node.value);
     if (product) document.querySelector('[name="params.product"]').value = [product.name, product.sku, product.description].join('\n').slice(0, 4000);
@@ -183,6 +188,7 @@ async function tasks(ctx) {
   if (!ctx.active()) return;
   const capability = plugins.flatMap(plugin => plugin.capabilities).find(entry => entry.id === task.capabilityId);
   const output = task.result;
+  const outputFiles = Array.isArray(output?.files) ? output.files : [];
   const voice = task.capabilityId === 'model.voice-turn';
   const showStream = task.streamed && pending(task);
   const externalUrl = httpsUrl(output?.url);
@@ -192,7 +198,7 @@ async function tasks(ctx) {
     if (voice) outputPanel += '<h3>录音转写</h3>' + result(output.transcript) + '<h3>模型回答</h3>' + result(output.answer);
     if (['image','video'].includes(output.type)) outputPanel += notice('AI 生成');
     if (output.assetId) {
-      outputPanel += action('下载结果', 'asset-download', output.assetId) + link('在素材库查看', 'assets') + '<div id="media-result"></div>';
+      outputPanel += action('下载结果', 'asset-download', output.assetId) + link('在素材库查看', 'assets/' + path(output.assetId)) + '<div id="media-result"></div>';
       if (['image/png','image/jpeg'].includes(output.mediaType)) {
         outputPanel += action('下载带标识图片','delivery-download',output.assetId) + link('用作新草稿主图', 'drafts/new/image/' + path(output.assetId));
       } else if (output.mediaType==='video/mp4') {
@@ -201,11 +207,19 @@ async function tasks(ctx) {
           link('调整画幅或导出音轨','media/video/'+output.assetId);
         else outputPanel += notice('当前部署未启用视频标识导出。');
       }
+      if (outputFiles.length > 1) {
+        outputPanel += '<h3>成品文件</h3>' + list(outputFiles, file => item(file.name, file.mediaType,
+          link('查看素材', 'assets/' + path(file.assetId)) + action('下载成品', 'task-file-download', file.assetId)));
+      }
+      if (outputFiles.length && output.text) outputPanel += '<h3>制作说明</h3>' + result(output.text);
     }
     else if (externalUrl) outputPanel += mediaTag(externalUrl, output.type) + '<a class="smallbtn" href="' + h(externalUrl) +
       '" target="_blank" rel="noopener noreferrer">打开生成结果</a>';
     else if (output.text !== undefined) {
       outputPanel += result(output.text);
+      if (task.pluginId === 'copywriting' && typeof output.text === 'string' && output.text.trim()) {
+        outputPanel += link('保存为文案草稿', 'copy-drafts/new/' + path(task.id));
+      }
       if(typeof output.text==='string'&&output.text)outputPanel+=textDelivery(output.text,capability?cardTitle(capability):task.capabilityId,ctx.manager?await ctx.all('/v1/knowledge/bases'):[]);
       if (typeof output.text === 'string' && output.text.length && output.text.length <= 8000) {
         outputPanel += link('用作新草稿描述', 'drafts/new/text/' + path(task.id));
@@ -214,14 +228,15 @@ async function tasks(ctx) {
     else outputPanel += result(output);
   }
   const controls = (task.state === 'queued' && task.attempts === 0 ? action('取消任务', 'cancel-task') : '') +
-    (!pending(task) && capability && !capability.requiresConfirmation && capability.available ? action('重新生成', 'regenerate-task') : '');
+    (task.imagePlan ? (task.imagePlan.canRetry ? action('重试此图', 'regenerate-task') : '') :
+      (!pending(task) && capability && !capability.requiresConfirmation && capability.available ? action('重新生成', 'regenerate-task') : ''));
   const parent=task.parentId?link('查看原任务',taskRoute(task.parentId)):'';
-  const revise=!pending(task)&&capability&&!voice?link('修改参数再提交','create/'+capability.pluginId+'/'+capability.id+'/revise/'+path(id)):'';
+  const revise=!task.imagePlan&&!pending(task)&&capability&&!voice?link('修改参数再提交','create/'+capability.pluginId+'/'+capability.id+'/revise/'+path(id)):'';
   const follow=task.capabilityId==='model.chat'&&task.state==='succeeded'&&output?.text?link('继续这段对话','models/follow/'+path(id)):'';
   if (!ctx.active()) return;
   ctx.html(heading(capability ? cardTitle(capability) : task.capabilityId, task.id) +
     panel('执行状态', '<div id="execution-state">' + item(states[task.state], date(task.updatedAt) + ' · ' +
-      task.cost + ' 积分' + (task.featureVersion ? ' · 功能版本 ' + task.featureVersion : '') + (task.errorCode ? ' · ' + task.errorCode : ''), controls+revise+follow+parent) + '</div>' +
+      task.cost + ' 积分' + (task.featureVersion ? ' · 功能版本 ' + task.featureVersion : '') + (task.errorCode ? ' · ' + task.errorCode : ''), controls+revise+follow+parent+(task.imagePlan ? link('查看整组方案', 'image-plans/' + path(task.imagePlan.planId)) : '')) + '</div>' +
       '<div data-task-trace>' + notice('正在读取执行轨迹…') + '</div>'+journalPanel()) +
     (showStream ? replyStreamPanel() : '') + (outputPanel ? panel('实际结果', outputPanel) : '') +
     '<div class="live-row">' + (voice ? link('继续语音问答', 'models/voice') : task.capabilityId === 'model.chat' ? link('返回文字对话', 'models') : '') +
@@ -244,6 +259,10 @@ async function tasks(ctx) {
   });
   ctx.click('asset-download', asset => downloadAsset(ctx, asset, task.id + extension));
   ctx.click('delivery-download',asset=>downloadAsset(ctx,asset,'delivery-'+task.id+extension,'delivery'));
+  ctx.click('task-file-download', asset => {
+    const file = outputFiles.find(entry => entry.assetId === asset);
+    if (file) return downloadAsset(ctx, asset, file.name);
+  });
   if (output?.assetId && ['image','audio','video'].includes(output.type)) {
     try {
       const response = await ctx.api('/v1/assets/' + path(output.assetId) + '/content', { raw: true });

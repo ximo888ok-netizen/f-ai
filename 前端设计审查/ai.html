@@ -525,6 +525,41 @@
       overflow: visible;
     }
 
+    /* 新建任务顶栏：沿用点阵开关的高度，文字控件按内容取宽。 */
+    .titlebar:has([data-stage="chat"][aria-current="page"]) {
+      --task-bar-height: 36px;
+      --caption-size: var(--control-size);
+
+      & :is(.brand-mark, .menu-item, .stage-switcher, .material-trigger, .credit-pill, .icon-btn) {
+        box-sizing: border-box;
+        height: var(--task-bar-height);
+        padding-block: 0;
+      }
+      & :is(.brand-mark, .menu-item, .switcher-btn, .material-trigger, .credit-pill, .dm-compact .dm-slot-btn) {
+        font-size: var(--control-size);
+        line-height: 1.25;
+      }
+      & .icon-btn { width: var(--task-bar-height); }
+      & .stage-switcher { padding-block: 4px; }
+      & .switcher-btn { align-self: stretch; padding-block: 0; }
+
+      @media (max-width: 720px) {
+        --task-bar-height: 32px;
+      }
+      @media (max-width: 420px) {
+        column-gap: 4px;
+        & :is(.titlebar-left, .titlebar-right, .brand-mark, .material-trigger) { gap: 4px; }
+        & .brand-mark { padding-inline: 0; }
+        & .brand-orb { width: 24px; height: 24px; }
+        & .material-trigger { padding-inline: 6px; }
+        & .dm-compact .dm-switch-stage { --dm-w: 84px; }
+      }
+      @media (max-width: 360px) {
+        margin-inline: 5px;
+        padding-inline: 5px;
+      }
+    }
+
     .titlebar-left {
       display: flex;
       align-items: center;
@@ -2913,6 +2948,8 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
           <a href="/merchant" id="merchantLink" hidden>商家后台</a>
           <a href="#tasks" id="queueLink" hidden>任务记录</a>
           <span id="connection" class="localState" role="status">正在连接</span>
+          <a href="#account">AI 加油站</a>
+          <a href="#team">去邀约</a>
           <a href="#account" class="account-balance" data-account-balance></a>
           <a href="#settings">设置与诊断</a>
           <button type="button" data-account-appearance>外观与壁纸</button>
@@ -3133,7 +3170,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
 
 
             <div class="studio-right">
-              <div class="glass-card brief-panel stagger-card"><h2>创作要求</h2><div data-brief-mount=""></div><div class="prompt-chips"><button type="button" class="smallbtn" data-brief-chip="保持商品外观">+ 保持商品外观</button><button type="button" class="smallbtn" data-brief-chip="突出材质细节">+ 突出材质细节</button><button type="button" class="smallbtn" data-brief-chip="使用简洁背景">+ 使用简洁背景</button></div></div>
+              <div class="glass-card brief-panel stagger-card"><div class="panel-header"><h2>创作要求</h2><button type="button" class="smallbtn" data-brief-assist="" hidden="">AI 帮写</button></div><div data-brief-assist-status="" role="status"></div><div data-brief-mount=""></div><div class="prompt-chips"><button type="button" class="smallbtn" data-brief-chip="保持商品外观">+ 保持商品外观</button><button type="button" class="smallbtn" data-brief-chip="突出材质细节">+ 突出材质细节</button><button type="button" class="smallbtn" data-brief-chip="使用简洁背景">+ 使用简洁背景</button></div></div>
 
               <div class="glass-card result-panel stagger-card"><div class="panel-header"><h2>生成结果</h2><div class="live-row"><a class="smallbtn" href="#psd">PSD 分层设计</a><a class="smallbtn" href="#tasks">任务记录</a></div></div><div data-tool-results="">正在读取最近任务…</div></div>
             </div>

@@ -11,6 +11,8 @@ import { modelDefinitions } from './config.js';
 import { installModels } from './models.js';
 import { startWorker } from './worker.js';
 import { createVideoDelivery } from './video-delivery.js';
+import { createRealtimeBindings } from './realtime-provider.js';
+import { createSmsBindings } from './tencent-sms.js';
 
 const port = Number(process.env.FAI_LOCAL_STUDIO_PORT ?? 8080);
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid FAI_LOCAL_STUDIO_PORT');
@@ -24,7 +26,8 @@ const db = new PGlite(stateDir ? join(stateDir,'database') : undefined);
 let app;
 try {
   await migrate(db);
-  const dependencies = { db, providers: installModels(createProviders(),modelDefinitions()), shops: new Map() };
+  const dependencies = { db, providers: installModels(createProviders(), modelDefinitions()), shops: new Map(),
+    realtimeVoice: createRealtimeBindings(), sms: createSmsBindings() };
   const previewPassword = !stateDir && process.env.FAI_PREVIEW_ADMIN_PASSWORD;
   if (previewPassword) {
     const account = await seedPreviewAdmin(db, previewPassword);

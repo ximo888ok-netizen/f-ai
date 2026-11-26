@@ -2,11 +2,11 @@ import { modelProviders } from './merchant-connections.js';
 import { createHash } from 'node:crypto';
 import { catalog, modelAlias } from './catalog.js';
 import { invalid, object, route as httpRoute, text } from './http.js';
-import { requestProviderStream, requestUpstream } from './model-http.js';
-import { streamChat } from './model-stream.js';
+import { modelBaseUrl, requestProviderStream, requestUpstream } from './model-http.js';
+import { supportsTextStream, streamText } from './model-stream.js';
 import { generateImage, supportsImageQuality } from './model-image.js';
 import { pollMapped, runMapped, validateMappedMedia, validateMapping } from './model-mapping.js';
-import { generateText, textCapabilities, textPrompt } from './model-text.js';
+import { generateText, textCapabilities, textPrompt, textRequest } from './model-text.js';
 import { utilityCapabilities, runUtility } from './model-utilities.js';
 import { pollVideo, startVideo } from './model-video.js';
 
@@ -18,15 +18,6 @@ const protocols = {
 };
 const idPattern=modelAlias.pattern;
 export const modelIdSchema=modelAlias;
-
-function cleanBase(raw) {
-  const base = new URL(raw);
-  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname);
-  if ((base.protocol !== 'https:' && !(base.protocol === 'http:' && loopback)) ||
-    base.username || base.password || base.search || base.hash) throw new Error('Invalid model baseUrl');
-  if (!base.pathname.endsWith('/')) base.pathname += '/';
-  return { base, loopback };
-}
 
 function validateParameters(config, capability, params) {
   if (config.kind === 'rerank' && params.topN > params.documents.length) throw invalid('topN exceeds the document count');
@@ -100,7 +91,7 @@ export function installModels(providers, definitions, env = process.env) {
     else if (!Object.hasOwn(protocols, entry.protocol)) throw new Error('Unknown model protocol');
     if (entry.apiKeyHeader && (entry.protocol !== 'chat-completions' || entry.apiKeyHeader !== 'api-key')) throw new Error('Unsupported model key header');
     const kind = entry.protocol === 'json-http' ? entry.mapping.kind : protocols[entry.protocol];
-    const { base, loopback } = cleanBase(entry.baseUrl);
+    const { base, loopback } = modelBaseUrl(entry.baseUrl);
     if (entry.keyEnv !== undefined && (typeof entry.keyEnv !== 'string' || !/^[A-Z_][A-Z0-9_]*$/.test(entry.keyEnv))) throw new Error('Invalid model keyEnv');
     const key = entry.keyEnv && env[entry.keyEnv];
     if (!key && (!loopback || entry.keyEnv)) throw new Error('Missing credentials for model ' + entry.id);
@@ -112,8 +103,8 @@ export function installModels(providers, definitions, env = process.env) {
     const headers = headersFor(config, key);
     if (entry.streamText!==undefined && typeof entry.streamText!=='boolean') throw new Error('streamText must be a boolean');
     const streaming=entry.streamText===true;
-    if (streaming && (config.protocol!=='chat-completions' || !capabilities.includes('model.chat'))) {
-      throw new Error('Text streaming requires a Chat Completions model with model.chat');
+    if (streaming && (!supportsTextStream(config.protocol) || !capabilities.includes('model.chat'))) {
+      throw new Error('Text streaming requires a supported streaming protocol with model.chat');
     }
     const info = { id: config.id, model: config.model, protocol: config.protocol, kind, capabilities: [...new Set(capabilities)],
       streamText: streaming, imageQuality: supportsImageQuality(config) };
@@ -141,9 +132,9 @@ export function installModels(providers, definitions, env = process.env) {
       },
     };
     if (streaming) adapter.streamText=async (payload,writeChunk)=>{
-      const body={model:config.model,messages:payload.parameters.messages,stream:true};
-      const content=await requestProviderStream(new URL('chat/completions',base),{headers,body});
-      return streamChat(config.id,content,writeChunk);
+      const [path,body]=textRequest(config,payload.parameters.messages);
+      const content=await requestProviderStream(new URL(path,base),{headers,body:{...body,stream:true}});
+      return streamText(config,content,writeChunk);
     };
     if (config.protocol === 'json-http' && entry.mapping.poll) adapter.poll = id => pollMapped(config, id, call);
     else if (config.protocol !== 'json-http' && kind === 'video') adapter.poll = id => pollVideo(config, id, call);

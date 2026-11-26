@@ -39,6 +39,10 @@ export const operationForms = {
     title: str('商品名称'), sku: str('商品 SKU',100), day: date('统计日期'),
     views: num('商品浏览次数'), visitors: num('访客数'), buyers: num('支付买家数'), salesMinor: money('成交金额（元）'),
   } },
+  traffic: { label: '流量来源', keyLabel: '渠道日记录编号', fields: {
+    day: date('统计日期'), channel: {label:'来源渠道',type:'choice',choices:['搜索','推荐','活动','其他']},
+    views: num('渠道浏览次数'),
+  } },
   campaigns: { label: '营销计划', keyLabel: '计划编号', fields: {
     title: str('活动名称'), start: date('开始日期'), end: date('结束日期'), status: status('筹备中','待确认','已归档'),
     sku: str('计划商品 SKU',100,true), pricePercent: num('计划成交价占原价百分比',1,100,true), budgetMinor: money('预算（元）', true), note: note('报名准备事项'),

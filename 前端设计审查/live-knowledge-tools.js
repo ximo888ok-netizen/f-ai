@@ -1,5 +1,16 @@
 import { action, field, form, h, heading, input, item, link, list, notice, panel, path, result, select, textarea } from './live-ui.js';
 
+export function customerScopeField(products, scope = null) {
+  return field('客服可引用范围', select('customerScope', [
+    ['', '仅工作区内部检索'], ['general', '通用客服知识'],
+    ...products.map(product => [product.id, product.sku + ' · ' + product.name]),
+  ], scope?.general ? 'general' : scope?.productId ?? ''));
+}
+
+export function readCustomerScope(value) {
+  return value === 'general' ? { general: true } : value ? { productId: value } : null;
+}
+
 export async function categoryPage(ctx, id) {
   const endpoint = '/v1/knowledge/bases/' + path(id) + '/categories';
   const categories = await ctx.all(endpoint);
@@ -28,14 +39,17 @@ export async function categoryDocs(ctx, id, categoryId) {
 
 export async function knowledgeDocument(ctx, id, documentId) {
   const url = '/v1/knowledge/bases/' + path(id) + '/documents/' + path(documentId);
-  const doc = await ctx.api(url);
+  const [doc, products] = await Promise.all([ctx.api(url), ctx.manager ? ctx.all('/v1/studio/products') : []]);
   ctx.html(heading(doc.name, doc.category) + link('返回知识库', 'resources/' + id) + panel('文档内容', result(doc.content)) +
     (ctx.manager ? '<details class="card live-panel live-fold"><summary>编辑文档</summary>' +
       form('edit-document', field('名称', input('name', 'required maxlength="200" value="' + h(doc.name) + '"')) +
         field('分类', input('category', 'maxlength="100" value="' + h(doc.category) + '"')) +
+        customerScopeField(products, doc.customerScope) +
         field('正文', textarea('content','required maxlength="200000"',doc.content)), '保存并更新检索内容') + '</details>' : ''));
   if (ctx.manager) ctx.submit('edit-document', async data => {
-    await ctx.api(url, { method:'PATCH', body:Object.fromEntries(data) }); ctx.reload();
+    const body = Object.fromEntries(data);
+    body.customerScope = readCustomerScope(body.customerScope);
+    await ctx.api(url, { method:'PATCH', body }); ctx.reload();
   });
 }
 

@@ -92,10 +92,19 @@ test('an exported MP4 contains the AI badge throughout and preserves the origina
   assert.notDeepEqual(response.rawPayload,original);
   assert.deepEqual((await call(app,member,'GET',asset+'/content')).rawPayload,original);
   await writeFile(delivered,response.rawPayload);
-  const {stdout}=await run(ffprobe,['-v','error','-show_entries','format=duration:format_tags:stream=codec_name','-of','json',delivered]);
-  const inspection=JSON.parse(stdout);
+  const probe=async path=>JSON.parse((await run(ffprobe,['-v','error','-show_entries',
+    'format=duration:format_tags:stream=codec_name,nb_frames,duration','-of','json',path])).stdout);
+  const input=await probe(source);
+  const inspection=await probe(delivered);
   assert.deepEqual(inspection.streams.map(stream=>stream.codec_name),['h264','aac']);
-  assert.equal(Number(inspection.format.duration),2);
+  assert.equal(Number(inspection.streams[0].nb_frames),48);
+  assert.equal(Number(inspection.format.duration),Number(input.format.duration));
+  assert.equal(Number(inspection.streams[1].duration),Number(input.streams[1].duration));
+  const audioHash=async path=>(await run(ffmpeg,['-v','error','-i',path,'-map','0:a:0',
+    '-c:a','copy','-f','hash','-hash','sha256','-'])).stdout.toString().trim();
+  const originalAudio=await audioHash(source);
+  assert.match(originalAudio,/^SHA256=[0-9a-f]{64}$/i);
+  assert.equal(await audioHash(delivered),originalAudio);
   assert.equal(inspection.format.tags.fai_ai_generated,'true');
   assert.equal(inspection.format.tags.fai_software,'F-AI Studio');
   assert.equal(inspection.format.tags.description,'AI-generated content');

@@ -6,7 +6,7 @@ import { onboarding, bindOnboarding } from './live-onboarding.js';
 import { date, generationModeTabs, h, heading, item, link, list, notice, panel, path } from './live-ui.js';
 import { cardTitle } from './live-task-fields.js';
 import { capabilityLinks } from './live-catalog.js';
-import { bindImageGeneration, imageGenerationForm } from './image-generation/index.js';
+import { bindImageGeneration, imageGenerationForm, imageGenerationTabs } from './image-generation/index.js';
 import { mainImageCapabilityId } from './image-generation/options.js';
 import { agentImagePlannerId } from './image-generation/agent.js';
 import { assetPreview } from './live-asset-preview.js';
@@ -97,7 +97,7 @@ export async function dashboard(ctx) {
   if (current === 'video') return videoDesk(ctx, plugin, wallet, tools, render, planning, tasks.items);
   if (imageGeneration) {
     if(ctx.args[1]==='skills'){
-      const nav=generationModeTabs('图片生成模式',[['quick','desk/image','快速模式'],['advanced','desk/image/advanced','高级模式'],['agent','desk/image/agent','Agent 生图'],['skills','desk/image/skills','平台图片技能']],'skills');
+      const nav = imageGenerationTabs('skills');
       const {mediaSkillDesk}=await import('./media-skill-desk.js');
       return mediaSkillDesk({...ctx,html:body=>{
         render(nav + dualModePanel('image') + body);
@@ -105,7 +105,8 @@ export async function dashboard(ctx) {
       }},plugin,wallet,ctx.args[2]);
     }
     render(dualModePanel('image') + imageGenerationForm(wallet, mainImage, mode, planning) +
-      '<details class="live-fold"><summary>更多图片工具</summary>' + tools + '</details>');
+      '<details class="live-fold"><summary>更多图片工具</summary><div class="live-row">' +
+      link('图片处理', 'media/images') + link('PSD 分层设计', 'psd') + '</div>' + tools + '</details>');
     bindImageGeneration(ctx, mainImage, wallet, planning);
     bindDualModePanel(document.querySelector('#main'), 'image');
     return;

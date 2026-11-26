@@ -3,6 +3,7 @@ import { GeneratedFile } from './model-file.js';
 import { MediaOutputs, storeMediaOutputs } from './media-skill-files.js';
 import { PendingModelJob } from './model-http.js';
 import { taskAssets } from './assets.js';
+import { checkImageInputs, needsImageReview } from './image-preflight.js';
 import { catalog } from './catalog.js';
 import { row, rows } from './db.js';
 import { ApiError } from './http.js';
@@ -14,7 +15,10 @@ import { requireFeature } from './merchant-features.js';
 import { accessibleProject } from './merchant-projects.js';
 import { logTask } from './task-events.js';
 import { dispatchFeishuReply } from './feishu-channel.js';
+import { dispatchSms } from './sms-channel.js';
+import { maintainRealtimeVoice } from './realtime-voice.js';
 import { appendTaskText } from './task-stream.js';
+import { decodeImage } from './raster.js';
 
 const maxAttempts = 3;
 
@@ -81,9 +85,11 @@ async function providerPayload(db, identityDb, task, capability, shops) {
     shopReference = shop.gatewayReference;
   }
   const ids = await taskAssets(db, context, assetIds ?? listing?.assetIds ?? [], capability);
-  const assets = ids.length ? await rows(db, 'SELECT id, media_type, data, consent_expires_at FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = ANY($3::uuid[]) AND NOT rights_restricted', [task.workspace_id, task.account_id, ids]) : [];
+  const assets = ids.length ? await rows(db, 'SELECT id, media_type, data, consent_expires_at, image_source_review FROM assets WHERE workspace_id = $1 AND account_id = $2 AND id = ANY($3::uuid[]) AND NOT rights_restricted', [task.workspace_id, task.account_id, ids]) : [];
   const assetsById = new Map(assets.map(asset => [asset.id, asset]));
   if (assets.length !== ids.length) throw new ProviderError('ASSET_REMOVED');
+  const orderedAssets=ids.map(id=>assetsById.get(id));
+  if (needsImageReview(capability)) checkImageInputs(capability,orderedAssets);
   if (capability.requiresConsent && assets.some(asset => new Date(asset.consent_expires_at).getTime() <= Date.now())) {
     throw new ProviderError('CONSENT_REQUIRED');
   }
@@ -95,10 +101,7 @@ async function providerPayload(db, identityDb, task, capability, shops) {
     capabilityId: capability.id, mode, parameters: providerParameters,
     ...(task.input.imageQuality ? { imageQuality: task.input.imageQuality } : {}),
     ...(shopReference ? { shopReference } : {}),
-    assets: ids.map(id => {
-      const asset = assetsById.get(id);
-      return { mediaType: asset.media_type, dataBase64: Buffer.from(asset.data).toString('base64') };
-    }),
+    assets: orderedAssets.map(asset=>({mediaType:asset.media_type,dataBase64:Buffer.from(asset.data).toString('base64')})),
   };
 }
 
@@ -131,7 +134,17 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
         result=await provider.streamText(payload,(sequence,text)=>appendTaskText(db,task,sequence,text));
       } else result=await provider.run(task,payload);
     }
+    if (task.input.requireImageAsset && !(result instanceof PendingModelJob)) {
+      if (!(result instanceof GeneratedFile)) result = GeneratedFile.image(result?.dataBase64, result?.mediaType);
+      if (!['image/png','image/jpeg'].includes(result.mediaType)) throw new ProviderError('INVALID_PROVIDER_IMAGE');
+      try {
+        await decodeImage(result.bytes);
+      } catch {
+        throw new ProviderError('INVALID_PROVIDER_IMAGE');
+      }
+    }
   } catch (error) {
+    if (task.input.requireImageAsset) result = undefined;
     if (error instanceof ApiError) failure = new ProviderError(error.code);
     else if (error instanceof ProviderError) failure = error;
     else failure = new ProviderError('TASK_EXECUTION_ERROR', (!provider?.signature && !provider?.nonRepeatable) || Boolean(task.provider_job_id));
@@ -176,7 +189,7 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
   return true;
 }
 
-export function startWorker(dependencies, logger) {
+function pollDatabase(dependencies,logger,processDatabase,interval) {
   let stopping = false;
   let timer;
   let pending;
@@ -184,18 +197,10 @@ export function startWorker(dependencies, logger) {
     if (stopping) return;
     pending = Promise.resolve()
       .then(() => dependencies.resolveDatabase ? dependencies.resolveDatabase() : dependencies.db)
-      .then(async db => {
-        if (!db) return;
-        const scoped = { ...dependencies, db };
-        const tasks = dispatchSchedule(scoped).then(() => workOnce(scoped));
-        const results = await Promise.allSettled(scoped.feishu ? [tasks,dispatchFeishuReply(scoped)] : [tasks]);
-        for (const result of results) {
-          if (result.status==='rejected') logger.error('Background work could not be processed');
-        }
-      })
+      .then(db => db && processDatabase(db))
       .catch(() => logger.error('Background work could not be processed'))
       .finally(() => {
-        if (!stopping) timer = setTimeout(run, 500);
+        if (!stopping) timer = setTimeout(run, interval);
       });
   };
   run();
@@ -204,4 +209,21 @@ export function startWorker(dependencies, logger) {
     clearTimeout(timer);
     await pending;
   };
+}
+
+export function startWorker(dependencies, logger) {
+  const stopTasks = pollDatabase(dependencies,logger,async db => {
+    const scoped = {...dependencies,db};
+    const tasks = dispatchSchedule(scoped).then(() => workOnce(scoped));
+    const results = await Promise.allSettled(scoped.feishu ? [tasks,dispatchFeishuReply(scoped)] : [tasks]);
+    for (const result of results) {
+      if (result.status === 'rejected') logger.error('Background work could not be processed');
+    }
+  },500);
+  // Expiring a call must not wait for an unrelated long-running model task.
+  const stopVoice = dependencies.realtimeVoice && pollDatabase(dependencies,logger,
+    db => maintainRealtimeVoice(db,dependencies.realtimeVoice),1000);
+  const stopSms = dependencies.sms && pollDatabase(dependencies,logger,
+    db => dispatchSms({...dependencies,db}),1000);
+  return async () => { await Promise.all([stopTasks(),stopVoice?.(),stopSms?.()]); };
 }

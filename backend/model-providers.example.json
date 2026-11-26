@@ -11,6 +11,7 @@
     "enabled": false,
     "id": "openai-responses",
     "protocol": "responses",
+    "streamText": true,
     "baseUrl": "https://api.openai.com/v1",
     "model": "REPLACE_WITH_MODEL_ID",
     "keyEnv": "FAI_OPENAI_KEY"
@@ -51,6 +52,7 @@
     "enabled": false,
     "id": "claude",
     "protocol": "anthropic-messages",
+    "streamText": true,
     "baseUrl": "https://api.anthropic.com/v1",
     "model": "REPLACE_WITH_MODEL_ID",
     "keyEnv": "FAI_ANTHROPIC_KEY"

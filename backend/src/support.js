@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { row, rows } from './db.js';
 import { capabilityId } from './catalog.js';
+import { registerMemoryChanges } from './memory-changes.js';
 import { array, bool, choice, integer, invalid, notFound, object, page, paginate, requireEnterprise, requireManager, route, text, uuid } from './http.js';
 
 const notificationTags = ['Notifications'];
@@ -15,7 +16,7 @@ const preferenceSchema = object({
   favoriteCapabilities: { ...array(capabilityId, capabilityId.enum.length), uniqueItems: true },
   locale: choice('zh-CN', 'en-US'),
   onboardingStep: integer(0, 6),
-  doNotDisturb: bool, taskNotifications: bool, memberNotifications: bool, rememberConversations: bool,
+  doNotDisturb: bool, taskNotifications: bool, memberNotifications: bool, rightsNotifications: bool, rememberConversations: bool,
 }, []);
 
 export function registerSupport(app, db) {
@@ -59,15 +60,18 @@ export function registerSupport(app, db) {
   ].join(' '), [request.context.workspaceId, request.context.accountId, request.body]));
 
   const scopeSchema = choice('personal', 'enterprise');
-  const memoryFields = 'id, content, scope, created_at AS "createdAt"';
+  registerMemoryChanges(app, db);
+  const memoryFields = 'id, content, scope, revision, created_at AS "createdAt"';
   route(app, 'GET', '/v1/memory', {
     tags: memoryTags, summary: 'Read personal or enterprise memory in the current workspace',
-    querystring: object({ scope: scopeSchema, ...page.properties }, ['scope']),
+    querystring: object({ scope: scopeSchema, q:text(200), ...page.properties }, ['scope']),
   }, async request => {
     const { workspaceId, accountId } = request.context;
     const { scope } = request.query;
     if (scope === 'enterprise') requireEnterprise(request);
-    return { items: await rows(db, 'SELECT ' + memoryFields + " FROM memory_items WHERE workspace_id = $1 AND scope = $3 AND (scope = 'enterprise' OR account_id = $2) ORDER BY created_at DESC, id LIMIT $4 OFFSET $5", [workspaceId, accountId, scope, ...paginate(request.query)]) };
+    return { items: await rows(db, 'SELECT ' + memoryFields + " FROM memory_items WHERE workspace_id = $1 AND scope = $3 AND (scope = 'enterprise' OR account_id = $2) " +
+      'AND ($6::text IS NULL OR strpos(lower(content),lower($6))>0) ORDER BY created_at DESC,id LIMIT $4 OFFSET $5',
+    [workspaceId, accountId, scope, ...paginate(request.query),request.query.q?.trim() || null]) };
   });
 
   route(app, 'POST', '/v1/memory', {

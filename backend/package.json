@@ -1,6 +1,6 @@
 {
   "name": "@f-ai/backend",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Backend API for the f-ai e-commerce platform",
@@ -11,6 +11,16 @@
     "start": "node src/server.js",
     "studio:demo": "node --env-file-if-exists=.env.preview.local src/local-studio.js",
     "migrate": "node src/admin.js migrate",
+    "ops:probe": "node src/ops-probe.js",
+    "ops:logs": "node src/task-log-export.js",
+    "ops:observe": "node src/ops-observation.js",
+    "ops:capacity": "node src/deployment-capacity.js",
+    "ops:directories": "node src/directory-diagnostics.js",
+    "release:inventory": "node src/package-inventory.js",
+    "release:offline": "node ops/build-offline.mjs",
+    "release:verify": "node src/verify-offline-release.js",
+    "accept:deployment": "node acceptance/deployment.mjs",
+    "db:credential": "node src/database-credentials.js",
     "db:backup": "node src/admin.js backup",
     "db:restore": "node src/admin.js restore-backup",
     "credits": "node src/admin.js credits",
@@ -26,7 +36,8 @@
     "ag-psd": "34.2.2",
     "fastify": "^5.12.8",
     "image-size": "2.1.0",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "sax": "1.6.1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.17"

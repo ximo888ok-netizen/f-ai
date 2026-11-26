@@ -7,7 +7,7 @@ const endpoint='/v1/customer-service/conversations';
 const roles={customer:'买家',assistant:'AI 客服',operator:'人工客服'};
 const msgTime=v=>new Date(v).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
 
-export function inboxPane(ctx,shops,bases) {
+export function inboxPane(ctx,shops,bases,products) {
   const shopList=[['','全部店铺'],['local','未关联店铺'],...shops.filter(s=>s.enabled).map(s=>[s.id,s.name])];
   return '<div class="inbox-layout"><aside class="inbox-rail"><header class="scene-panel-title">'+studioIcon('service')+'<h2>会话队列</h2><button type="button" class="inbox-add" aria-label="新建会话" title="新建会话" data-inbox-new>'+studioIcon('plus')+'</button></header>'+
     field('店铺范围',select('inboxShop',shopList,rememberedShop(ctx,shops)))+
@@ -20,6 +20,7 @@ export function inboxPane(ctx,shops,bases) {
     '<dialog class="scene-dialog" data-inbox-dialog><header><h2>新建工作台会话</h2>'+action('关闭','close-new')+'</header>'+
     form('new-conversation',field('主题',input('subject','required maxlength="160" placeholder="本次咨询的主题"'))+
       (ctx.manager?field('关联店铺',select('shopId',[['','工作区会话'],...shopList.slice(2)],rememberedShop(ctx,shops))):'')+
+      (products.length ? field('关联商品（选填）',select('productId',[['','不关联'],...products.map(product=>[product.id,product.sku+' · '+product.name])])) : '')+
       field('商品编号（选填）',input('productReference','maxlength="100"'))+field('订单编号（选填）',input('orderReference','maxlength="100"'))+
       (bases.length?field('可引用的知识库',select('baseId',bases.map(b=>[b.id,b.name]),undefined,'multiple')):''),'创建会话')+'</dialog>';
 }
@@ -135,7 +136,7 @@ export async function bindInbox(ctx,{shops,conversations,replies,initial,onDraft
   ctx.click('close-new',()=>dialog.close());
   ctx.submit('new-conversation',async f=>{
     const body={subject:f.get('subject').trim(),knowledgeBaseIds:f.getAll('baseId')};
-    for(const key of ['shopId','productReference','orderReference'])if(f.get(key)?.trim())body[key]=f.get(key).trim();
+    for(const key of ['shopId','productId','productReference','orderReference'])if(f.get(key)?.trim())body[key]=f.get(key).trim();
     const created=await ctx.api(endpoint,{method:'POST',body});if(!ctx.active())return;
     dialog.close();dialog.querySelector('form').reset();all.unshift(created);filter='all';
     root.querySelectorAll('[data-inbox-filter]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.inboxFilter==='all')));

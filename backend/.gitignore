@@ -6,3 +6,6 @@ model-providers.local.json
 coverage/
 __pycache__/
 data/
+*.dbcred
+*.dbcred.*.tmp
+*.dbkeys.json

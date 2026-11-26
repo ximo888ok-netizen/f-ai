@@ -1,17 +1,65 @@
 import assert from 'node:assert/strict';
-import { createCipheriv, createHash, randomUUID } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { buildApp } from '../src/app.js';
 import { migrate, postgres } from '../src/db.js';
 import { createWebdavBindings } from '../src/webdav.js';
 import { createFeishuBindings } from '../src/feishu.js';
+import { createWechatBindings } from '../src/wechat-channel.js';
 import { dispatchFeishuReply } from '../src/feishu-channel.js';
 import { ProviderError } from '../src/model-http.js';
 
 const newDatabase=()=>process.env.FAI_TEST_DATABASE_URL?postgres(process.env.FAI_TEST_DATABASE_URL):new PGlite();
 const publicKey='fixture-event-encryption-key';
 const verification='fixture-verification-token';
+
+test('WeChat official account and WeCom application verify callbacks, deduplicate text and deliver encrypted replies',async()=>{
+  const db=newDatabase(), wechat=new Map();
+  const app=await buildApp({db,wechat});
+  try {
+    await migrate(db);
+    const owner=await register(app,'wx-owner@example.test'), other=await register(app,'wx-other@example.test');
+    const token=randomBytes(12).toString('hex'), key=randomBytes(32);
+    for (const channel of ['wechat','wecom']) {
+      const receiver=channel==='wechat'?'wxFixtureApp':'wwFixtureCorp', recipient=channel==='wechat'?'gh_qa':receiver;
+      const settings={channel,id:'test',workspaceId:owner.workspaceId,receiver,recipient,agentId:'1001',
+        tokenEnv:'TEST_TOKEN',keyEnv:'TEST_KEY',replyText:'收到 & 已记录'};
+      const config=createWechatBindings({WECHAT_BINDINGS_JSON:JSON.stringify([settings]),TEST_TOKEN:token,TEST_KEY:key.toString('base64').slice(0,-1)});
+      for (const [name,binding] of config) wechat.set(name,binding);
+      const seal=plain=>{
+        const bytes=Buffer.from(plain), size=Buffer.alloc(4);size.writeUInt32BE(bytes.length);
+        const raw=Buffer.concat([randomBytes(16),size,bytes,Buffer.from(receiver)]), pad=32-raw.length%32;
+        const cipher=createCipheriv('aes-256-cbc',key,key.subarray(0,16)).setAutoPadding(false);
+        return Buffer.concat([cipher.update(Buffer.concat([raw,Buffer.alloc(pad,pad)])),cipher.final()]).toString('base64');
+      };
+      const path='/v1/channels/'+channel+'/test/callback', ts=String(Math.floor(Date.now()/1000)),nonce='n123';
+      const hash=(...parts)=>createHash('sha1').update(parts.sort().join('')).digest('hex');
+      const echo=channel==='wechat'?'12345':seal('12345');
+      const getQuery=channel==='wechat'?{signature:hash(token,ts,nonce)}:{msg_signature:hash(token,ts,nonce,echo)};
+      assert.equal((await app.inject(path+'?'+new URLSearchParams({...getQuery,timestamp:ts,nonce,echostr:echo}))).body,'12345');
+      const payload=seal('<xml><ToUserName>'+recipient+'</ToUserName><FromUserName>qa-user</FromUserName><MsgType>text</MsgType>'+
+        '<MsgId>998877</MsgId><AgentID>1001</AgentID><Content><![CDATA[两种规格 & 库存]]></Content></xml>');
+      const send=sig=>app.inject({method:'POST',url:path+'?'+new URLSearchParams({msg_signature:sig,nonce,timestamp:ts}),
+        headers:{'content-type':'application/xml'},payload:'<xml><Encrypt><![CDATA['+payload+']]></Encrypt></xml>'});
+      assert.equal((await send('0'.repeat(40))).statusCode,401);
+      for (const reply of await Promise.all([send(hash(token,ts,nonce,payload)),send(hash(token,ts,nonce,payload))])) {
+        assert.equal(reply.statusCode,200);
+        const tag=name=>new RegExp('<'+name+'>([^<]+)</'+name+'>').exec(reply.body)[1];
+        assert.equal(tag('MsgSignature'),hash(token,tag('TimeStamp'),tag('Nonce'),tag('Encrypt')));
+        const decipher=createDecipheriv('aes-256-cbc',key,key.subarray(0,16)).setAutoPadding(false);
+        const raw=Buffer.concat([decipher.update(Buffer.from(tag('Encrypt'),'base64')),decipher.final()]);
+        assert.ok(raw.subarray(20,20+raw.readUInt32BE(16)).toString().includes('收到 &amp; 已记录'));
+        assert.equal(raw.subarray(20+raw.readUInt32BE(16),raw.length-raw.at(-1)).toString(),receiver);
+      }
+      const inbox='/v1/channels/'+channel+'/inbox';
+      const entries=json(await call(app,owner,'GET',inbox),200);
+      assert.equal(entries.available,true);
+      assert.deepEqual(entries.items.map(i=>i.content),['两种规格 & 库存']);
+      assert.deepEqual(json(await call(app,other,'GET',inbox),200),{available:false,items:[]});
+    }
+  } finally {await app.close();await db.close();}
+});
 
 async function register(app,email) {
   const result=await app.inject({method:'POST',url:'/v1/auth/register',payload:{

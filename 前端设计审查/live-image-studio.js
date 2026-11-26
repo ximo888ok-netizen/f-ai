@@ -1,7 +1,9 @@
+import { waitForModelTask } from './live-agent-model.js';
 import { assetPreview } from './live-asset-preview.js';
-import { action, date, field, form, h, heading, input, item, link, list, notice, panel, path, retryKey, select, toast } from './live.js';
+import { action, date, field, form, h, heading, input, item, link, list, notice, panel, path, retryKey, select, toast, uid } from './live.js';
 import { downloadFile } from './live-files.js';
 import { assetField, editRows, imageFiles, numeric, rowControls, toggleFields } from './live-media-controls.js';
+import { bindImagePresets, imagePresetPanels, loadImagePresets } from './live-image-presets.js';
 
 const root='/v1/media/images/batches';
 const profiles=[
@@ -16,13 +18,15 @@ const failures={
   OUTPUT_TOO_LARGE:'导出的文件大于 10 MiB',
 };
 
-function imageRow(files,assetId) {
+function imageRow(files,templates,assetId) {
   return '<fieldset data-edit-row><legend>处理项</legend>' +
     '<div class="live-image-layout"><div class="live-image-source">' +
     '<div class="live-original" data-source-preview aria-live="polite">选择主体图片后可查看原图</div>' +
     assetField('主体图片','source',files,assetId,true,'选择图片') + '</div><div class="live-fields">' +
     field('SKU 或处理名称',input('key','required maxlength="100"')) +
-    field('画布尺寸',select('size',profiles,'square')) +
+    field('画布尺寸',select('size',[...profiles,...templates.map(template=>[
+      template.platform,template.label+' · '+template.width+' × '+template.height,
+    ])],'square')) +
     '<div class="live-fields" data-image-size>' + numeric('自定义宽度','width',800,32,1920) +
     numeric('自定义高度','height',800,32,6144) + '</div>' +
     '<div data-image-scale>'+numeric('放大倍数','scale',2,2,4)+'</div>' +
@@ -30,8 +34,8 @@ function imageRow(files,assetId) {
     field('图片组成',select('composition',[['single','单张图片'],['stack','纵向拼接']], 'single')) +
     '<div class="live-fields" data-image-stack>' + [2,3,4,5,6].map(index=>
       assetField('第 '+index+' 张图','panel',files)).join('') + '</div>' +
-    field('适配方式',select('fit',[['contain','等比保留完整图片'],['cover','等比裁切填满']], 'contain')) +
-    field('格式',select('format',[['png','PNG'],['jpeg','JPG']], 'png')) +
+    '<div data-image-format>'+field('适配方式',select('fit',[['contain','等比保留完整图片'],['cover','等比裁切填满']], 'contain')) +
+    field('格式',select('format',[['png','PNG'],['jpeg','JPG']], 'png')) + '</div>' +
     field('背景方式',select('backgroundMode',[['default','使用默认背景'],['color','纯色背景'],['transparent','透明背景'],
       ['asset','使用背景图片']], 'default')) +
     '<div data-image-color>'+field('纯色背景颜色',input('background','type="color" value="#ffffff"'))+'</div>' +
@@ -44,7 +48,7 @@ function imageRow(files,assetId) {
     '</div></details></div></div>' + rowControls('移除处理项') + '</fieldset>';
 }
 
-function imageFields(row) {
+function imageFields(row,templates) {
   const controls=row.elements;
   const value=name=>controls.namedItem(name).value;
   const stack=value('composition')==='stack';
@@ -58,6 +62,7 @@ function imageFields(row) {
   toggleFields(row,'[data-image-stack]',stack);
   toggleFields(row,'[data-image-size]',size.value==='custom');
   toggleFields(row,'[data-image-scale]',size.value==='scale');
+  toggleFields(row,'[data-image-format]',!templates.some(template=>template.platform===size.value));
   toggleFields(row,'[data-image-color]',background.value==='color');
   toggleFields(row,'[data-image-background]',background.value==='asset');
   toggleFields(row,'[data-image-edit]',!stack);
@@ -68,16 +73,21 @@ function imageFields(row) {
   toggleFields(row,'[data-image-replace]',edit==='replace-region');
 }
 
-function readJob(row) {
+function readJob(row,templates) {
   const value=name=>row.elements.namedItem(name).value;
   const stack=value('composition')==='stack';
   const panels=stack?[...row.querySelectorAll('[name=panel]')].map(node=>node.value).filter(Boolean):[];
   if (stack && !panels.length) throw new Error('纵向拼接需要至少两张图片。');
-  const body={key:value('key').trim(),assetIds:[value('source'),...panels],fit:value('fit'),format:value('format')};
+  const body={key:value('key').trim(),assetIds:[value('source'),...panels]};
   const size=value('size');
-  if (size==='custom') Object.assign(body,{width:Number(value('width')),height:Number(value('height'))});
-  else if (size==='scale') body.scale=Number(value('scale'));
-  else body.profile=size;
+  const template=templates.find(entry=>entry.platform===size);
+  if (template) body.platformTemplate={platform:template.platform,revision:template.revision};
+  else {
+    Object.assign(body,{fit:value('fit'),format:value('format')});
+    if (size==='custom') Object.assign(body,{width:Number(value('width')),height:Number(value('height'))});
+    else if (size==='scale') body.scale=Number(value('scale'));
+    else body.profile=size;
+  }
   const background=value('backgroundMode');
   if (background==='color') body.background=value('background');
   if (background==='transparent') body.background='transparent';
@@ -91,7 +101,7 @@ function readJob(row) {
     if (method==='tint') body.edit.color=value('color');
     if (method==='replace-region') body.edit.replacementAssetId=value('replacementAssetId');
   }
-  if (body.format==='jpeg' && (background==='transparent' || (background==='default' && method==='cutout'))) {
+  if ((template?.format ?? body.format)==='jpeg' && (background==='transparent' || (background==='default' && method==='cutout'))) {
     throw new Error('透明背景需要 PNG，请更换格式或选择背景。');
   }
   return body;
@@ -106,19 +116,21 @@ function batchResults(batch) {
 }
 
 export async function imageStudio(ctx,id,assetId,navigation) {
-  const [assets,batch]=await Promise.all([ctx.all('/v1/assets'),id?ctx.api(root+'/'+path(id)):null]);
+  const [assets,batch,presets]=await Promise.all([ctx.all('/v1/assets'),id?ctx.api(root+'/'+path(id)):null,loadImagePresets(ctx)]);
+  const {templates}=presets;
   const files=imageFiles(assets);
-  const controls=files.length?form('image-batch','<div class="live-fields" data-edit-rows>'+imageRow(files,assetId)+'</div>'+
+  const controls=files.length?form('image-batch','<div class="live-fields" data-edit-rows>'+imageRow(files,templates,assetId)+'</div>'+
     '<button type="button" class="plain" data-row-command="add">添加处理项</button>','开始处理') :
     notice('请先在素材库上传 PNG 或 JPEG 图片。');
   ctx.html(heading('图片处理')+navigation+link('打开素材库','assets')+
-    (batch?batchResults(batch):'')+panel('新批次',controls));
+    (batch?batchResults(batch):'')+panel('新批次',controls)+imagePresetPanels(ctx,presets,files));
   if (!ctx.active()) return;
+  bindImagePresets(ctx,presets,root);
   const editor=document.querySelector('[data-form=image-batch]');
   if (editor) {
     const previews = new WeakMap();
-    editRows(editor, () => imageRow(files), 8, { update(row) {
-      imageFields(row);
+    editRows(editor, () => imageRow(files,templates), 8, { update(row) {
+      imageFields(row,templates);
       const source = row.elements.namedItem('source');
       if (!previews.has(row)) previews.set(row, assetPreview(ctx, row.querySelector('[data-source-preview]')));
       if (source.value !== (row.dataset.previewSource ?? '')) {
@@ -130,7 +142,7 @@ export async function imageStudio(ctx,id,assetId,navigation) {
   }
   const key=retryKey();
   ctx.submit('image-batch',async (_data,node)=>{
-    const items=[...node.querySelectorAll('[data-edit-row]')].map(readJob);
+    const items=[...node.querySelectorAll('[data-edit-row]')].map(row=>readJob(row,templates));
     const saved=await ctx.api(root,{method:'POST',body:{id:key(items),items}});
     toast('批次处理完成，结果已记录');
     ctx.go('media/images/'+saved.id);
@@ -164,7 +176,7 @@ export function renderImageTool(ctx, capability, cost, summary, fields) {
   ctx.html(template.firstElementChild.outerHTML);
 }
 
-export function bindImageTool(ctx, capability, taskForm) {
+export function bindImageTool(ctx, capability, taskForm, planner) {
   const brief = document.querySelector('[data-brief-mount]');
   const prompt = taskForm.elements['params.prompt'];
   taskForm.id = 'image-task';
@@ -192,6 +204,43 @@ export function bindImageTool(ctx, capability, taskForm) {
       prompt.dispatchEvent(new Event('input', { bubbles: true }));
       prompt.focus();
     };
+  }
+  const helper = document.querySelector('[data-brief-assist]');
+  if (planner?.available) {
+    const status = document.querySelector('[data-brief-assist-status]');
+    helper.hidden = false;
+    helper.textContent = 'AI 帮写 · ' + planner.cost + ' 积分';
+    let attempt;
+    ctx.click('brief-assist', async () => {
+      const text = prompt.value.trim();
+      if (!text) throw new Error('先输入商品与画面的基本要求。');
+      if (attempt?.text !== text) attempt = { text, key: uid() };
+      attempt.task ??= await ctx.api('/v1/tasks', { method: 'POST', body: {
+        capabilityId: planner.id, mode: 'workflow', idempotencyKey: attempt.key,
+        parameters: { messages: [
+          { role: 'system', content: '你是电商图片策划师。精炼图片创作要求，保留用户提供的事实，禁止补造数值、认证或承诺。只返回改写后的要求。' },
+          { role: 'user', content: text },
+        ] },
+      } });
+      if (!ctx.active()) return;
+      status.innerHTML = link('查看帮写任务', 'tasks/' + path(attempt.task.id));
+      attempt.task = await waitForModelTask(ctx, attempt.task, 30000);
+      if (!ctx.active()) return;
+      if (['queued', 'running'].includes(attempt.task.state)) {
+        toast('帮写仍在进行，再次点击可继续查看同一任务。');
+        return;
+      }
+      const output = attempt.task.result?.text;
+      attempt = undefined;
+      if (typeof output !== 'string' || !output.trim()) throw new Error('帮写暂未完成，请在任务记录查看详情。');
+      if (prompt.value.trim() !== text || output.length > prompt.maxLength) {
+        toast('帮写已完成，可从任务记录查看完整内容。');
+        return;
+      }
+      prompt.value = output.trim();
+      prompt.dispatchEvent(new Event('input', { bubbles: true }));
+      prompt.focus();
+    });
   }
   const results = document.querySelector('[data-tool-results]');
   ctx.api('/v1/tasks?limit=30').then(({ items }) => {

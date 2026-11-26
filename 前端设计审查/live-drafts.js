@@ -127,16 +127,23 @@ export async function listingDrafts(ctx) {
         link('继续编辑', 'drafts/' + record.id)), '还没有保存的商品草稿。'))));
     return;
   }
-  const [draft, assets, task] = await Promise.all([
+  const [draft, assets, task, imagePlan] = await Promise.all([
     id === 'new' ? { id: uid(), revision: 0, images: [], variants: [] } : ctx.api(endpoint + '/' + path(id)),
     ctx.all('/v1/assets'),
     id === 'new' && view === 'text' && source ? ctx.api('/v1/tasks/' + path(source)) : null,
+    id === 'new' && view === 'plan' && source ? ctx.api('/v1/media/images/product-plans/' + path(source)) : null,
   ]);
   if (!ctx.active()) return;
   const imageOptions = assets.filter(a => ['image/jpeg','image/png'].includes(a.mediaType)).map(a => [a.id, a.name]);
   if (id === 'new' && view === 'image') {
     if (!imageOptions.some(([assetId]) => assetId === source)) throw new Error('当前工作区找不到这张图片');
     draft.images = [{ role: 'main', assetId: source }];
+  }
+  if (imagePlan) {
+    const usable = imagePlan.images.filter(image => image.state === 'succeeded' && imageOptions.some(([key]) => key === image.assetId));
+    if (!usable.some(image => image.role === 'main')) throw new Error('商品组图方案没有可使用的主图。');
+    draft.title = imagePlan.source.productName;
+    draft.images = usable.map(({ role, assetId }) => ({ role, assetId }));
   }
   if (task) {
     const description = task.result?.text;

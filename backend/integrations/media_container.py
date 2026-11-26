@@ -17,6 +17,21 @@ KEYS={"linkpix":"QHKIT_TOKEN","dlazy":"DLAZY_API_KEY","fal":"FAL_KEY","wan":"DAS
       "commerce":"OPENAI_API_KEY","minimax":"MINIMAX_API_KEY","runway":"RUNWAY_MCP_TOKEN","vidu":"VIDU_TOKEN"}
 IMAGE_TYPES={".png",".jpg",".jpeg",".webp"}
 SOURCE=Path(sys.argv[2]).resolve() if __name__=="__main__" and len(sys.argv)>2 else Path("/opt/source")
+PROFILE=Path("/opt/vendor-profile")
+
+
+def has_profile_files():
+    if not PROFILE.is_dir() or PROFILE.is_symlink():
+        return False
+    for root, _, files in os.walk(PROFILE, followlinks=False):
+        for name in files:
+            path=Path(root)/name
+            try:
+                if not path.is_symlink() and path.is_file() and path.stat().st_size>0:
+                    return True
+            except OSError:
+                continue
+    return False
 
 
 def preflight(source,files,alias):
@@ -29,7 +44,7 @@ def preflight(source,files,alias):
     if source=="firered":deps.append("websockets")
     if source=="suite":deps.extend(["numpy","dotenv"])
     if not all(importlib.util.find_spec(d) is not None for d in deps):return "runtime_unavailable"
-    profile=Path("/opt/vendor-profile").is_dir()
+    profile=source in {"minimax","dlazy","vidu","kling","pixverse","ark"} and has_profile_files()
     if source in KEYS and not os.environ.get(KEYS[source]) and not (profile and source in {"minimax","dlazy","vidu"}):return "credentials_required"
     if source in {"kling","pixverse","ark"} and not profile:return "credentials_required"
     if source=="kling" and not os.environ.get("MEDIA_IMAGE_MODEL" if alias.startswith("image-") else "MEDIA_VIDEO_MODEL"):return "model_required"
@@ -84,7 +99,7 @@ def execute(req):
     with tempfile.TemporaryDirectory() as directory:
         work=Path(directory);out=work/"out";out.mkdir()
         home=work/"home";home.mkdir()
-        if Path("/opt/vendor-profile").is_dir():shutil.copytree("/opt/vendor-profile",home,dirs_exist_ok=True)
+        if PROFILE.is_dir():shutil.copytree(PROFILE,home,dirs_exist_ok=True)
         os.environ.update(HOME=str(home),USERPROFILE=str(home))
         if os.name=="nt":os.environ.update(APPDATA=str(home),LOCALAPPDATA=str(home))
         inputs=[]

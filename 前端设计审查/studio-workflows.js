@@ -14,8 +14,8 @@ export function productionSection(route, args) {
   if (route === 'create' && Object.hasOwn(deskSections, args[0])) return args[0];
   if (['shops', 'products', 'roi', 'drafts', 'commerce'].includes(route)) return 'operations';
   if (route === 'customer') return 'customer-service';
-  if (route === 'copy-review') return 'copywriting';
-  if (route === 'psd' || (route === 'media' && args[0] === 'images')) return 'image';
+  if (['copy-review', 'copy-drafts'].includes(route)) return 'copywriting';
+  if (['psd', 'image-plans'].includes(route) || (route === 'media' && args[0] === 'images')) return 'image';
   if (route === 'media' && ['storyboards', 'video'].includes(args[0])) return 'video';
   return '';
 }

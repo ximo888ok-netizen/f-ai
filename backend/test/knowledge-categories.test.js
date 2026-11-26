@@ -84,3 +84,26 @@ test('knowledge category migration backfills labels without rewriting existing d
     assert.deepEqual(rows,[{name:'Existing label',content:'Legacy text'}]);
   } finally { await db.close(); }
 });
+
+test('product scope migration binds only a SKU known to predate the conversation and keeps old documents unclassified',async t=>{
+  const db=new PGlite();
+  t.after(()=>db.close());
+  const files=(await migrationFiles()).filter(file=>file<'025_');
+  for (const file of files) await db.exec(await readFile(new URL('../migrations/'+file,import.meta.url),'utf8'));
+  await db.exec('CREATE TABLE migrations (name text PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now())');
+  await db.query('INSERT INTO migrations(name) SELECT unnest($1::text[])',[files]);
+  const workspace=randomUUID(),account=randomUUID(),product=randomUUID(),base=randomUUID(),doc=randomUUID();
+  await db.query("INSERT INTO workspaces(id,kind,name) VALUES($1,'enterprise','QA')",[workspace]);
+  await db.query("INSERT INTO accounts(id,email,password_hash,display_name,account_type) VALUES($1,'old@example.test','fixture','QA','enterprise')",[account]);
+  await db.query("INSERT INTO memberships VALUES($1,$2,'owner',now())",[workspace,account]);
+  await db.query("INSERT INTO studio_products(id,workspace_id,sku,name,updated_at) VALUES($1,$2,'SKU','Same name','2025-01-02')",[product,workspace]);
+  await db.query("INSERT INTO knowledge_bases(id,workspace_id,name) VALUES($1,$2,'QA')",[base,workspace]);
+  await db.query("INSERT INTO documents(id,workspace_id,base_id,name,content) VALUES($1,$2,$3,'Legacy','Unreviewed product facts')",[doc,workspace,base]);
+  for (const createdAt of ['2025-01-01','2025-01-03']) {
+    await db.query(`INSERT INTO service_conversations(id,workspace_id,account_id,subject,state,product_reference,created_at)
+      VALUES($1,$2,$3,'QA','assistant','SKU',$4)`,[randomUUID(),workspace,account,createdAt]);
+  }
+  await migrate(db);
+  assert.deepEqual((await db.query('SELECT product_id FROM service_conversations ORDER BY created_at')).rows.map(r=>r.product_id),[null,product]);
+  assert.equal((await db.query('SELECT customer_scope FROM documents WHERE id=$1',[doc])).rows[0].customer_scope,null);
+});

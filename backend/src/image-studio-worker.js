@@ -64,7 +64,16 @@ async function render({job,sources}) {
     ctx.fillRect(0,0,width,height);
   }
   if (backdrop) drawFitted(ctx,byId.get(backdrop),0,0,width,height,'cover');
-  images.forEach((image,index)=>{
+  if (job.series) {
+    const {subjectBox:box,font,textColor,caption}=job.series;
+    drawFitted(ctx,images[0],width*box.x/100,height*box.y/100,width*box.width/100,height*box.height/100,fit);
+    if (caption) {
+      const size=Math.max(1,Math.round(Math.min(width,height)*job.series.fontSizePercent/100));
+      ctx.font=size+'px '+(font==='chinese'?'"Noto Sans CJK SC", "Microsoft YaHei", sans-serif':'Arial, "Liberation Sans", sans-serif');
+      ctx.fillStyle=textColor;
+      ctx.fillText(caption,width*0.04,height*0.94,width*0.92);
+    }
+  } else images.forEach((image,index)=>{
     const start=Math.round(index*height/images.length);
     const end=Math.round((index+1)*height/images.length);
     drawFitted(ctx,image,0,start,width,end-start,fit);

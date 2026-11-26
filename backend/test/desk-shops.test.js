@@ -34,7 +34,15 @@ test('shared shop directory, scoped chats and one-use merchant authorization',as
   assert.deepEqual((await api(200,'GET',base,b)).items,[]);
   const convo={subject:'测试咨询',shopId:s.id};
   await api(404,'POST','/v1/customer-service/conversations',b,convo);
-  assert.equal((await api(201,'POST','/v1/customer-service/conversations',a,convo)).shopId,s.id);
+  const products='/v1/studio/products', conversations='/v1/customer-service/conversations';
+  const product=await api(201,'POST',products,a,{sku:'SHOP-1',name:'测试商品',description:'商品描述'});
+  const conversation=await api(201,'POST',conversations,a,{...convo,productId:product.id});
+  assert.equal(conversation.shopId,s.id);
+  assert.equal(conversation.productId,product.id);
+  assert.equal(conversation.productReference,product.sku);
+  const {conversation: persisted}=await api(200,'GET',conversations+'/'+conversation.id+'/messages',a);
+  assert.equal(persisted.shopId,s.id);
+  assert.equal(persisted.productId,product.id);
   const query={shopId:s.id,operation:'get_order_list',params:{}};
   await api(409,'POST','/v1/integrations/mcp-cn-commerce/query',a,query);
   const start=await api(200,'POST',base+'/'+s.id+'/authorize',a);

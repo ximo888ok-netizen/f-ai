@@ -4,6 +4,7 @@ import { featureAllowed, requireFeature, updateFeature } from './merchant-featur
 import { randomUUID } from 'node:crypto';
 import { digest } from './auth.js';
 import { taskAssets } from './assets.js';
+import { needsImageReview } from './image-preflight.js';
 import { capabilityId, capabilityRules, catalog, plugins } from './catalog.js';
 import { row, rows } from './db.js';
 import { ApiError, bool, choice, freeObject, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
@@ -13,6 +14,7 @@ import { finishCredits, reserveCredits } from './wallet.js';
 import { accessibleProject } from './merchant-projects.js';
 import { guidedMessages } from './workspace-library.js';
 import { notify } from './notifications.js';
+import { imageDelivery, imagePlanRetryUrl } from './product-image-contract.js';
 import { logTask, registerTaskEvents } from './task-events.js';
 import { registerTaskStream } from './task-stream.js';
 
@@ -23,9 +25,32 @@ const taskFields = [
   'id', 'capability_id AS "capabilityId"', 'plugin_id AS "pluginId"', 'project_id AS "projectId"',
   'parent_id AS "parentId"', 'feature_version AS "featureVersion"', "CASE WHEN provider_id LIKE 'model:%' THEN substr(provider_id, 7) END AS \"modelId\"", 'state', 'cost', 'attempts', 'result', 'error_code AS "errorCode"',
   'created_at AS "createdAt"', 'updated_at AS "updatedAt"',
+  `CASE WHEN plugin_id='copywriting' AND capability_id<>'copywriting.detect-terms'
+    THEN coalesce((input->'parameters'->>'templateVersion')::integer,1) END AS "templateVersion"`,
   "COALESCE(capability_id = 'model.chat' AND input->'parameters'->'stream' = 'true'::jsonb, false) AS streamed",
 ].join(', ');
 const stateSchema = choice('queued', 'running', 'succeeded', 'failed', 'cancelled');
+const taskReadFields = taskFields + `, COALESCE((SELECT MAX(e.id) FROM task_events e WHERE e.task_id=tasks.id),0)::text AS "eventCursor",
+  (SELECT jsonb_build_object('planId',a.plan_id,'position',a.position,'attempt',a.attempt,'assetId',asset.id,'latest',
+    NOT EXISTS(SELECT 1 FROM product_image_attempts successor WHERE successor.workspace_id=a.workspace_id
+      AND successor.account_id=a.account_id AND successor.plan_id=a.plan_id AND successor.position=a.position
+      AND successor.attempt>a.attempt))
+   FROM product_image_attempts a
+   LEFT JOIN assets asset ON tasks.state='succeeded'
+     AND asset.id=CASE WHEN tasks.input->>'requireImageAsset'='true' THEN (tasks.result->>'assetId')::uuid END
+     AND asset.workspace_id=a.workspace_id AND asset.account_id=a.account_id AND NOT asset.rights_restricted
+   WHERE a.task_id=tasks.id AND a.workspace_id=tasks.workspace_id
+     AND a.account_id=tasks.account_id) AS "imagePlan"`;
+
+function presentTask(task) {
+  if (task.imagePlan) {
+    const {planId,position,latest,assetId} = task.imagePlan;
+    const canRetry = latest && ['failed','cancelled'].includes(task.state);
+    task.imagePlan = {...task.imagePlan,canRetry,retryUrl:canRetry ? imagePlanRetryUrl(planId,position) : null,
+      ...imageDelivery(assetId)};
+  }
+  return task;
+}
 
 export function stableJson(value) {
   if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
@@ -59,15 +84,20 @@ async function findTask(db, context, id, fields = taskFields, lock = false) {
   return task;
 }
 
+async function readTask(db, context, id) {
+  return presentTask(await findTask(db,context,id,taskReadFields));
+}
+
 async function submit(db, providers, shops, context, input, parentId = null) {
   return db.transaction(connection => submitInTransaction(connection, providers, shops, context, input, parentId));
 }
 
-export async function submitInTransaction(connection, providers, shops, context, input, parentId = null) {
+export async function submitInTransaction(connection, providers, shops, context, input, parentId = null, { requireImageAsset = false } = {}) {
   const { workspaceId, accountId } = context;
   const { capabilityId: id, projectId, mode, parameters, idempotencyKey, confirmationId, imageQuality } = input;
   const capability = catalog.get(id);
   const storedInput = { mode, parameters };
+  if (requireImageAsset) storedInput.requireImageAsset = true;
   if (input.modelId !== undefined) storedInput.modelId = input.modelId;
   if (imageQuality !== undefined) storedInput.imageQuality = imageQuality;
   const hash = digest(stableJson({ id, projectId: projectId ?? null, storedInput, parentId, confirmationId: confirmationId ?? null }));
@@ -82,11 +112,18 @@ export async function submitInTransaction(connection, providers, shops, context,
   }
 
   const featureVersion = await requireFeature(connection, context, capability.pluginId, id, true);
+  const assetIds=parameters.assetIds ?? parameters.listing?.assetIds ?? [];
+  const reviewImages=needsImageReview(capability);
+  // Return actionable source errors even on a deployment without an image model.
+  if (reviewImages) await taskAssets(connection,context,assetIds,capability);
   const availableProviders = await modelProviders(connection, workspaceId, providers);
   const providerId = providerFor(availableProviders, capability, input.modelId, id==='model.chat' && parameters.stream===true);
   const provider = taskProvider(availableProviders, providerId);
   if (imageQuality !== undefined && (id !== 'image.main-image' || !provider.info?.imageQuality)) {
     throw invalid('The selected model does not support independent main image quality');
+  }
+  if (capability.pluginId==='copywriting' && capability.execution==='gateway') {
+    storedInput.parameters={...parameters,templateVersion:parameters.templateVersion ?? 2};
   }
   provider.validate?.(capability, parameters);
   if (provider.taskConfiguration) storedInput.providerConfiguration=provider.taskConfiguration(parameters);
@@ -105,7 +142,7 @@ export async function submitInTransaction(connection, providers, shops, context,
   if (shop) await requireConnection(connection, workspaceId, 'shop', shop.id);
   const binding = shop ? shopFingerprint(shop) : null;
   if (binding) storedInput.shopFingerprint = binding;
-  await taskAssets(connection, context, parameters.assetIds ?? parameters.listing?.assetIds ?? [], capability);
+  if (!reviewImages) await taskAssets(connection,context,assetIds,capability);
   if (capability.requiresConfirmation) {
     const preview = confirmationId && await row(connection, 'SELECT parameters, shop_fingerprint FROM shop_previews WHERE id = $1 AND workspace_id = $2 AND account_id = $3 AND capability_id = $4 AND used_at IS NULL AND expires_at > now() FOR UPDATE', [confirmationId, workspaceId, accountId, id]);
     if (!preview || preview.shop_fingerprint !== binding || stableJson(preview.parameters) !== stableJson(parameters)) {
@@ -138,8 +175,8 @@ export async function finishTask(db, task, state, result, errorCode) {
     { taskId: task.id, capabilityId: task.capability_id, state, errorCode });
 }
 
-export function registerTasks(app, db, providers, shops) {
-  registerTaskEvents(app, db, findTask);
+export function registerTasks(app, db, providers, shops, retryProductImageTask) {
+  registerTaskEvents(app, db, readTask);
   registerTaskStream(app,findTask);
   route(app, 'GET', '/v1/plugins', { tags: ['Plugins'], summary: 'List business plugins, capabilities and input contracts' }, async request => {
     const { workspaceId, accountId } = request.context;
@@ -215,11 +252,11 @@ export function registerTasks(app, db, providers, shops) {
     tags, summary: 'List tasks for the authenticated member',
     querystring: object({ ...page.properties, state: stateSchema }, []),
   }, async request => ({
-    items: await rows(db, 'SELECT ' + taskFields + ' FROM tasks WHERE workspace_id = $1 AND account_id = $2 AND ($3::text IS NULL OR state = $3) ORDER BY created_at DESC, id LIMIT $4 OFFSET $5', [request.context.workspaceId, request.context.accountId, request.query.state ?? null, ...paginate(request.query)]),
+    items: (await rows(db, 'SELECT ' + taskReadFields + ' FROM tasks WHERE workspace_id = $1 AND account_id = $2 AND ($3::text IS NULL OR state = $3) ORDER BY created_at DESC, id LIMIT $4 OFFSET $5', [request.context.workspaceId, request.context.accountId, request.query.state ?? null, ...paginate(request.query)])).map(presentTask),
   }));
 
   route(app, 'GET', '/v1/tasks/:id', { tags, summary: 'Read task status, error and output', params: idParams },
-    request => findTask(db, request.context, request.params.id));
+    request => readTask(db, request.context, request.params.id));
 
   route(app, 'GET', '/v1/tasks/:id/inputs', { tags, summary: 'Read your own editable task parameters', params: idParams },
     request => findTask(db, request.context, request.params.id,
@@ -234,21 +271,40 @@ export function registerTasks(app, db, providers, shops) {
       if (existing.state !== 'queued' || existing.attempts > 0) throw new ApiError(409, 'TASK_ALREADY_STARTED', 'Only tasks that have never started can be cancelled');
       await finishTask(connection, existing, 'cancelled', null, null);
     }
-    return findTask(connection, request.context, existing.id);
+    return readTask(connection, request.context, existing.id);
   }));
 
   route(app, 'POST', '/v1/tasks/:id/regenerate', {
-    tags, summary: 'Create a new execution linked to a completed task',
-    params: idParams, body: object({ idempotencyKey: keySchema }),
+    tags, summary: 'Create a new execution linked to a completed task or retry one failed product image',
+    params: idParams, body: object({ idempotencyKey: keySchema, instructions:text(2000) }, ['idempotencyKey']),
   }, async (request, reply) => {
     const previous = await findTask(db, request.context, request.params.id, '*');
+    if (previous.input.requireImageAsset) {
+      if (request.body.instructions !== undefined) throw invalid('Revision instructions apply to copywriting generation tasks');
+      const {imagePlan} = await readTask(db, request.context, previous.id);
+      if (!imagePlan) throw new ApiError(409, 'IMAGE_PLAN_RETRY_REQUIRED', 'Retry this image from its product image plan');
+      const result = await retryProductImageTask(request.context, imagePlan.planId, imagePlan.position, previous.id);
+      reply.code(result.created ? 202 : 200);
+      return readTask(db, request.context, result.image.taskId);
+    }
     if (['queued', 'running'].includes(previous.state)) throw new ApiError(409, 'TASK_IN_PROGRESS', 'Wait for the original task to finish');
     if (catalog.get(previous.capability_id).requiresConfirmation) {
       throw new ApiError(409, 'CONFIRMATION_REQUIRED', 'Create a fresh shop preview before submitting again');
     }
+    let parameters=previous.input.parameters;
+    if (previous.plugin_id==='copywriting' && previous.capability_id!=='copywriting.detect-terms') {
+      parameters={...parameters,templateVersion:parameters.templateVersion ?? 1};
+    }
+    if (request.body.instructions!==undefined) {
+      if (previous.plugin_id!=='copywriting' || previous.capability_id==='copywriting.detect-terms') {
+        throw invalid('Revision instructions apply to copywriting generation tasks');
+      }
+      if (!request.body.instructions.trim()) throw invalid('Supply nonblank revision instructions');
+      parameters={...parameters,instructions:request.body.instructions};
+    }
     const result = await submit(db, providers, shops, request.context, {
       ...previous.input, capabilityId: previous.capability_id, projectId: previous.project_id,
-      idempotencyKey: request.body.idempotencyKey,
+      parameters,idempotencyKey: request.body.idempotencyKey,
     }, previous.id);
     reply.code(result.created ? 202 : 200);
     return result.task;

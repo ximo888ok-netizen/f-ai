@@ -26,7 +26,7 @@ export async function copyReviewPage(ctx) {
   sceneDesk(ctx,'copywriting',[
     {id:'write',label:'内容创作',icon:'copywriting',body:integrationSlot('ecommerce-content-agent')},
     {id:'check',label:'平台校验',icon:'tasks',body:rulesPane},
-  ], ctx.args[0] ? 'check' : 'write',link('创作文案','create/copywriting/copywriting.generate')+link('技能运行','skills'));
+  ], ctx.args[0] ? 'check' : 'write',link('创作文案','create/copywriting/copywriting.generate')+link('文案草稿','copy-drafts')+link('技能运行','skills'));
   void bindContentAgent(ctx, platform);
   ctx.submit('copy-rules',async data=>{
     const body={revision:rules?.revision ?? 0,titleLimit:Number(data.get('titleLimit')),

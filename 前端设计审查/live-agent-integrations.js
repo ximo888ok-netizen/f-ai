@@ -69,7 +69,7 @@ export async function bindCustomerAgent(ctx, question = '', handover = null) {
       field('知识关键词或买家 ID',input('query','required maxlength="150"')), '读取') + '<div data-evidence></div></details>' :
     notice('尚无可访问的 Customer-Agent 店铺绑定。');
   box.innerHTML = '<div class="scene-split"><section class="scene-editor">'+paneTitle('service','回复助手')+
-    (state.state === 'ready' ? form('ca-draft',field('买家问题',textarea('question','required maxlength="2000" rows="4" placeholder="输入买家刚刚问的问题…"',question)) +
+    (state.state === 'ready' ? form('ca-draft',field('买家问题',textarea('question','required maxlength="2000" rows="4" placeholder="输入买家刚刚问的问题…"',handover?.question ?? question)) +
       field('参考事实',textarea('facts','maxlength="5000" rows="4" placeholder="填写商品参数、店铺政策或已确认的订单情况"'))+modelMeta(state), '生成回复草稿') : notice(states[state.state]))+knowledge+
     '</section><section class="scene-output">'+paneTitle('copywriting','回复草稿')+'<div data-generation-result role="status">'+blankResult('service','等待生成回复','核对后可将草稿带入已接管的会话。')+'</div></section></div>';
   const facts = box.querySelector('[name=facts]');

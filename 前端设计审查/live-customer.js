@@ -1,4 +1,3 @@
-
 import { action, field, form, h, heading, input, item, link, list, notice, panel, result, textarea } from './live.js';
 import { bindCustomerAgent, integrationSlot } from './live-agent-integrations.js';
 import { sceneDesk } from './studio-workflows.js';
@@ -16,9 +15,9 @@ export async function customerPage(ctx) {
   }
   const [id]=ctx.args;
   if(id==='replies'){await quickReplies(ctx);return;}
-  const [conversations,bases,replies,shops]=await Promise.all([ctx.all(endpoint+'/conversations'),ctx.all('/v1/knowledge/bases'),ctx.all(endpoint+'/quick-replies'),storesFor(ctx)]);
+  const [conversations,bases,replies,shops,products]=await Promise.all([ctx.all(endpoint+'/conversations'),ctx.all('/v1/knowledge/bases'),ctx.all(endpoint+'/quick-replies'),storesFor(ctx),ctx.all('/v1/studio/products')]);
   if(!ctx.active())return;
-  const panels=[{id:'inbox',label:'接待台',icon:'service',body:inboxPane(ctx,shops.items,bases)},
+  const panels=[{id:'inbox',label:'接待台',icon:'service',body:inboxPane(ctx,shops.items,bases,products)},
     {id:'draft',label:'回复助手',icon:'copywriting',body:integrationSlot('customer-agent')}];
   const native=shops.items.filter(s=>s.customer);
   if(ctx.manager){
@@ -29,12 +28,19 @@ export async function customerPage(ctx) {
   const switchTab=name=>document.querySelector('#scene-customer-'+name+'-tab')?.click();
   if(ctx.manager)bindShopPane(ctx,shops);
   if(ctx.manager)bindNativeChannels(ctx,native);
-  const handover={id:null,insert:null};
+  const handover={id:null,insert:null,question:''};
   void bindCustomerAgent(ctx,'',handover);
   handover.insert=await bindInbox(ctx,{shops:shops.items,conversations,replies,initial:id==='shops'?null:id,onDraft:(question,conversationId)=>{
-    handover.id=conversationId;switchTab('draft');
+    const changed=handover.id!==conversationId;
+    handover.id=conversationId;
+    handover.question=question.slice(0,2000);
+    switchTab('draft');
     const q=document.querySelector('[data-form="ca-draft"] [name=question]');
-    if(q){q.value=question;q.focus();}
+    if(q){
+      if(changed)q.form.elements.facts.value='';
+      q.value=handover.question;
+      q.focus();
+    }
   }});
   const extra=document.querySelector('.inbox-context-links');
   if(extra && ctx.active())extra.insertAdjacentHTML('beforeend',link('权利通知','rights')+(ctx.manager?link('飞书消息','feishu'):''));

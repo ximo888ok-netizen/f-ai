@@ -1,4 +1,6 @@
 import { Worker } from 'node:worker_threads';
+import { assetDownload } from './contracts.js';
+import { lockPlugin } from './plugin-policy.js';
 import { row, rows } from './db.js';
 import { ApiError, array, choice, integer, invalid, notFound, object, page, paginate, route, text, uuid } from './http.js';
 import { generatedAsset } from './ai-export-mark.js';
@@ -78,6 +80,7 @@ export function registerStudioPsd(app, db, videoDelivery) {
     const {workspaceId,accountId}=request.context;
     const {id}=request.params;
     const {title,layout,subjectAssetId,backgroundAssetId,revision}=request.body;
+    await lockPlugin(tx,workspaceId,'image');
     if (!title.trim()) throw invalid('Design title cannot be blank');
     verify(layout);
     const ids=[...new Set([subjectAssetId,backgroundAssetId].filter(Boolean).map(v=>v.toLowerCase()))];
@@ -113,7 +116,7 @@ export function registerStudioPsd(app, db, videoDelivery) {
   });
 
   route(app,'GET','/v1/assets/:id/delivery',{tags:['Assets'],params,summary:'Export an AI-generated image or MP4 with visible and embedded provenance',
-    produces:['image/png','image/jpeg','video/mp4']},async (request,reply)=>{
+    response:{200:assetDownload('AI-marked attachment with visible and embedded provenance',['image/png','image/jpeg','video/mp4'])}},async (request,reply)=>{
     const key=[request.context.workspaceId,request.context.accountId,request.params.id];
     const owned=await row(db,`SELECT a.data,a.media_type,${generatedAsset('a')} AS generated
       FROM assets a WHERE a.workspace_id=$1 AND a.account_id=$2 AND a.id=$3 AND NOT a.rights_restricted`,key);

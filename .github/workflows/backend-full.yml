@@ -1,0 +1,178 @@
+name: Backend full regression
+
+on:
+  push:
+    branches: [main, feat/backend-native-streams, 'ci/backend-*', codex/f-ai-glass-integration]
+    paths:
+      - 'backend/**'
+      - '前端设计审查/**'
+      - '.github/workflows/backend-full.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: Full suite (${{ matrix.database }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [PGlite, PostgreSQL]
+    defaults:
+      run:
+        shell: bash
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v6
+        id: python311
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install locked backend dependencies and test tools
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --prefix "$RUNNER_TEMP/browser-tools" --no-audit --no-fund --ignore-scripts playwright@1.62.1
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          google-chrome --version
+          {
+            echo "FAI_TEST_PLAYWRIGHT_PATH=$RUNNER_TEMP/browser-tools/node_modules/playwright"
+            echo "FAI_TEST_FFMPEG_PATH=$(command -v ffmpeg)"
+            echo "FAI_TEST_FFPROBE_PATH=$(command -v ffprobe)"
+            echo 'FAI_TEST_VIDEO_ENCODER=libx264'
+          } >> "$GITHUB_ENV"
+      - name: Prepare pinned integration and media sources for local fixtures
+        env:
+          PYTHON311: ${{ steps.python311.outputs.python-path }}
+        run: |
+          fixture="$RUNNER_TEMP/upstream-fixtures"
+          mkdir -p "$fixture"
+          fetch_revision() {
+            git init -q "$3"
+            git -C "$3" fetch -q --depth=1 "$1" "$2"
+            git -C "$3" checkout -q --detach FETCH_HEAD
+            test "$(git -C "$3" rev-parse HEAD)" = "$2"
+          }
+          fetch_revision https://github.com/JC0v0/Customer-Agent.git 172f67867bcf2bc2d2d41400009655fd813f001c "$fixture/customer"
+          fetch_revision https://github.com/aaadanzghe/ecommerce-content-agent.git 029d1985231e1f395aa87efc7e8a556411af890d "$fixture/content"
+          node media-runtime/prepare.mjs "$fixture/media-sources"
+
+          "$PYTHON311" -m venv "$fixture/customer-env"
+          "$PYTHON311" -m venv "$fixture/commerce-env"
+          python -m venv "$fixture/content-env"
+          python -m venv "$fixture/media-env"
+          "$fixture/customer-env/bin/python" -m pip install uv
+          "$fixture/customer-env/bin/uv" pip install --python "$fixture/customer-env/bin/python" -r "$fixture/customer/pyproject.toml"
+          "$fixture/commerce-env/bin/python" -m pip install mcp-cn-commerce==0.1.6 tzdata
+          "$fixture/content-env/bin/python" -m pip install -e "$fixture/content/agent-app/agent-core"
+          "$fixture/media-env/bin/python" -m pip install 'requests>=2.32,<3' 'pillow>=10,<13' 'numpy<3' python-dotenv
+
+          jq -n --arg root "$fixture" '{customer:{python:($root+"/customer-env/bin/python"),source:($root+"/customer"),shops:[]},commerce:{python:($root+"/commerce-env/bin/python"),shops:[]},content:{python:($root+"/content-env/bin/python")}}' > "$fixture/integrations.json"
+          jq -n --arg root "$fixture" '{sources:($root+"/media-sources"),python:($root+"/media-env/bin/python"),bindings:[]}' > "$fixture/media.json"
+          {
+            echo "FAI_TEST_INTEGRATIONS_FILE=$fixture/integrations.json"
+            echo "FAI_TEST_MEDIA_SKILLS_FILE=$fixture/media.json"
+          } >> "$GITHUB_ENV"
+      - name: Start isolated PostgreSQL databases
+        if: matrix.database == 'PostgreSQL'
+        run: |
+          pg_bin=$(find /usr/lib/postgresql -name initdb -type f -printf '%h\n' | sort -V | tail -1)
+          test -x "$pg_bin/pg_ctl"
+          data="$RUNNER_TEMP/regression-pg"
+          password=$(openssl rand -hex 24)
+          echo "::add-mask::$password"
+          printf '%s\n' "$password" | "$pg_bin/initdb" -D "$data" -U regression --auth=scram-sha-256 --pwfile=/dev/stdin --encoding=UTF8 --locale=C --no-sync
+          "$pg_bin/pg_ctl" -D "$data" -o "-h 127.0.0.1 -p 55432 -k $RUNNER_TEMP" -l "$RUNNER_TEMP/regression-pg.log" -w start
+          for database in cutover_control cutover_tenant; do
+            PGPASSWORD="$password" "$pg_bin/createdb" -h 127.0.0.1 -p 55432 -U regression "$database"
+          done
+          base="postgresql://regression:$password@127.0.0.1:55432"
+          {
+            echo "FAI_TEST_DATABASE_URL=$base/postgres"
+            echo "FAI_TEST_CUTOVER_CONTROL_URL=$base/cutover_control"
+            echo "FAI_TEST_DEDICATED_DATABASE_URL=$base/cutover_tenant"
+            echo "FAI_QA_PG_BIN=$pg_bin"
+            echo 'FAI_TEST_SMS_REAL_BACKOFF=1'
+          } >> "$GITHUB_ENV"
+      - name: Run every test and require zero skips
+        run: |
+          python -I -B test/media-profile-preflight.py
+          report="$RUNNER_TEMP/backend.tap"
+          if [[ -n "$FAI_TEST_DATABASE_URL" ]]; then
+            : > "$report"
+            for suite in test/*.test.js; do
+              database="regression_$(basename "$suite" .test.js | tr '-' '_')"
+              "$FAI_QA_PG_BIN/createdb" --maintenance-db="$FAI_TEST_DATABASE_URL" "$database"
+              FAI_TEST_DATABASE_URL="${FAI_TEST_DATABASE_URL%/*}/$database" \
+                node --test --test-reporter=tap "$suite" | tee -a "$report"
+            done
+          else
+            node --test --test-concurrency=1 --test-reporter=tap | tee "$report"
+          fi
+          tests=$(awk '/^# tests / {sum+=$3} END {print sum+0}' "$report")
+          passed=$(awk '/^# pass / {sum+=$3} END {print sum+0}' "$report")
+          [[ "$tests" =~ ^[1-9][0-9]*$ && "$tests" == "$passed" ]]
+          ! grep -Eq '^# (skipped|todo) [1-9]' "$report"
+          echo "Passed $passed of $tests tests with zero skips." >> "$GITHUB_STEP_SUMMARY"
+          grep -q 'Browser check passed: 通过真实 ffmpeg 合成与下载 MP4' "$report"
+          {
+            echo '### Studio browser checks'
+            sed -n 's/^# Browser check passed: /- /p' "$report"
+            echo
+            echo 'Browser requests use the application and database on this runner. Model outputs come from local fixtures.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify a fresh source deployment and backup restore
+        if: matrix.database == 'PostgreSQL'
+        run: |
+          if [[ ! -w /var/run/postgresql ]]; then
+            sudo setfacl -m "u:$(id -un):rwx" /var/run/postgresql
+          fi
+          FAI_QA_NPM_CACHE="$(npm config get cache)" npm run accept:deployment
+      - name: Stop the temporary database
+        if: always() && matrix.database == 'PostgreSQL'
+        run: |
+          if [[ -n "${FAI_QA_PG_BIN:-}" && -e "$RUNNER_TEMP/regression-pg/postmaster.pid" ]]; then
+            "$FAI_QA_PG_BIN/pg_ctl" -D "$RUNNER_TEMP/regression-pg" -m fast -w stop
+          fi
+
+  windows-offline:
+    name: Build and verify Windows x64 offline backend
+    needs: regression
+    if: startsWith(github.ref, 'refs/heads/ci/backend-release-') || github.ref == 'refs/heads/feat/backend-native-streams' || github.ref == 'refs/heads/codex/f-ai-glass-integration' || github.ref == 'refs/heads/main'
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.16.0'
+      - name: Build from the tested commit and rehearse isolated deployment
+        shell: pwsh
+        working-directory: backend
+        run: ./ops/windows-ci-release.ps1
+      - name: Publish verified offline package and checksums
+        uses: actions/upload-artifact@v6
+        with:
+          name: f-ai-backend-win-x64-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/backend-delivery/f-ai-backend-win-x64.tar.gz
+            ${{ runner.temp }}/backend-delivery/f-ai-backend-win-x64.tar.gz.sha256
+            ${{ runner.temp }}/backend-delivery/release.json.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

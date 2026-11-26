@@ -47,6 +47,10 @@ foreach ($folder in @('src','migrations','integrations')) {
     }
 }
 
+# The versioned help endpoint reads this guide from the source directory.
+$help = New-Item -ItemType Directory -Path (Join-Path $target 'src/help')
+Copy-Item -LiteralPath (Join-Path $backend 'src/help/workbench-v1.md') -Destination $help.FullName
+
 # Include only files served by the workbench.
 $runtime = Join-Path $target 'media-runtime'
 New-Item -ItemType Directory -Force (Join-Path $runtime 'aidge') | Out-Null

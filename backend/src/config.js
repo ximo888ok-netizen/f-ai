@@ -1,6 +1,7 @@
 
 import { readFileSync } from 'node:fs';
 import { catalog } from './catalog.js';
+import { databaseAlias, openCredential } from './database-credentials.js';
 
 export const isUuid = value => typeof value === 'string' && /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(value);
 const list = value => (value ?? '').split(',').map(item => item.trim()).filter(Boolean);
@@ -41,21 +42,27 @@ export function config(env = process.env) {
 }
 
 function loadDedicatedDatabases(env) {
-  const entries = JSON.parse(env.DEDICATED_DATABASES_JSON || '{}');
+  let entries;
+  try { entries = JSON.parse(env.DEDICATED_DATABASES_JSON || '{}'); } catch { throw new Error('Invalid dedicated database registry'); }
   if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
-    throw new Error('DEDICATED_DATABASES_JSON must map database aliases to secret environment variable names');
+    throw new Error('DEDICATED_DATABASES_JSON must map database aliases to credential references');
   }
   const byAlias = new Map();
   if (!Object.keys(entries).length) return byAlias;
-  const destination = url => [url.hostname.toLowerCase(), url.port || '5432', url.pathname].join('|');
+  const destination = url => JSON.stringify([decodeURIComponent(url.hostname).toLowerCase(), url.port || '5432', decodeURIComponent(url.pathname)]);
   let control;
   try { control = new URL(env.DATABASE_URL); } catch { throw new Error('Invalid control database connection setting'); }
   const targets = new Set([destination(control)]);
-  for (const [alias, name] of Object.entries(entries)) {
-    if (!/^[a-z][a-z0-9_-]{0,63}$/.test(alias) || typeof name !== 'string' || !/^[A-Z][A-Z0-9_]{0,127}$/.test(name)) {
-      throw new Error('Invalid dedicated database alias or secret variable name');
+  for (const [alias, ref] of Object.entries(entries)) {
+    if (!databaseAlias.test(alias)) throw new Error('Invalid dedicated database alias');
+    let secret;
+    if (typeof ref === 'string' && /^[A-Z][A-Z0-9_]{0,127}$/.test(ref)) {
+      secret = env[ref];
+    } else if (ref && typeof ref === 'object' && Object.keys(ref).length === 1 && Object.hasOwn(ref, 'credentialVersion')) {
+      secret = openCredential(env, alias, ref.credentialVersion);
+    } else {
+      throw new Error('Invalid dedicated database credential reference');
     }
-    const secret = env[name];
     let parsed;
     try { parsed = new URL(secret); } catch { throw new Error('Missing or invalid dedicated database connection setting'); }
     if (!['postgresql:','postgres:'].includes(parsed.protocol) || !parsed.hostname || !parsed.pathname.slice(1)
