@@ -116,7 +116,7 @@ try {
   } else {
     run('git', ['--git-dir=' + gitDir, '--work-tree=' + work, '-c', 'core.autocrlf=false',
     'restore', '--source=' + revision, '--worktree', '--', 'backend/package.json', 'backend/package-lock.json',
-    'backend/src', 'backend/migrations', 'backend/sdk', web], indexEnv);
+    'backend/src', 'backend/migrations', 'backend/sdk', 'backend/integrations', 'backend/media-runtime', web], indexEnv);
     run(node, [npm, 'ci', '--offline', '--omit=dev', '--no-audit', '--no-fund', '--cache', cache], osEnv, application);
   }
   const preflight = spawnSync(node, ['src/deployment-capacity.js', work], {

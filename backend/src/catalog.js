@@ -1,5 +1,6 @@
 
 import { array, choice, freeObject, integer, object, text, uuid } from './http.js';
+import { mediaSkills } from './media-skills.js';
 
 export const plugins = [
   { id: 'image', name: '商品图片' },
@@ -77,6 +78,13 @@ const definitions = [
     ['translate', '多语言'], ['selling-points', '卖点与竞品对比'],
   ]],
   ['copywriting', 'local', object({ content: text(20000) }), [['detect-terms', '词语检测']]],
+  ['customer-service', 'model:customer-agent', object({
+    question: text(2000), facts: text(5000),
+  }, ['question']), [['reply-draft', 'Customer-Agent 回复草稿']]],
+  ['copywriting', 'model:ecommerce-content-agent', object({
+    title: text(240), category: text(120), facts: text(4000), platform: choice('taobao','douyin','xiaohongshu'),
+    tone: choice('professional','casual','trendy','luxury','cute'), audience: text(300), sellingPoints: array(text(300), 10),
+  }, ['title','category','facts','platform']), [['content-package', '商品文案内容包']]],
 ];
 
 const serviceEndpoints = {
@@ -127,6 +135,16 @@ catalog.set('model.voice-turn',{
   minAssets:1,requiresConsent:false,requiresConfirmation:false,modes:['chat','workflow'],cost:6,
 });
 
+for(const s of mediaSkills) {
+  const fields={prompt:text(3000), platform:choice(...s.channels), ratio:choice('1:1','3:4','4:3','9:16','16:9'),
+    assetIds:{...array(uuid,s.max,s.min),uniqueItems:true}};
+  if(s.alsoNative==='ark-video')fields.frameMode=choice('frames','references');
+  if(s.slots)fields.slots={...array(choice(...s.slots),s.slots.length,s.minOutputs),uniqueItems:true};
+  catalog.set(s.id,{id:s.id,name:s.title,pluginId:s.kind,execution:s.native||s.alsoNative?'gateway':'model:'+s.alias,
+    parameters:object(fields,['prompt','platform',...(s.min?['assetIds']:[])]),
+    minAssets:s.min,mediaSkill:s,requiresConsent:s.consent,requiresConfirmation:false,modes:['workflow'],
+    cost:s.local?1:s.kind==='image'?3:5});
+}
 export const capabilityId = choice(...catalog.keys());
 export const capabilityRules = [...catalog.values()].map(capability => ({
   if: { properties: { capabilityId: { const: capability.id } }, required: ['capabilityId'] },

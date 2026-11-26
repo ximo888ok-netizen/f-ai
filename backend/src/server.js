@@ -2,6 +2,7 @@
 import { loadEnvFile } from 'node:process';
 import { readFileSync } from 'node:fs';
 import { buildApp } from './app.js';
+import { loadIntegrations } from './integration-config.js';
 import { config } from './config.js';
 import { postgres } from './db.js';
 import { createProviders } from './providers.js';
@@ -40,7 +41,7 @@ const dedicatedDatabases = new Map([...settings.dedicatedDatabases].map(([key,ur
 const providers = installModels(createProviders(settings.gateway), settings.models);
 const dependencies = { db, providers, shops: settings.shops, feishu, wechat:createWechatBindings(), sms:createSmsBindings(), realtimeVoice:createRealtimeBindings(),
   videoArchive: createVideoArchive(settings.videoArchiveOrigins) };
-const app = await buildApp({ ...dependencies, dedicatedDatabases, cloudAssets, packagedStudio, videoDelivery:createVideoDelivery(),
+const app = await buildApp({ ...dependencies, integrations: loadIntegrations(), dedicatedDatabases, cloudAssets, packagedStudio, videoDelivery:createVideoDelivery(),
   customerAnswer:createCustomerAnswer(providers,process.env.CUSTOMER_ASSISTANT_LOCAL_MODEL_ID), origins: settings.origins, webSearch:createExaSearch(process.env.EXA_API_KEY), logger: true });
 await app.listen({ port: settings.port, host: settings.host });
 const workers = [startWorker(dependencies,app.log), ...[...dedicatedDatabases.keys()].map(key =>

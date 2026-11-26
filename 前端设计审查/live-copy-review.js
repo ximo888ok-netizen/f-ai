@@ -1,5 +1,7 @@
 import { revisedCopy } from './live-copy-suggestions.js';
-import { field, form, grid, h, heading, input, item, link, list, notice, panel, textarea, toast } from './live.js';
+import { bindContentAgent, editedProof, integrationSlot } from './live-agent-integrations.js';
+import { sceneDesk } from './studio-workflows.js';
+import { field, form, grid, h, input, item, link, list, notice, panel, textarea, toast } from './live.js';
 
 const platforms={taobao:'淘宝',pinduoduo:'拼多多',douyin:'抖店'};
 const root='/v1/copywriting';
@@ -19,9 +21,13 @@ export async function copyReviewPage(ctx) {
     notice(ctx.manager ? '先保存本平台的工作区规则，即可检查商品标题和卖点。' : '请工作区管理员先设置本平台的文案规则。');
   const platformLinks=Object.entries(platforms).map(([key,label])=>key===platform
     ? '<strong aria-current="page">'+h(label)+'</strong>':link(label,'copy-review/'+key));
-  ctx.html(heading('电商文案与平台校验')+link('创作文案','create/copywriting/copywriting.generate')+link('文案草稿','copy-drafts')+link('技能运行','skills') +
-    '<div class="live-row">'+platformLinks.join('')+'</div>' +
-    grid(editor,panel('文案检查',review+'<div data-copy-result aria-live="polite"></div>')));
+  const rulesPane='<nav class="scene-platforms" aria-label="校验平台">'+platformLinks.join('')+'</nav>'+
+    grid(panel('文案检查',review+'<div data-copy-result aria-live="polite"></div>'),editor);
+  sceneDesk(ctx,'copywriting',[
+    {id:'write',label:'内容创作',icon:'copywriting',body:integrationSlot('ecommerce-content-agent')},
+    {id:'check',label:'平台校验',icon:'tasks',body:rulesPane},
+  ], ctx.args[0] ? 'check' : 'write',link('创作文案','create/copywriting/copywriting.generate')+link('文案草稿','copy-drafts')+link('技能运行','skills'));
+  void bindContentAgent(ctx, platform);
   ctx.submit('copy-rules',async data=>{
     const body={revision:rules?.revision ?? 0,titleLimit:Number(data.get('titleLimit')),
       sellingPointLimit:Number(data.get('sellingPointLimit')),forbiddenPhrases:lines(data.get('forbiddenPhrases'))};
@@ -31,6 +37,14 @@ export async function copyReviewPage(ctx) {
   });
   const edit=document.querySelector('[data-form="copy-review"]');
   if(!edit)return;
+  if (ctx.args[1] === 'from' && ctx.args[2]) {
+    const task = await ctx.api('/v1/tasks/' + encodeURIComponent(ctx.args[2]));
+    if (!ctx.active()) return;
+    if (task.capabilityId !== 'copywriting.content-package' || task.state !== 'succeeded' || task.result?.platform !== platform) throw new Error('该任务没有此平台可校验的文案。');
+    const revised=editedProof.get(task.id);
+    edit.elements.title.value = revised?.title ?? task.result.title;
+    edit.elements.sellingPoints.value = revised?.sellingPoints ?? task.result.sellingPoints.join('\n');
+  }
   let sequence=0;
   const target=document.querySelector('[data-copy-result]');
   edit.addEventListener('input',()=>{sequence++;target.replaceChildren();});

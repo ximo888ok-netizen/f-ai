@@ -31,7 +31,7 @@ export function featureReleases(input = '[]') {
   return directory;
 }
 
-async function readSettings(db, context, plugin, lock) {
+export async function readSettings(db, context, plugin, lock) {
   return row(db, `SELECT enabled,revision,release_mode AS mode,release_version AS version,release_capabilities AS capabilities,
     EXISTS (SELECT 1 FROM merchant_plugin_members m
       WHERE m.workspace_id=s.workspace_id AND m.plugin_id=s.plugin_id AND m.account_id=$3) AS included

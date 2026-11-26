@@ -57,7 +57,7 @@ export function videoQuickView(models, available) {
     '<p class="live-muted video-quick-help">脚本根据文字说明编排，成片时才会使用首帧。</p></fieldset>';
   return '<div class="quick-image-layout video-quick-layout" data-video-quick>' +
     videoCreationForm(models, available, { title: '智能快创', description, submit: '生成脚本' }) +
-    '<section class="card video-quick-stage" aria-label="方案与成片"><header><h3>方案与成片</h3>' + link('查看任务记录', 'tasks') + '</header>' +
+    '<section class="card video-quick-stage" aria-label="方案与成片"><header><h3>方案与成片</h3><div class="live-row">' + link('Seedance 商品展示片','desk/video/skills/video.skill-seedance-film')+link('查看任务记录', 'tasks') + '</div></header>' +
     videoCreationProgress(quickVideoSteps) + videoCreationFrame('从一张商品图开始', '添加商品图后即可预览首帧。填写场景或卖点，让脚本更贴合商品。') +
     '<section class="video-quick-script" data-video-quick-script hidden><label>成片脚本<textarea data-video-quick-script-text rows="7"></textarea></label>' +
     '<p class="live-muted">可编辑镜头、动作和节奏。确认后，脚本会与选定首帧一起用于生成。</p></section>' +

@@ -1,0 +1,255 @@
+/* 3-State Monochrome (Black / Gray / White) Dot-Matrix Frosted-Glass Switch
+   Ultra-silky 4-canvas architecture + 100% flush top/bottom border alignment */
+.theme-strip:has(.dm-switch-wrap),
+.glass-presets:has(.dm-switch-wrap),
+.mat-theme:has(.dm-switch-wrap) {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  gap: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  overflow: visible !important;
+}
+
+.mat-theme:has(.dm-switch-wrap) {
+  display: flex;
+  justify-content: center;
+}
+
+.dm-switch-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: visible;
+}
+
+.dm-switch-wrap.dm-hero {
+  width: 100%;
+  margin: 12px 0 6px;
+}
+
+.dm-switch-stage,
+.dm-track,
+.dm-thumb-mover,
+.dm-thumb-body {
+  box-sizing: border-box;
+}
+
+/* Flush concentric squircle-pill geometry: thumb hugs inner track border with 0px vertical gap */
+.dm-switch-stage {
+  position: relative;
+  width: var(--dm-w, 272px);
+  height: var(--dm-h, 96px);
+  isolation: isolate;
+  overflow: visible;
+}
+
+.dm-switch-wrap.dm-compact .dm-switch-stage {
+  --dm-w: 122px;
+  --dm-h: 36px;
+  --dm-r: 13px;
+  --dm-thumb: calc(var(--dm-h) - 2px);
+  --dm-thumb-r: calc(var(--dm-r) - 1px);
+}
+
+.dm-switch-wrap.dm-hero .dm-switch-stage {
+  --dm-w: min(272px, 100%);
+  --dm-h: 96px;
+  --dm-r: 30px;
+  --dm-thumb: calc(var(--dm-h) - 2px);
+  --dm-thumb-r: calc(var(--dm-r) - 1px);
+}
+
+/* Canvas 1: Restrained studio atmospheric aura (hero popover only; disabled in compact header to avoid over-rendering) */
+.dm-aura-canvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(100% + 48px);
+  height: calc(100% + 40px);
+  transform: translate3d(-50%, -50%, 0);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dm-switch-wrap.dm-compact .dm-aura-canvas {
+  display: none;
+}
+
+/* Stationary recessed glass track: static border & shadow so backdrop-filter layer NEVER re-rasterizes/flashes during slide! */
+.dm-track {
+  position: relative;
+  width: var(--dm-w);
+  height: var(--dm-h);
+  border-radius: var(--dm-r);
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+  z-index: 5;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.22);
+  -webkit-backdrop-filter: var(--card-optics, var(--studio-panel-filter));
+  backdrop-filter: var(--card-optics, var(--studio-panel-filter));
+}
+
+.dm-track:focus-visible {
+  outline: 2px solid var(--action, var(--studio-accent, #7BA8D1));
+  outline-offset: 2px;
+}
+
+/* Canvas 2: Continuous crossfaded track glass floor + ambient light spill */
+.dm-floor-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* 3-slot semantic labels embedded softly inside the track floor */
+.dm-slots {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: center;
+  z-index: 7;
+  pointer-events: none;
+}
+
+.dm-slot-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: rgba(248, 250, 252, 0.56);
+  pointer-events: none;
+  transition: color 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity;
+}
+
+.dm-switch-wrap.dm-compact .dm-slot-btn {
+  font-size: 10.5px;
+}
+
+:root[data-material="white"] .dm-slot-btn {
+  color: rgba(15, 23, 34, 0.58);
+}
+
+/* GPU-locked sliding frosted-glass thumb: flush top=0/bottom=0 inside track border, ZERO CSS transitions */
+.dm-thumb-mover {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--dm-thumb);
+  height: 100%;
+  border-radius: var(--dm-thumb-r);
+  z-index: 10;
+  pointer-events: none;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.dm-thumb-body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--dm-thumb-r);
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  /* Static radial centered shadow (zero CSS transition -> zero compositor flicker) */
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.22);
+}
+
+/* Canvas 3: Full frosted glass optics + internal liquid-light sheen + bead-blasted grain + dot-matrix LEDs */
+.dm-thumb-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Canvas 4: Crisp hairline perimeter bevel hugging exact outer border symmetrically (zero outer smudge) */
+.dm-rim-canvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(100% + 16px);
+  height: calc(100% + 16px);
+  transform: translate3d(-50%, -50%, 0);
+  pointer-events: none;
+  z-index: 14;
+}
+
+.dm-switch-wrap.dm-compact .dm-rim-canvas {
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+}
+
+.dm-hero-meta {
+  width: min(var(--dm-w, 272px), 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-tertiary, var(--sub));
+  padding: 0 2px;
+}
+
+.dm-sound-btn {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  border: 1px solid var(--edge-subtle, var(--line));
+  background: var(--bg-input, transparent);
+  color: var(--text-secondary, var(--sub));
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11.5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.3s ease, border-color 0.3s ease, background-color 0.3s ease;
+}
+
+.dm-sound-btn:hover {
+  color: var(--text-primary, var(--ink));
+  border-color: var(--edge-strong, var(--line-strong));
+}
+
+@media (max-width: 720px) {
+  .dm-switch-wrap.dm-compact .dm-switch-stage {
+    --dm-w: 106px;
+    --dm-h: 32px;
+    --dm-r: 11px;
+    --dm-thumb: calc(var(--dm-h) - 2px);
+    --dm-thumb-r: calc(var(--dm-r) - 1px);
+  }
+  .dm-switch-wrap.dm-compact .dm-slot-btn {
+    font-size: 9.5px;
+  }
+}

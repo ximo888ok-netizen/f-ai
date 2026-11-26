@@ -1,44 +1,46 @@
+import { downloadFile } from './live-files.js';
 import { action, field, form, h, heading, input, item, link, list, notice, panel, path, select } from './live-ui.js';
 
-const periods={day:'日',week:'周',month:'月'};
-function bucket(day,period) {
-  if(period==='month')return day.slice(0,7);
-  if(period==='day')return day;
-  const start=new Date(day+'T00:00:00Z');
-  start.setUTCDate(start.getUTCDate()-(start.getUTCDay()+6)%7);
-  return start.toISOString().slice(0,10);
+const periods = { day: '日', week: '周', month: '月' };
+const day = value => new Intl.DateTimeFormat('en-CA', {
+  year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Asia/Shanghai',
+}).format(value);
+const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+const count = value => value ?? '暂无';
+function currency(minor) {
+  if (minor === null) return '暂无';
+  const value = BigInt(minor);
+  return '¥' + (value / 100n) + '.' + (value % 100n).toString().padStart(2, '0');
 }
-export function groupOrders(days,period) {
-  const groups=new Map();
-  for(const d of days){
-    const key=bucket(d.day,period);
-    const group=groups.get(key)??{period:key,orders:0,known:0,units:0n,paid:0n};
-    group.orders+=d.orders;group.known+=d.withAmount;group.units+=BigInt(d.units??0);group.paid+=BigInt(d.paidMinor??0);
-    groups.set(key,group);
-  }
-  return [...groups.values()].sort((a,b)=>b.period.localeCompare(a.period));
-}
-const currency=minor=>(minor/100n).toString()+'.'+(minor%100n).toString().padStart(2,'0');
-export async function commerceReport(ctx,book,queryText) {
-  const values=new URLSearchParams(queryText?decodeURIComponent(queryText):'');
-  const period=Object.hasOwn(periods,values.get('period'))?values.get('period'):'week';
-  const range=new URLSearchParams();
-  for(const k of ['from','to'])if(values.get(k))range.set(k,values.get(k));
-  const days=await ctx.all('/v1/studio/pinduoduo/books/'+path(book.id)+'/analytics?'+range);
-  const rows=groupOrders(days,period);
-  ctx.html(heading('订单经营报表',book.name+' · 本台账非取消订单')+link('返回运营总览','commerce/'+book.id)+
-    panel('统计范围',form('report-range',field('汇总周期',select('period',Object.entries(periods),period))+
-      ['from','to'].map((k,i)=>field(i?'结束日期':'开始日期',input(k,'type="date" value="'+h(range.get(k))+'"'))).join(''),'查询'))+
-    panel('按'+periods[period]+'汇总',(period==='week'?notice('周从周一开始，跨周查询仅统计所选日期。'):'')+
-      list(rows,r=>item(r.period,r.orders+' 笔订单 · '+r.units+' 件 · '+r.known+' 笔有金额 · 已知实付 '+(r.known?'¥'+currency(r.paid):'暂无')))+
-      (rows.length?action('导出当前报表 CSV','report-csv'):'')));
-  ctx.submit('report-range',async data=>{
-    if(data.get('from')&&data.get('to')&&data.get('from')>data.get('to'))throw new Error('开始日期不能晚于结束日期。');
-    ctx.go('commerce/'+book.id+'/report/'+path(new URLSearchParams(data).toString()));
+
+export async function commerceReport(ctx, book, queryText) {
+  const values = new URLSearchParams(queryText ? decodeURIComponent(queryText) : '');
+  const period = Object.hasOwn(periods, values.get('period')) ? values.get('period') : 'week';
+  const now = new Date();
+  const fallbackFrom = day(new Date(now.getTime() - 29 * 86400000));
+  const from = datePattern.test(values.get('from')) ? values.get('from') : fallbackFrom;
+  const to = datePattern.test(values.get('to')) ? values.get('to') : day(now);
+  const range = new URLSearchParams({ from, to, period });
+  const endpoint = '/v1/studio/pinduoduo/books/' + path(book.id) + '/report';
+  const { items } = await ctx.api(endpoint + '?' + range);
+  const base = 'commerce/' + path(book.id);
+  const tip = '统计范围为本台账所选日期内的记录。' + (period === 'week' ? '周从周一开始。' : '');
+  ctx.html(heading('台账经营报表', book.name + ' · 北京时间') + link('返回运营总览', base) +
+    panel('统计范围', form('report-range', field('汇总周期', select('period', Object.entries(periods), period)) +
+      field('开始日期', input('from', 'type="date" required value="' + h(from) + '"')) +
+      field('结束日期', input('to', 'type="date" required value="' + h(to) + '"')), '查询')) +
+    panel('按' + periods[period] + '汇总', notice(tip) + list(items, row => item(row.start,
+      '有效订单 ' + count(row.orders) + ' · 件数 ' + count(row.units) + ' · 已填实付订单 ' + count(row.paidOrders) +
+      ' · 实付合计 ' + currency(row.paidMinor),
+      '<p>SKU 浏览 ' + h(count(row.views)) + ' · 访客 ' + h(count(row.visitors)) +
+      ' · 买家 ' + h(count(row.buyers)) + ' · 成交 ' + h(currency(row.salesMinor)) +
+      ' · 转化率 ' + h(row.conversionPercent === null ? '暂无' : row.conversionPercent + '%') + '</p><p>渠道浏览 ' +
+      Object.entries(row.traffic).map(([label, value]) => h(label) + ' ' + h(count(value))).join(' · ') + '</p>'),
+    '这个范围内暂无经营记录。') + (items.length ? action('导出当前报表 CSV', 'report-csv') : '')));
+  ctx.submit('report-range', async data => {
+    const span = (Date.parse(data.get('to')) - Date.parse(data.get('from'))) / 86400000;
+    if (span < 0 || span > 365) throw new Error('请选择 1 至 366 个日历日。');
+    ctx.go(base + '/report/' + path(new URLSearchParams(data).toString()));
   });
-  ctx.click('report-csv',()=>{
-    const lines=[['期间','非取消订单','件数','有实付金额的订单','已知实付（元）'],...rows.map(r=>[r.period,r.orders,String(r.units),r.known,r.known?currency(r.paid):''])];
-    const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.map(r=>r.join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
-    const a=document.createElement('a');a.href=url;a.download='订单经营'+periods[period]+'报.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);
-  });
+  ctx.click('report-csv', () => downloadFile(ctx, endpoint + '/export?' + range, '经营' + periods[period] + '报.csv'));
 }

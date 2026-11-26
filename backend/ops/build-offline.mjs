@@ -31,8 +31,8 @@ try {
   const web='前端设计审查';
   const gitDir=run('git',['rev-parse','--absolute-git-dir']);
   run('git',['--git-dir='+gitDir,'--work-tree='+root,'-c','core.autocrlf=false','restore','--source='+revision,'--worktree','--',
-    'backend/src','backend/sdk','backend/migrations','backend/package.json',
-    'backend/package-lock.json','backend/.env.example','backend/DEPLOYMENT.md','backend/README.md','backend/ACCEPTANCE.md',
+    'backend/src','backend/sdk','backend/migrations','backend/integrations','backend/media-runtime','backend/package.json',
+    'backend/package-lock.json','backend/.env.example','backend/DEPLOYMENT.md','backend/README.md','backend/ACCEPTANCE.md','backend/INTEGRATIONS.md',
     ...studioPublicFiles.map(file => web + '/' + file)],
     repo,{...env,GIT_INDEX_FILE:join(temp,'release.index')});
   // Keep the portable archive paths independent of the target Windows system code page.

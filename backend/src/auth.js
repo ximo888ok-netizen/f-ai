@@ -56,7 +56,7 @@ async function insertWorkspaceAccount(connection, { email, passwordHash, display
 
 export async function seedPreviewAdmin(db, password) {
   const passwordHash = await hashPassword(password);
-  await db.transaction(connection => insertWorkspaceAccount(connection, {
+  return db.transaction(connection => insertWorkspaceAccount(connection, {
     email: previewAdminEmail, passwordHash, displayName: 'admin', type: 'enterprise', workspaceName: '创意工作室',
   }));
 }

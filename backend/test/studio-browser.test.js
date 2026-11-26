@@ -46,8 +46,9 @@ async function open(page, origin, route, target) {
 const responseFor = (page, method, pathname) => page.waitForResponse(response =>
   response.request().method() === method && new URL(response.url()).pathname === pathname && response.ok());
 
-test('the served glass workbench completes account, service, image, draft and export workflows in a browser',
+test('the served workbench completes tasks, merchant settings, drafts, ledger, service and media workflows in a browser',
   { skip: !playwrightPath, timeout: 120000 }, async t => {
+    const covered = description => t.diagnostic('Browser check passed: ' + description);
     const db = process.env.FAI_TEST_DATABASE_URL ? postgres(process.env.FAI_TEST_DATABASE_URL) : new PGlite();
     const providers = createProviders();
     const shops = new Map();
@@ -72,7 +73,9 @@ test('the served glass workbench completes account, service, image, draft and ex
       supports: capability => capability.id === 'model.chat',
       run: async (_task, payload) => {
         assert.match(payload.parameters.messages[1].content, /陶瓷杯/);
-        return { type: 'text', text: '保留陶瓷杯原色，使用自然侧光表现釉面。' };
+        const answer = '保留陶瓷杯原色，使用自然侧光表现釉面。';
+        const isAssistant = payload.parameters.messages[0].content.includes('意图解析器');
+        return { type: 'text', text: isAssistant ? JSON.stringify({ action: 'answer', value: answer }) : answer };
       },
     });
     const videoDelivery = ffmpeg && ffprobe ? createVideoDelivery({ ffmpeg, ffprobe, encoder: 'libx264' }) : null;
@@ -130,7 +133,9 @@ test('the served glass workbench completes account, service, image, draft and ex
 
     const inviteEmail = randomUUID() + '@example.test';
     await page.getByRole('link', { name: '在商家后台管理成员' }).click();
+    const invitationCreated = responseFor(page, 'POST', '/v1/invitations');
     await save(page, 'invite', { email: inviteEmail });
+    await invitationCreated;
     await page.locator('[data-ticket]').waitFor();
     const invitation = await page.locator('[data-ticket]').inputValue();
     const invitee = await browser.newPage({ reducedMotion: 'reduce' });
@@ -143,6 +148,12 @@ test('the served glass workbench completes account, service, image, draft and ex
     assert.equal(await invitee.locator('#workspace-selector').inputValue(), workspace);
     await invitee.close();
 
+    const auditRead = responseFor(page, 'GET', '/v1/merchant/audit-events');
+    await page.getByRole('link', { name: '操作记录', exact: true }).click();
+    await auditRead;
+    await form(page, 'audit-filter').waitFor();
+    covered('商家后台创建与接受邀请，读取操作记录');
+
     await open(page, origin, 'resources', form(page, 'new-base'));
     await save(page, 'new-base', { name: '陶瓷商品资料' });
     await form(page, 'add-doc').waitFor();
@@ -150,16 +161,21 @@ test('the served glass workbench completes account, service, image, draft and ex
     await save(page, 'add-doc', { name: '容量手册', category: '规格', content: '陶瓷杯容量为350毫升。' });
     await page.getByText('容量手册', { exact: true }).waitFor();
     const base = (await read('/v1/knowledge/bases')).items[0];
-    await open(page, origin, 'customer', form(page, 'new-conversation'));
+    const newConversation = page.locator('[data-inbox-new]').first();
+    await open(page, origin, 'customer', newConversation);
+    await newConversation.click();
     await form(page, 'new-conversation').locator('[name=baseId]').selectOption(base.id);
     await save(page, 'new-conversation', { subject: '容量咨询' });
-    await form(page, 'message').waitFor();
-    await save(page, 'message', { content: '陶瓷杯的容量？', search: '容量' });
+    await page.getByText('检索选项', { exact: true }).click();
+    await page.getByLabel('知识检索关键词').fill('容量');
+    await page.getByLabel('客户消息').fill('陶瓷杯的容量？');
+    await page.getByRole('button', { name: '发送客户消息', exact: true }).click();
     await page.getByText('陶瓷杯容量为350毫升。', { exact: false }).first().waitFor();
-    await page.getByRole('button', { name: '接管会话' }).click();
-    await page.getByText('人工接待', { exact: true }).waitFor();
-    await save(page, 'message', { content: '人工客服已回复。' });
+    await page.getByRole('button', { name: '人工接管', exact: true }).click();
+    await page.getByLabel('客服回复').fill('人工客服已回复。');
+    await page.getByRole('button', { name: '发送人工回复', exact: true }).click();
     await page.getByText('人工客服已回复。', { exact: true }).waitFor();
+    covered('知识库上传、客服应答与人工接管');
 
     await open(page, origin, 'assets', form(page, 'upload'));
     await form(page, 'upload').locator('[name=file]').setInputFiles({ name: 'product.png', mimeType: 'image/png', buffer: sourceBytes });
@@ -173,11 +189,22 @@ test('the served glass workbench completes account, service, image, draft and ex
 
     await open(page, origin, 'drafts/new', form(page, 'save-draft'));
     await form(page, 'save-draft').locator('[name=image-main]').selectOption(asset.id);
+    const draftCreated = page.waitForResponse(response => response.ok() && response.request().method() === 'PUT' &&
+      /^\/v1\/studio\/pinduoduo-drafts\/[^/]+$/.test(new URL(response.url()).pathname));
     await save(page, 'save-draft', { title: '陶瓷杯上新', specification: '350ml', sku: 'CUP-350', price: '49.9', stock: '10' });
     await page.getByRole('heading', { name: '陶瓷杯上新', exact: true }).waitFor();
-    const draft = (await read('/v1/studio/pinduoduo-drafts')).items[0];
+    const draft = await (await draftCreated).json();
+    covered('素材上传与源图检查，创建商品草稿');
 
-    await open(page, origin, 'desk/image', page.getByRole('link', { name: '商品组图方案', exact: true }));
+    const stages = page.getByRole('navigation', { name: '核心工作区切换' });
+    const homeRead = responseFor(page, 'GET', '/v1/plugins');
+    await stages.getByRole('link', { name: '电商工作台', exact: true }).click();
+    await homeRead;
+    await page.getByRole('heading', { name: '电商工作台', exact: true }).waitFor();
+    covered('从顶部导航进入电商工作台并读取插件目录');
+    const workbenchRead = responseFor(page, 'GET', '/v1/tasks');
+    await stages.getByRole('link', { name: '图片生成', exact: true }).click();
+    await workbenchRead;
     await page.getByRole('link', { name: '商品组图方案', exact: true }).click();
     await form(page, 'image-plan-create').locator('[name=assetId]').selectOption(asset.id);
     await save(page, 'image-plan-create', { productName: '陶瓷杯组图', requirements: '保留浅色陶瓷杯外观。', detailCount: '1' });
@@ -206,6 +233,7 @@ test('the served glass workbench completes account, service, image, draft and ex
     const wallet = await read('/v1/credits/wallet');
     assert.equal(wallet.reserved, 0);
     assert.equal(wallet.available, 100 - plan.estimatedCredits);
+    covered('商品组图创建、确认、失败重试、下载并应用到草稿（本地模型替身）');
 
     await open(page, origin, 'drafts/new/plan/' + planId, form(page, 'save-draft'));
     assert.equal(await form(page, 'save-draft').locator('[name=image-main]').inputValue(), plan.images[0].assetId);
@@ -216,13 +244,51 @@ test('the served glass workbench completes account, service, image, draft and ex
     await page.locator('[data-brief-assist]').click();
     await page.waitForFunction(() => document.querySelector('[name="params.prompt"]').value.includes('自然侧光'));
 
-    await open(page, origin, 'commerce', form(page, 'book'));
+    const ledgerTab = page.getByRole('tab', { name: /运营台账/ });
+    await open(page, origin, 'commerce', ledgerTab);
+    await ledgerTab.click();
+    const bookCreated = responseFor(page, 'POST', '/v1/studio/pinduoduo/books');
     await save(page, 'book', { name: '商品运营台账' });
+    const book = await (await bookCreated).json();
     await page.getByRole('heading', { name: '商品运营台账', exact: true }).waitFor();
     await open(page, origin, 'drafts/' + draft.id + '/inventory', form(page, 'inventory-preview'));
+    const inventoryImport = '/v1/studio/pinduoduo/books/' + book.id + '/records/inventory/draft-import';
+    const inventoryPreviewed = responseFor(page, 'POST', inventoryImport + '/preview');
     await form(page, 'inventory-preview').locator('button').click();
+    await inventoryPreviewed;
+    const inventoryWritten = responseFor(page, 'POST', inventoryImport + '/confirm');
     await page.getByRole('button', { name: '确认写入台账' }).click();
+    await inventoryWritten;
     await page.getByText('CUP-350', { exact: false }).first().waitFor();
+    covered('创建运营台账、预览并确认库存写入');
+
+    await stages.getByRole('link', { name: '新建任务', exact: true }).click();
+    await page.locator('.composer-model').click();
+    await page.locator('[data-model-id="browser-text"]').click();
+    await page.locator('.agent-home textarea').fill('为陶瓷杯建议布光方式。');
+    const taskCreated = responseFor(page, 'POST', '/v1/tasks');
+    await page.getByRole('button', { name: '发送消息', exact: true }).click();
+    const modelTask = await (await taskCreated).json();
+    await page.locator('.agent-log').getByText('模型建议：保留陶瓷杯原色，使用自然侧光表现釉面。', { exact: true }).waitFor();
+    assert.equal((await read('/v1/tasks/' + modelTask.id)).state, 'succeeded');
+    covered('新建任务提交、后台执行、浏览器显示结果（本地模型替身）');
+
+    await page.locator('#profile').click();
+    await page.getByRole('link', { name: '设置与诊断', exact: true }).click();
+    const preferences = form(page, 'settings').locator('[name=taskNotifications]');
+    await preferences.uncheck();
+    const preferencesSaved = responseFor(page, 'PATCH', '/v1/settings');
+    await save(page, 'settings', {});
+    assert.equal((await (await preferencesSaved).json()).preferences.taskNotifications, false);
+    const health = responseFor(page, 'GET', '/health');
+    const ready = responseFor(page, 'GET', '/ready');
+    await page.getByRole('button', { name: '检查服务和数据库', exact: true }).click();
+    await Promise.all([health, ready]);
+    await page.locator('#checks').getByText('数据库与迁移', { exact: true }).waitFor();
+    await page.reload();
+    await preferences.waitFor();
+    assert.equal(await preferences.isChecked(), false);
+    covered('保存工作区偏好、检查服务与数据库、刷新后确认设置');
 
     await open(page, origin, 'copy-drafts/new', form(page, 'copy-draft-edit'));
     await save(page, 'copy-draft-edit', { title: '上新文案', content: '350 毫升陶瓷杯，规格清晰。' });
@@ -237,6 +303,7 @@ test('the served glass workbench completes account, service, image, draft and ex
     const [psd] = await Promise.all([page.waitForEvent('download'),
       page.getByRole('button', { name: '下载分层 PSD' }).click()]);
     assert.equal((await readFile(await psd.path())).subarray(0, 4).toString(), '8BPS');
+    covered('导出已保存文案与分层 PSD');
 
     if (videoDelivery) {
       await open(page, origin, 'media/storyboards/new', form(page, 'storyboard-save'));
@@ -245,6 +312,7 @@ test('the served glass workbench completes account, service, image, draft and ex
       const [video] = await Promise.all([page.waitForEvent('download'),
         page.getByRole('button', { name: '合成并下载 MP4' }).click()]);
       assert.equal((await readFile(await video.path())).subarray(4, 8).toString(), 'ftyp');
+      covered('通过真实 ffmpeg 合成与下载 MP4');
     }
 
     await open(page, origin, 'inbox', page.getByRole('button', { name: '全部标为已读' }));
@@ -254,4 +322,5 @@ test('the served glass workbench completes account, service, image, draft and ex
     await page.getByRole('heading', { name: '消息中心', exact: true }).waitFor();
     assert.equal((await read('/v1/notifications?limit=1')).unread, 0);
     assert.deepEqual(errors, []);
+    covered('消息标记已读并确认刷新后的状态');
   });

@@ -36,3 +36,26 @@ export function select(name, options, selected, attrs = '') {
   return '<select name="' + h(name) + '" ' + attrs + '>' + options.map(([key, label]) => '<option value="' + h(key) + '"' +
     ((Array.isArray(selected) ? selected.includes(key) : key === selected) ? ' selected' : '') + '>' + h(label) + '</option>').join('') + '</select>';
 }
+export function confirmDialog(title, message, confirmLabel = '继续', cancelLabel = '取消') {
+  if (typeof document === 'undefined') return Promise.resolve(false);
+  return new Promise(resolve => {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'ui-dialog';
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.innerHTML = '<header class="ui-dialog-header"><h2>' + h(title) + '</h2>' +
+      '<button class="ui-icon-button" type="button" value="cancel" aria-label="关闭">×</button></header>' +
+      '<div class="ui-dialog-body"><p>' + h(message) + '</p></div>' +
+      '<footer class="ui-dialog-footer"><button type="button" class="plain" value="cancel">' + h(cancelLabel) + '</button>' +
+      '<button type="button" class="primary" value="confirm">' + h(confirmLabel) + '</button></footer>';
+    const settle = accepted => {
+      dialog.close();
+      dialog.remove();
+      resolve(accepted);
+    };
+    dialog.addEventListener('cancel', event => { event.preventDefault(); settle(false); });
+    dialog.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => settle(btn.value === 'confirm')));
+    document.body.append(dialog);
+    dialog.showModal();
+    dialog.querySelector('.primary')?.focus();
+  });
+}

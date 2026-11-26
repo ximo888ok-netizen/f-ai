@@ -42,7 +42,7 @@ export function videoDirectorView(models, available, storyboardRoute) {
   return '<div class="quick-image-layout video-quick-layout video-director-layout" data-video-director>' +
     videoCreationForm(models, available, { title: '智能导演', description, submit: '挖掘商品信息' }) +
     '<section class="card video-quick-stage director-stage" aria-label="导演工作区"><header><h3>导演工作区</h3>' +
-    '<div class="director-stage-links">' + link('分镜编辑', storyboardRoute) + link('任务记录', 'tasks') + '</div></header>' +
+    '<div class="director-stage-links">' + link('商品分镜技能','desk/video/skills/video.skill-product-storyboard')+link('参考广告改编','desk/video/skills/video.skill-ad-rewrite')+link('实拍剪辑','desk/video/skills/video.skill-openstoryline')+link('分镜编辑', storyboardRoute) + link('任务记录', 'tasks') + '</div></header>' +
     videoCreationProgress(directorSteps.map(([, label]) => label)) +
     videoCreationFrame('从商品资料到拍摄方案', '添加商品图并填写已知信息。你可以逐步筛选信息、选择创作方向，再编辑脚本。') +
     '<section class="director-stage-content" data-director-stage hidden></section><div class="director-task-links" data-director-tasks hidden></div>' +

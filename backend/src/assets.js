@@ -31,6 +31,10 @@ export async function taskAssets(db, context, identifiers, capability) {
     WHERE workspace_id=$1 AND account_id=$2 AND id=ANY($3::uuid[]) AND NOT rights_restricted
     ORDER BY id ${reviewImages?'FOR SHARE':''}`, [context.workspaceId, context.accountId, ids]);
   if (assets.length !== ids.length) throw notFound('Asset');
+  const spec=capability.mediaSkill;
+  if(spec && (assets.some(a=>!spec.mediaTypes.includes(a.media_type)) ||
+      (spec.needsMovie&&!assets.some(a=>a.media_type==='video/mp4')) ||
+      (spec.needsImage&&!assets.some(a=>a.media_type.startsWith('image/'))))) throw invalid('素材类型与所选技能不匹配。');
   if (capability.requiresConsent && assets.some(asset => !asset.consent_reference || !asset.consent_expires_at || new Date(asset.consent_expires_at).getTime() <= Date.now())) {
     throw new ApiError(422, 'CONSENT_REQUIRED', 'A valid asset authorization and expiry are required');
   }

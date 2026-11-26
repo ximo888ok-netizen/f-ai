@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { GeneratedFile } from './model-file.js';
+import { MediaOutputs, storeMediaOutputs } from './media-skill-files.js';
 import { PendingModelJob } from './model-http.js';
 import { taskAssets } from './assets.js';
 import { checkImageInputs, needsImageReview } from './image-preflight.js';
@@ -10,6 +11,7 @@ import { ProviderError, taskProvider } from './providers.js';
 import { dispatchSchedule } from './schedules.js';
 import { capabilitySignature, finishTask, shopFingerprint } from './tasks.js';
 import { modelProviders, requireConnection, shopGrantExpired } from './merchant-connections.js';
+import { requireFeature } from './merchant-features.js';
 import { accessibleProject } from './merchant-projects.js';
 import { logTask } from './task-events.js';
 import { dispatchFeishuReply } from './feishu-channel.js';
@@ -20,7 +22,7 @@ import { decodeImage } from './raster.js';
 
 const maxAttempts = 3;
 
-async function claim(db) {
+async function claim(db, providers) {
   return db.transaction(async connection => {
     const task = await row(connection, [
       'SELECT * FROM tasks',
@@ -42,10 +44,11 @@ async function claim(db) {
       return { expired: true };
     }
     const lease = randomUUID();
+    const leaseSeconds = Math.max(120, Math.ceil((providers.get(task.provider_id)?.runTimeoutMs ?? 0) / 1000) + 15);
     const claimed = await row(connection, [
       "UPDATE tasks SET state = 'running', attempts = attempts + CASE WHEN provider_job_id IS NULL THEN 1 ELSE 0 END, updated_at = now(),",
-      "lease_id = $2, lease_until = now() + interval '120 seconds' WHERE id = $1 RETURNING *",
-    ].join(' '), [task.id, lease]);
+      "lease_id = $2, lease_until = now() + $3::integer * interval '1 second' WHERE id = $1 RETURNING *",
+    ].join(' '), [task.id, lease, leaseSeconds]);
     if (!claimed.provider_job_id) await logTask(connection, claimed.id, 'running', claimed.attempts);
     return claimed;
   });
@@ -55,6 +58,10 @@ async function providerPayload(db, identityDb, task, capability, shops) {
   const scope = await row(identityDb, 'SELECT m.role, m.state, w.kind FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.workspace_id = $1 AND m.account_id = $2', [task.workspace_id, task.account_id]);
   if (!scope) throw new ProviderError('MEMBERSHIP_REVOKED');
   const context = { ...scope, workspaceId: task.workspace_id, accountId: task.account_id };
+  if(capability.mediaSkill){
+    if(scope.state!=='active')throw new ProviderError('MEMBERSHIP_REVOKED');
+    await requireFeature(db,context,capability.pluginId,capability.id);
+  }
   await accessibleProject(db, context, task.project_id, true);
   if (!task.feature_version) {
     const setting = await row(db, 'SELECT enabled FROM plugin_settings WHERE workspace_id=$1 AND plugin_id=$2', [task.workspace_id, task.plugin_id]);
@@ -99,7 +106,7 @@ async function providerPayload(db, identityDb, task, capability, shops) {
 }
 
 export async function workOnce({ db, providers, shops, videoArchive, identityDb = db }) {
-  const task = await claim(db);
+  const task = await claim(db, providers);
   if (!task) return false;
   if (task.expired) return true;
   const capability = catalog.get(task.capability_id);
@@ -164,6 +171,7 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
       ].join(' '), [current.id, 2 ** current.attempts, failure.code]);
       await logTask(connection, current.id, 'retrying', current.attempts, failure.code);
     } else {
+      if (result instanceof MediaOutputs) result=await storeMediaOutputs(connection,current,result);
       const file = archive?.file ?? (result instanceof GeneratedFile ? result : null);
       if (file) {
         const assetId = randomUUID();

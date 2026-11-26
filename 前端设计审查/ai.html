@@ -22,26 +22,32 @@
 @import url("/studio/live-video-director.css") layer(business);
 @import url("/studio/studio-foundation.css") layer(business);
 @import url("/studio/studio-entry.css") layer(business);
-@import url("/studio/studio-workflows.css") layer(business);</style>
+@import url("/studio/studio-workflows.css") layer(business);
+@import url("/studio/scene-desk.css") layer(business);
+@import url("/studio/media-skills.css") layer(business);</style>
+<link rel="stylesheet" href="/studio/dot-matrix-switch.css">
 <style id="native-glass-design">
     /* ==========================================================================
        1. 核心光学设计令牌 (三态单色玻璃体系 + 精密排版刻度 + 统一圆角)
        ========================================================================== */
     :root {
-      /* 精密字体体系：中文辅字严格守住 12px 下限，确保磨砂玻璃之上清晰锐利 */
-      --font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Noto Sans SC", sans-serif;
-      --page-title-size: clamp(22px, 2vw, 26px);
-      --card-title-size: 15px;
-      --item-title-size: 13.5px;
-      --body-size: 13.5px;
-      --control-size: 13px;
-      --caption-size: 12px;
+      /* 精密高斯玻璃配套字体体系：Windows 11 原生可变字体 + macOS SF Pro + 精致中文回退，零外链瞬时锐利渲染 */
+      --font-display: "SF Pro Display", "Segoe UI Variable Display", "HarmonyOS Sans SC", "PingFang SC", "MiSans", "Microsoft YaHei UI", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+      --font: "SF Pro Text", "Segoe UI Variable Text", "HarmonyOS Sans SC", "PingFang SC", "MiSans", "Microsoft YaHei UI", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+      --font-mono: "SF Mono", "Cascadia Code", "JetBrains Mono", "Consolas", ui-monospace, monospace;
+      --in-oklab: ;
+      --page-title-size: clamp(1.42rem, 1.15rem + 1.05vw, 1.85rem);
+      --card-title-size: 0.9375rem;
+      --item-title-size: 0.875rem;
+      --body-size: 0.875rem;
+      --control-size: 0.8125rem;
+      --caption-size: 0.75rem;
 
       --body-leading: 1.65;
       --title-leading: 1.22;
-      --display-tracking: -0.02em;
-      --title-tracking: -0.005em;
-      --body-tracking: 0.01em;
+      --display-tracking: -0.024em;
+      --title-tracking: -0.008em;
+      --body-tracking: 0.008em;
 
       --w-regular: 400;
       --w-medium: 500;
@@ -62,7 +68,7 @@
       /* 实时可调材质参数 (滑块即时覆盖) */
       --default-blur: 24px;
       --default-sat: 165%;
-      --default-alpha: 0.56;
+      --default-alpha: 0.50;
       --blur: var(--default-blur);
       --sat: var(--default-sat);
       --alpha: var(--default-alpha);
@@ -71,29 +77,29 @@
       --card-optics: blur(var(--blur)) saturate(var(--sat));
       --popup-optics: blur(calc(var(--blur) + 12px)) saturate(calc(var(--sat) + 15%));
 
-      /* 银白玻璃默认主题 (Silver White) */
+      /* 柔光银白玻璃默认主题 (Soft Silver White，克制防刺眼) */
       color-scheme: light;
-      --canvas-bg: linear-gradient(145deg, #DCE3EC 0%, #EBEFF4 52%, #D1DAE5 100%);
-      --card-rgb: 248, 250, 253;
-      --card-end-rgb: 231, 237, 244;
-      --card-fade: 0.10;
-      --popup-rgb: 252, 254, 255;
-      --popup-alpha-boost: 0.20;
+      --canvas-bg: linear-gradient(145deg, #C7D0DB 0%, #D6DEE8 52%, #BFC9D5 100%);
+      --card-rgb: 238, 243, 248;
+      --card-end-rgb: 214, 222, 233;
+      --card-fade: 0.14;
+      --popup-rgb: 236, 241, 247;
+      --popup-alpha-boost: 0.22;
 
-      --edge: rgba(255, 255, 255, 0.68);
-      --edge-subtle: rgba(15, 23, 34, 0.12);
-      --edge-strong: rgba(15, 23, 34, 0.22);
-      --cut-highlight: rgba(255, 255, 255, 0.58);
-      --cut-side: rgba(255, 255, 255, 0.28);
-      --cut-shade: rgba(15, 23, 42, 0.10);
-      --cast-shadow: rgba(15, 23, 42, 0.12);
-      --cast-shadow-elev: rgba(15, 23, 42, 0.17);
+      --edge: rgba(246, 249, 253, 0.72);
+      --edge-subtle: rgba(15, 23, 34, 0.10);
+      --edge-strong: rgba(15, 23, 34, 0.20);
+      --cut-highlight: rgba(248, 251, 255, 0.78);
+      --cut-side: rgba(242, 247, 252, 0.44);
+      --cut-shade: rgba(15, 23, 42, 0.07);
+      --cast-shadow: rgba(15, 23, 42, 0.09);
+      --cast-shadow-elev: rgba(15, 23, 42, 0.15);
 
       --hq-ink: 15, 23, 34;
       --text-primary: rgba(var(--hq-ink), 0.92);
-      --text-secondary: rgba(var(--hq-ink), 0.70);
-      --text-tertiary: rgba(var(--hq-ink), 0.54);
-      --text-muted: rgba(var(--hq-ink), 0.44);
+      --text-secondary: rgba(var(--hq-ink), 0.74);
+      --text-tertiary: rgba(var(--hq-ink), 0.62);
+      --text-muted: rgba(var(--hq-ink), 0.56);
 
       /* 克制单一交互强调色：冷钢蓝 */
       --action: #2F4F6F;
@@ -102,30 +108,45 @@
       --selected-ink: #244361;
 
       /* 选择性光学微阴影：仅用于大标题、核心指标与主行动按钮 */
-      --type-shadow: 0 1px 2px rgba(255, 255, 255, 0.72);
+      --type-shadow: 0 1px 2px rgba(235, 241, 248, 0.55);
       --micro-shadow: var(--type-shadow);
 
-      --bg-input: rgba(var(--hq-ink), 0.045);
-      --bg-input-hover: rgba(var(--hq-ink), 0.07);
-      --track: rgba(var(--hq-ink), 0.16);
+      --bg-input: rgba(var(--hq-ink), 0.05);
+      --bg-input-hover: rgba(var(--hq-ink), 0.08);
+      --track: rgba(var(--hq-ink), 0.18);
       --rail: var(--action);
-      --thumb: #FFFFFF;
-      --veil: rgba(226, 232, 240, 0.36);
-      --opaque-surface: #EEF2F7;
-      --spotlight: rgba(255, 255, 255, 0.12);
-      --grain-opacity: 0.030;
+      --thumb: #F3F6FA;
+      --veil: rgba(185, 196, 210, 0.44);
+      --opaque-surface: #DCE3EC;
+      --spotlight: rgba(248, 251, 255, 0.34);
+      --grain-opacity: 0.022;
 
       /* 主题自适应品牌徽章与光学球体滤镜 */
-      --orb-contrast: 0.88;
-      --orb-gain: 1.06;
-      --orb-opacity: 0.80;
-      --logo-box-start: rgba(255, 255, 255, 0.88);
-      --logo-box-end: rgba(214, 224, 236, 0.72);
-      --logo-box-stroke: rgba(255, 255, 255, 0.95);
+      --orb-contrast: 0.62;
+      --orb-gain: 1.38;
+      --orb-opacity: 0.92;
+      --logo-box-start: rgba(238, 243, 248, 0.88);
+      --logo-box-end: rgba(196, 208, 222, 0.74);
+      --logo-box-stroke: rgba(246, 249, 253, 0.85);
       --logo-rim: rgba(47, 79, 111, 0.82);
       --logo-flow: #2F4F6F;
       --logo-digit: rgba(30, 48, 68, 0.72);
-      --bottle-label-bg: rgba(255, 255, 255, 0.86);
+      /* 三层光学鼠标跟随边框令牌（银白主题：橙蓝双色适度加深以确保浅底清晰可见） */
+      --glass-fill: rgba(235, 240, 247, 0.58);
+      --glass-static-border: rgba(15, 23, 34, 0.11);
+      --glass-top-catchlight: rgba(255, 255, 255, 0.78);
+      --rim-width: 1px;
+      --core-radius: 80px;
+      --falloff-radius: 230px;
+      --core-peak: rgba(255, 255, 255, 0.98);
+      --core-mid: rgba(255, 255, 255, 0.60);
+      --rim-falloff-bg: linear-gradient(100deg, #e54d0c 0%, #dc712b 26%, #3b88f6 58%, #1858d8 100%);
+      --rim-falloff-alpha: 0.96;
+      --bloom-bg: linear-gradient(100deg, #e54d0c 0%, #dc712b 28%, #3b88f6 60%, #1858d8 100%);
+      --bloom-opacity: 0.48;
+      --sheen-peak: rgba(255, 255, 255, 0.16);
+      --intensity: 1.42;
+      --bottle-label-bg: rgba(236, 242, 248, 0.86);
       --bottle-label-ink: rgba(15, 23, 34, 0.88);
     }
 
@@ -152,9 +173,9 @@
 
       --hq-ink: 248, 250, 252;
       --text-primary: rgba(var(--hq-ink), 0.94);
-      --text-secondary: rgba(var(--hq-ink), 0.76);
-      --text-tertiary: rgba(var(--hq-ink), 0.58);
-      --text-muted: rgba(var(--hq-ink), 0.48);
+      --text-secondary: rgba(var(--hq-ink), 0.78);
+      --text-tertiary: rgba(var(--hq-ink), 0.64);
+      --text-muted: rgba(var(--hq-ink), 0.58);
 
       --action: #7BA8D1;
       --action-hover: #8BB6DD;
@@ -179,6 +200,18 @@
       --logo-rim: rgba(241, 245, 249, 0.92);
       --logo-flow: #FFFFFF;
       --logo-digit: rgba(241, 245, 249, 0.82);
+      /* 三层光学鼠标跟随边框令牌（雾灰炭灰玻璃 · 橙蓝双色加深） */
+      --glass-fill: rgba(54, 60, 70, 0.58);
+      --glass-static-border: rgba(255, 255, 255, 0.085);
+      --glass-top-catchlight: rgba(255, 255, 255, 0.11);
+      --core-peak: rgba(255, 255, 255, 0.96);
+      --core-mid: rgba(255, 255, 255, 0.50);
+      --rim-falloff-bg: linear-gradient(100deg, #f85f1c 0%, #eb8244 26%, #62a6ff 58%, #2a72f5 100%);
+      --rim-falloff-alpha: 0.95;
+      --bloom-bg: linear-gradient(100deg, #f85f1c 0%, #eb8244 28%, #62a6ff 60%, #2a72f5 100%);
+      --bloom-opacity: 0.56;
+      --sheen-peak: rgba(255, 255, 255, 0.055);
+      --intensity: 1.56;
       --bottle-label-bg: rgba(34, 40, 48, 0.78);
       --bottle-label-ink: rgba(248, 250, 252, 0.92);
     }
@@ -206,9 +239,9 @@
 
       --hq-ink: 248, 250, 252;
       --text-primary: rgba(var(--hq-ink), 0.95);
-      --text-secondary: rgba(var(--hq-ink), 0.74);
-      --text-tertiary: rgba(var(--hq-ink), 0.56);
-      --text-muted: rgba(var(--hq-ink), 0.46);
+      --text-secondary: rgba(var(--hq-ink), 0.78);
+      --text-tertiary: rgba(var(--hq-ink), 0.64);
+      --text-muted: rgba(var(--hq-ink), 0.58);
 
       --action: #73A2CC;
       --action-hover: #86B3DB;
@@ -233,6 +266,18 @@
       --logo-rim: rgba(226, 232, 240, 0.90);
       --logo-flow: #FFFFFF;
       --logo-digit: rgba(226, 232, 240, 0.78);
+      /* 三层光学鼠标跟随边框令牌（黑曜炭灰玻璃 · 橙蓝双色加深显色） */
+      --glass-fill: rgba(34, 37, 44, 0.60);
+      --glass-static-border: rgba(255, 255, 255, 0.07);
+      --glass-top-catchlight: rgba(255, 255, 255, 0.085);
+      --core-peak: rgba(255, 255, 255, 0.96);
+      --core-mid: rgba(255, 255, 255, 0.48);
+      --rim-falloff-bg: linear-gradient(100deg, #ff6420 0%, #f18749 26%, #68abff 58%, #2e78ff 100%);
+      --rim-falloff-alpha: 0.96;
+      --bloom-bg: linear-gradient(100deg, #ff6420 0%, #f18749 28%, #68abff 60%, #2e78ff 100%);
+      --bloom-opacity: 0.62;
+      --sheen-peak: rgba(255, 255, 255, 0.045);
+      --intensity: 1.62;
       --bottle-label-bg: rgba(18, 23, 30, 0.82);
       --bottle-label-ink: rgba(248, 250, 252, 0.92);
     }
@@ -240,9 +285,6 @@
     :root[data-shadow="off"] {
       --micro-shadow: none;
     }
-
-    :root { --stage-light-start: rgba(255, 255, 255, 0.22); --stage-light-end: rgba(255, 255, 255, 0.08); }
-    :root[data-material="white"] { --stage-light-start: rgba(255, 255, 255, 0.08); --stage-light-end: rgba(255, 255, 255, 0.025); }
 
     /* 物理切边与复合玻璃材质计算 */
     :root {
@@ -283,6 +325,8 @@
       width: 100%;
       text-rendering: optimizeLegibility;
       font-optical-sizing: auto;
+      font-kerning: normal;
+      font-synthesis-weight: none;
     }
 
     body {
@@ -481,6 +525,41 @@
       overflow: visible;
     }
 
+    /* 新建任务顶栏：沿用点阵开关的高度，文字控件按内容取宽。 */
+    .titlebar:has([data-stage="chat"][aria-current="page"]) {
+      --task-bar-height: 36px;
+      --caption-size: var(--control-size);
+
+      & :is(.brand-mark, .menu-item, .stage-switcher, .material-trigger, .credit-pill, .icon-btn) {
+        box-sizing: border-box;
+        height: var(--task-bar-height);
+        padding-block: 0;
+      }
+      & :is(.brand-mark, .menu-item, .switcher-btn, .material-trigger, .credit-pill, .dm-compact .dm-slot-btn) {
+        font-size: var(--control-size);
+        line-height: 1.25;
+      }
+      & .icon-btn { width: var(--task-bar-height); }
+      & .stage-switcher { padding-block: 4px; }
+      & .switcher-btn { align-self: stretch; padding-block: 0; }
+
+      @media (max-width: 720px) {
+        --task-bar-height: 32px;
+      }
+      @media (max-width: 420px) {
+        column-gap: 4px;
+        & :is(.titlebar-left, .titlebar-right, .brand-mark, .material-trigger) { gap: 4px; }
+        & .brand-mark { padding-inline: 0; }
+        & .brand-orb { width: 24px; height: 24px; }
+        & .material-trigger { padding-inline: 6px; }
+        & .dm-compact .dm-switch-stage { --dm-w: 84px; }
+      }
+      @media (max-width: 360px) {
+        margin-inline: 5px;
+        padding-inline: 5px;
+      }
+    }
+
     .titlebar-left {
       display: flex;
       align-items: center;
@@ -662,7 +741,7 @@
     }
     .material-dot.black { background: linear-gradient(135deg, #646B75, #14171C 80%); }
     .material-dot.gray  { background: linear-gradient(135deg, #B5BCC6, #5B626D 82%); }
-    .material-dot.white { background: linear-gradient(135deg, #FFFFFF, #C9D2DC 85%); }
+    .material-dot.white { background: linear-gradient(135deg, #E8EEF5, #B8C4D2 85%); }
 
     .credit-pill {
       display: inline-flex;
@@ -980,20 +1059,41 @@
         border-color 0.24s var(--ease-smooth);
     }
 
-    /* 鼠标跟随珠光折射高光 */
+    /* 鼠标跟随精致光效（三态差异化：银白=冰晶微环 / 雾灰=拉丝椭圆掠光 / 黑曜=针尖冷钛微芒） */
     .glass-card::before {
       content: "";
       position: absolute;
       inset: 0;
-      background: radial-gradient(
-        420px circle at var(--mx, 50%) var(--my, 0%),
-        var(--spotlight),
-        transparent 62%
-      );
+      background:
+        radial-gradient(
+          140px circle at var(--mx, 50%) var(--my, 50%),
+          rgba(255, 255, 255, 0.42) 0%,
+          rgba(255, 255, 255, 0.16) 24%,
+          rgba(168, 196, 224, 0.12) 44%,
+          transparent 70%
+        );
       opacity: 0;
-      transition: opacity 0.35s var(--ease-smooth);
+      transition: opacity 0.28s var(--ease-smooth);
       pointer-events: none;
       z-index: 0;
+    }
+    :root[data-material="gray"] .glass-card::before {
+      background:
+        radial-gradient(
+          ellipse 168px 86px at var(--mx, 50%) var(--my, 50%),
+          rgba(232, 240, 248, 0.22) 0%,
+          rgba(176, 194, 214, 0.09) 46%,
+          transparent 74%
+        );
+    }
+    :root:is([data-material="dark"], [data-material="black"]) .glass-card::before {
+      background:
+        radial-gradient(
+          92px circle at var(--mx, 50%) var(--my, 50%),
+          rgba(236, 246, 255, 0.24) 0%,
+          rgba(115, 162, 204, 0.11) 34%,
+          transparent 68%
+        );
     }
     .glass-card:hover::before {
       opacity: 1;
@@ -1110,7 +1210,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(115deg, var(--stage-light-start) 0%, transparent 48%, var(--stage-light-end) 100%);
+      background: linear-gradient(115deg, rgba(255, 255, 255, 0.22) 0%, transparent 48%, rgba(255, 255, 255, 0.08) 100%);
       pointer-events: none;
       z-index: 0;
     }
@@ -2076,7 +2176,7 @@
       margin: 12px 0 4px;
       width: 100%;
     }
-    .mat-theme button { flex: 1; }
+    .mat-theme > button { flex: 1; }
 
     .mat-field { margin-top: 15px; }
     .mat-field-label label {
@@ -2409,10 +2509,266 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
 .app-shell .titlebar .switcher-btn { color:var(--text-secondary); }
 .app-shell .titlebar .switcher-btn.active { color:var(--selected-ink); }
 .app-shell .btn-primary.commerce-action { color:var(--action-ink); }
-.native-directory .glass-search input { box-shadow:none; border:0; outline:0; }
+.native-directory .glass-search input,
+.native-directory .glass-search input:is(:hover, :focus, :focus-visible),
+#studio .glass-search input:is(:hover, :focus, :focus-visible) { box-shadow:none; border:0; outline:0; background:transparent; }
 .native-directory .apple-switch { box-shadow:inset 0 1px 2px var(--cut-shade); }
+
+/* ==========================================================================
+   全局跨作用域关键修复：流体玻璃背景层级、磨砂环动态动画、输入框去方框与顺时针克制流光、
+   以及与高斯模糊玻璃配套的字体排版精调 (作用于顶栏、工作台及 #studio 业务根容器)
+   ========================================================================== */
+@supports (background: linear-gradient(in oklab, white, black)) {
+  :root { --in-oklab: in oklab; }
+}
+
+.aurora-field {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  pointer-events: none;
+  overflow: hidden;
+}
+.aurora-field > canvas,
+#liquidGlassBg {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  pointer-events: none;
+}
+
+/* 1. 全局 AI 磨砂环图标（顶栏 + 新建任务主舞台）动态旋转、流光与呼吸浮游 */
+.brand-orb,
+.ai-orb-logo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--bg-glass);
+  border: 1px solid var(--edge);
+  box-shadow: var(--inner-sheen), 0 4px 12px -4px var(--cast-shadow);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  overflow: hidden;
+}
+.ai-orb-logo {
+  border-radius: 18px;
+}
+.mobius-svg-root {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.mobius-ring-halo {
+  fill: none;
+  stroke: var(--logo-rim);
+  stroke-opacity: 0.22;
+  stroke-width: 1.5;
+  stroke-dasharray: 22 10 6 10;
+  transform-origin: 60px 60px;
+  animation: mobiusTurnReverse 22s linear infinite;
+}
+.mobius-ribbon {
+  transform-origin: 60px 60px;
+  animation: mobiusTurn 14s linear infinite;
+  will-change: transform;
+}
+.mobius-flow {
+  stroke: var(--logo-flow);
+  animation: svgMobiusFlow 4.2s linear infinite;
+}
+.mobius-digit {
+  font-family: var(--font-display);
+  font-weight: 600;
+  fill: var(--logo-digit);
+  animation: svgDigitFloat 4.2s ease-in-out infinite;
+}
+.mobius-digit.d2 { animation-delay: 0.6s; }
+.mobius-digit.d3 { animation-delay: 1.2s; }
+.mobius-digit.d4 { animation-delay: 1.8s; }
+@keyframes mobiusTurn {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes mobiusTurnReverse {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+@keyframes svgMobiusFlow {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -360; }
+}
+@keyframes svgDigitFloat {
+  0%, 100% { transform: translateY(0px); opacity: 0.68; }
+  50% { transform: translateY(-2.4px); opacity: 1; }
+}
+
+/* 2. 输入框彻底消除内部强制方框 + 三层光学鼠标跟随边框（橙蓝双色加深 · 去掉呼吸光效） */
+.glass-glow-item,
+.glass-glow-item * {
+  box-sizing: border-box;
+}
+#studio #main .agent-home .agent-composer.glass-glow-item,
+.composer-box.agent-composer.glass-glow-item {
+  --mx: -999px;
+  --my: -999px;
+  --glow-opacity: 0;
+  position: relative;
+  display: block !important;
+  grid-template-rows: none !important;
+  gap: 0 !important;
+  min-block-size: 0 !important;
+  block-size: auto !important;
+  overflow: visible !important;
+  border-radius: 20px !important;
+  isolation: isolate;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+#studio #main .agent-home .agent-composer.glass-glow-item::before,
+#studio #main .agent-home .agent-composer.glass-glow-item::after,
+.composer-box.agent-composer.glass-glow-item::before,
+.composer-box.agent-composer.glass-glow-item::after {
+  content: none !important;
+  display: none !important;
+}
+#studio #main .agent-home .agent-composer.glass-glow-item:focus-within,
+.composer-box.agent-composer.glass-glow-item:focus-within {
+  outline: none !important;
+}
+/* Layer 1: 紧贴边缘外晕（橙蓝双色外溢柔光，随鼠标平滑跟随） */
+.glass-glow-item > .glow-bloom {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  background: var(--bloom-bg);
+  filter: blur(10px);
+  -webkit-mask-image: radial-gradient(250px circle at var(--mx) var(--my), #000 0%, rgba(0, 0, 0, 0.56) 46%, transparent 80%);
+  mask-image: radial-gradient(250px circle at var(--mx) var(--my), #000 0%, rgba(0, 0, 0, 0.56) 46%, transparent 80%);
+  opacity: clamp(0, calc(var(--glow-opacity) * var(--bloom-opacity) * var(--intensity)), 0.96);
+  transition: opacity 0.2s var(--ease-smooth);
+}
+/* Layer 2: 高斯模糊玻璃本体 + 极低静态底边 + 内部微反光 */
+.glass-glow-item > .glow-body {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  margin: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  padding: 16px 21px 10px;
+  display: grid;
+  gap: 6px;
+  min-block-size: 168px;
+  align-content: stretch;
+  grid-template-rows: minmax(64px, 1fr) auto auto;
+  background:
+    radial-gradient(240px circle at var(--mx) var(--my), var(--sheen-peak) 0%, transparent 70%),
+    var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--blur, 28px)) saturate(125%);
+  backdrop-filter: blur(var(--blur, 28px)) saturate(125%);
+  box-shadow:
+    inset 0 0 0 1px var(--glass-static-border),
+    inset 0 1px 0 var(--glass-top-catchlight),
+    0 14px 34px -14px var(--cast-shadow);
+}
+.agent-home.in-chat .glass-glow-item > .glow-body {
+  min-block-size: 0;
+  grid-template-rows: auto auto auto;
+}
+/* Layer 3: 精准 mask-composite 光学切边（1.5px 高清切边：沿边橙蓝色散 + 锐利白金高光核） */
+.glass-glow-item > .glow-rim {
+  position: absolute;
+  inset: 0;
+  padding: 1.5px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 3;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  filter: brightness(var(--intensity, 1.58));
+}
+.glass-glow-item .glow-rim-falloff {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--rim-falloff-bg);
+  -webkit-mask-image: radial-gradient(var(--falloff-radius, 250px) circle at var(--mx) var(--my), #000 0%, rgba(0, 0, 0, 0.72) 48%, transparent 100%);
+  mask-image: radial-gradient(var(--falloff-radius, 250px) circle at var(--mx) var(--my), #000 0%, rgba(0, 0, 0, 0.72) 48%, transparent 100%);
+  opacity: calc(var(--glow-opacity) * var(--rim-falloff-alpha, 0.96));
+  transition: opacity 0.18s var(--ease-smooth);
+}
+.glass-glow-item .glow-rim-core {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: var(--glow-opacity);
+  background: radial-gradient(
+    var(--core-radius, 86px) circle at var(--mx) var(--my),
+    var(--core-peak) 0%,
+    var(--core-mid) 40%,
+    rgba(255, 255, 255, 0.14) 72%,
+    transparent 100%
+  );
+  transition: opacity 0.16s var(--ease-smooth);
+}
+#studio .agent-composer textarea,
+#studio .agent-composer textarea:is(:hover, :focus, :focus-visible),
+.composer-box .composer-input,
+.composer-box .composer-input:is(:hover, :focus, :focus-visible) {
+  outline: none !important;
+  outline-offset: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  resize: none;
+  font-family: var(--font);
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.65;
+  letter-spacing: 0.008em;
+  color: var(--text-primary);
+}
+.composer-box .composer-input::placeholder,
+#studio .agent-composer textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.92;
+}
+
+/* 3. 与高斯模糊玻璃配套的光学字体精调：标题平衡换行 + 正文自然换行 + 防伪粗体发虚 */
+.commerce-title, .chat-hero h1, .agent-heading h1, .live-title h1, .entry-caption h1, .subview-title {
+  font-family: var(--font-display);
+  text-wrap: balance;
+  font-synthesis-weight: none;
+}
+.hero-desc, .plugin-desc, .entry-intro, .chat-hero p {
+  text-wrap: pretty;
+}
+.tabular, output, .credit-pill, .metric-chip-val, .stat-value {
+  font-variant-numeric: tabular-nums;
+}
+.find-entry kbd, #studio #nav kbd {
+  font-family: var(--font-mono);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobius-ribbon { animation-duration: 28s; }
+  .mobius-ring-halo { animation-duration: 42s; }
+  .mobius-flow { animation-duration: 8s; }
+}
 </style>
-<script defer src="/studio/glass.js"></script><script defer src="/studio/theme-motion.js"></script>
+<script defer src="/studio/glass.js"></script><script defer src="/studio/theme-motion.js"></script><script defer src="/studio/dot-matrix-switch.js"></script>
 <script type="module" src="/studio/live.js"></script>
 </head><body><svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute;pointer-events:none">
     <defs>
@@ -2458,7 +2814,20 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
         </button>
         <a class="brand-mark" title="电商工作台" href="#home">
           <div class="brand-orb">
-            <svg class="mobius-svg-root" viewbox="0 0 120 120" aria-hidden="true"><use href="#hq-mobius-mark"></use></svg>
+            <svg class="mobius-svg-root" viewbox="0 0 120 120" aria-hidden="true">
+              <circle class="mobius-ring-halo" cx="60" cy="60" r="46"></circle>
+              <g class="mobius-ribbon">
+                <path d="M89.9,46.6 C90.2,63.5 67.5,85.2 44.3,86.3 C31.2,86.9 28.5,73.4 35.2,63.5 C43.5,51.2 61.8,37.8 77.2,36.3 C85.8,35.5 89.7,40.4 89.9,46.6 Z" fill="none" style="stroke:var(--logo-rim)" stroke-opacity="0.34" stroke-width="1.6"></path>
+                <path d="M101.8,43.2 C102.6,59.5 76.8,84.4 45.2,85.6 C27.8,86.2 20.4,74.2 26.8,60.6 C34.8,43.8 61.5,35.6 74.8,45.2 C83.4,51.4 79.8,70.5 64.2,82.6 C50.2,93.4 35.8,88.2 38.4,72.4 C41.6,53.2 71.2,31.4 91.6,31.8 C98.8,32.0 101.4,36.8 101.8,43.2 Z" fill="none" style="stroke:var(--logo-rim)" stroke-opacity=".76" stroke-width="2.4" stroke-linejoin="round"></path>
+                <path d="M101.8,43.2 C102.6,59.5 76.8,84.4 45.2,85.6 C27.8,86.2 20.4,74.2 26.8,60.6 C34.8,43.8 61.5,35.6 74.8,45.2 C83.4,51.4 79.8,70.5 64.2,82.6 C50.2,93.4 35.8,88.2 38.4,72.4 C41.6,53.2 71.2,31.4 91.6,31.8 C98.8,32.0 101.4,36.8 101.8,43.2 Z" class="mobius-flow" fill="none" pathLength="360" stroke-width="3.2" stroke-linecap="round" stroke-dasharray="56 304" filter="url(#mobius-glow)"></path>
+              </g>
+              <g text-anchor="middle" dominant-baseline="central">
+                <text class="mobius-digit d1" x="20" y="25" font-size="9">0</text>
+                <text class="mobius-digit d2" x="98" y="22" font-size="9.5">1</text>
+                <text class="mobius-digit d3" x="98" y="98" font-size="9">8</text>
+                <text class="mobius-digit d4" x="22" y="96" font-size="9">7</text>
+              </g>
+            </svg>
           </div>
           <span>寰球 AI</span>
         </a>
@@ -2537,11 +2906,11 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
                 <svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"></path></svg>
                 <span>插件市场</span>
               </a>
-              <a class="nav-item" data-nav="knowledge" href="#resources">
+              <a class="nav-item" data-nav="knowledge" href="#data">
                 <svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
                 <span>知识库</span>
               </a>
-              <a class="nav-item" data-nav="experts" href="#library/experts">
+              <a class="nav-item" data-nav="experts" href="#capabilities">
                 <svg viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8z"></path></svg>
                 <span>专家 · 技能</span>
               </a>
@@ -2579,9 +2948,9 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
           <a href="/merchant" id="merchantLink" hidden>商家后台</a>
           <a href="#tasks" id="queueLink" hidden>任务记录</a>
           <span id="connection" class="localState" role="status">正在连接</span>
-          <a href="#account" class="account-balance" data-account-balance></a>
           <a href="#account">AI 加油站</a>
           <a href="#team">去邀约</a>
+          <a href="#account" class="account-balance" data-account-balance></a>
           <a href="#settings">设置与诊断</a>
           <button type="button" data-account-appearance>外观与壁纸</button>
           <a href="#resources/memory/personal">个人记忆</a>
@@ -2756,7 +3125,20 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
 <template id="chat-template"><section class="chat-stage agent-home" id="chatStage" aria-labelledby="agent-title">
             <div class="chat-hero stagger-card agent-heading">
               <div class="ai-orb-logo">
-                <svg class="mobius-svg-root" viewbox="0 0 120 120" aria-hidden="true"><use href="#hq-mobius-mark"></use></svg>
+                <svg class="mobius-svg-root" viewbox="0 0 120 120" aria-hidden="true">
+                  <circle class="mobius-ring-halo" cx="60" cy="60" r="46"></circle>
+                  <g class="mobius-ribbon">
+                    <path d="M89.9,46.6 C90.2,63.5 67.5,85.2 44.3,86.3 C31.2,86.9 28.5,73.4 35.2,63.5 C43.5,51.2 61.8,37.8 77.2,36.3 C85.8,35.5 89.7,40.4 89.9,46.6 Z" fill="none" style="stroke:var(--logo-rim)" stroke-opacity="0.34" stroke-width="1.6"></path>
+                    <path d="M101.8,43.2 C102.6,59.5 76.8,84.4 45.2,85.6 C27.8,86.2 20.4,74.2 26.8,60.6 C34.8,43.8 61.5,35.6 74.8,45.2 C83.4,51.4 79.8,70.5 64.2,82.6 C50.2,93.4 35.8,88.2 38.4,72.4 C41.6,53.2 71.2,31.4 91.6,31.8 C98.8,32.0 101.4,36.8 101.8,43.2 Z" fill="none" style="stroke:var(--logo-rim)" stroke-opacity=".76" stroke-width="2.3" stroke-linejoin="round"></path>
+                    <path d="M101.8,43.2 C102.6,59.5 76.8,84.4 45.2,85.6 C27.8,86.2 20.4,74.2 26.8,60.6 C34.8,43.8 61.5,35.6 74.8,45.2 C83.4,51.4 79.8,70.5 64.2,82.6 C50.2,93.4 35.8,88.2 38.4,72.4 C41.6,53.2 71.2,31.4 91.6,31.8 C98.8,32.0 101.4,36.8 101.8,43.2 Z" class="mobius-flow" fill="none" pathLength="360" stroke-width="3.1" stroke-linecap="round" stroke-dasharray="56 304" filter="url(#mobius-glow)"></path>
+                  </g>
+                  <g text-anchor="middle" dominant-baseline="central">
+                    <text class="mobius-digit d1" x="20" y="25" font-size="9">0</text>
+                    <text class="mobius-digit d2" x="98" y="22" font-size="9.5">1</text>
+                    <text class="mobius-digit d3" x="98" y="98" font-size="9">8</text>
+                    <text class="mobius-digit d4" x="22" y="96" font-size="9">7</text>
+                  </g>
+                </svg>
               </div>
               <h1 id="agent-title">寰球 AI，我帮你</h1>
               <p data-chat-scope=""></p>
@@ -2767,13 +3149,16 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
             <div class="chat-messages agent-log" id="chatMessages" role="log" aria-live="polite" aria-label="对话记录"></div>
 
             <div class="agent-next"></div><div class="stagger-card">
-              <form class="composer-box agent-composer card">
-                <svg class="composer-edge" aria-hidden="true" focusable="false">
-                  <rect class="edge-halo" pathlength="100" stroke-dasharray="16 84"></rect>
-                  <rect class="edge-glint" pathlength="100" stroke-dasharray="9 91"></rect>
-                </svg>
-                <textarea class="composer-input" id="chatInput" aria-label="给工作台助手发消息" placeholder="今天帮你做些什么？按 Enter 发送指令，Shift + Enter 换行" maxlength="4000" rows="2"></textarea>
-                </form>
+              <form class="composer-box agent-composer card glass-glow-item">
+                <div class="glow-bloom" aria-hidden="true"></div>
+                <div class="glow-body">
+                  <textarea class="composer-input" id="chatInput" aria-label="给工作台助手发消息" placeholder="今天帮你做些什么？按 Enter 发送指令，Shift + Enter 换行" maxlength="4000" rows="2"></textarea>
+                </div>
+                <div class="glow-rim" aria-hidden="true">
+                  <div class="glow-rim-falloff"></div>
+                  <div class="glow-rim-core"></div>
+                </div>
+              </form>
               <div class="composer-submeta agent-status" role="status"></div>
             </div>
 
@@ -2785,7 +3170,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
 
 
             <div class="studio-right">
-              <div class="glass-card brief-panel stagger-card"><div class="panel-header"><h2>创作要求</h2><button type="button" class="smallbtn" data-brief-assist="" hidden="">AI 帮写</button></div><div data-brief-assist-status="" role="status"></div><div data-brief-mount=""></div><div class="prompt-chips"><button type="button" class="smallbtn" data-brief-chip="保持商品外观">+ 保持商品外观</button><button type="button" class="smallbtn" data-brief-chip="突出材质细节">+ 突出材质细节</button><button type="button" class="smallbtn" data-brief-chip="使用简洁背景">+ 使用简洁背景</button></div></div>
+              <div class="glass-card brief-panel stagger-card"><div class="panel-header"><h2>创作要求</h2><button type="button" class="smallbtn" data-brief-assist="" hidden="">AI 帮写</button></div><div data-brief-mount=""></div><div class="prompt-chips"><button type="button" class="smallbtn" data-brief-chip="保持商品外观">+ 保持商品外观</button><button type="button" class="smallbtn" data-brief-chip="突出材质细节">+ 突出材质细节</button><button type="button" class="smallbtn" data-brief-chip="使用简洁背景">+ 使用简洁背景</button></div></div>
 
               <div class="glass-card result-panel stagger-card"><div class="panel-header"><h2>生成结果</h2><div class="live-row"><a class="smallbtn" href="#psd">PSD 分层设计</a><a class="smallbtn" href="#tasks">任务记录</a></div></div><div data-tool-results="">正在读取最近任务…</div></div>
             </div>
@@ -2828,9 +3213,9 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
     <div class="mat-field">
       <div class="mat-field-label">
         <label for="mat-alpha">玻璃浓度 <small lang="en">Opacity</small></label>
-        <output for="mat-alpha" id="mat-out-alpha">0.56</output>
+        <output for="mat-alpha" id="mat-out-alpha">0.50</output>
       </div>
-      <input id="mat-alpha" type="range" min="0.15" max="0.88" step="0.01" value="0.56">
+      <input id="mat-alpha" type="range" min="0.15" max="0.88" step="0.01" value="0.50">
       <div class="mat-limits" aria-hidden="true"><span>0.15</span><span>0.88</span></div>
     </div>
 

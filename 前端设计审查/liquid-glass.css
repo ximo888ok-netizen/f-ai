@@ -1,5 +1,5 @@
 :root {
-  --liquid-blur: blur(2px);
+  --liquid-blur: blur(var(--blur, 24px)) saturate(var(--sat, 165%));
   --liquid-clear-layer: linear-gradient(transparent, transparent);
   --liquid-tint-light: transparent;
   --liquid-tint: rgba(255, 255, 255, .025);
@@ -282,10 +282,12 @@
   }
 
   :root[data-theme] .work .agent-composer textarea,
-  :root[data-theme] .work .agent-composer textarea:focus {
+  :root[data-theme] .work .agent-composer textarea:focus,
+  :root[data-theme] .work .agent-composer textarea:focus-visible {
     background: transparent;
     border: 0;
     box-shadow: none;
+    outline: none;
   }
 
   .agent-composer textarea::placeholder {
@@ -311,16 +313,24 @@
       linear-gradient(currentColor, currentColor) center / 2px 13px no-repeat;
   }
 
-  :root[data-motion="on"] .liquid-highlight:is(.primary, .workspace-new, .quick-drop) {
-    --liquid-specular: radial-gradient(ellipse 100px 48px at var(--mouse-x) var(--mouse-y),
-      light-dark(#ffffff24, #e6f2ff34), transparent);
+  :root:not([data-motion="off"]) .liquid-highlight:is(.primary, .workspace-new, .quick-drop) {
+    --liquid-specular: radial-gradient(ellipse 68px 32px at var(--mouse-x) var(--mouse-y),
+      rgba(255, 255, 255, 0.34) 0%, rgba(168, 198, 228, 0.12) 48%, transparent 78%);
+  }
+  :root[data-material="gray"]:not([data-motion="off"]) .liquid-highlight:is(.primary, .workspace-new, .quick-drop) {
+    --liquid-specular: radial-gradient(ellipse 84px 24px at var(--mouse-x) var(--mouse-y),
+      rgba(236, 242, 248, 0.26) 0%, rgba(182, 198, 216, 0.08) 54%, transparent 82%);
+  }
+  :root:is([data-material="dark"], [data-material="black"]):not([data-motion="off"]) .liquid-highlight:is(.primary, .workspace-new, .quick-drop) {
+    --liquid-specular: radial-gradient(54px circle at var(--mouse-x) var(--mouse-y),
+      rgba(232, 244, 255, 0.32) 0%, rgba(115, 162, 204, 0.14) 40%, transparent 74%);
   }
 
-  :root[data-theme][data-motion="on"] .topline.liquid-highlight::after {
-    height: 2px;
-    background: radial-gradient(ellipse 175px 2px at var(--mouse-x) 0,
-      color-mix(in srgb, var(--accent) 55%, transparent), transparent);
-    opacity: .7;
+  :root[data-theme]:not([data-motion="off"]) .topline.liquid-highlight::after {
+    height: 1.5px;
+    background: radial-gradient(ellipse 108px 1.5px at var(--mouse-x) 0,
+      color-mix(in oklab, var(--accent) 52%, transparent), transparent);
+    opacity: .62;
   }
 
   :root[data-theme] .studio-popover {

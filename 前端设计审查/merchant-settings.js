@@ -1,5 +1,5 @@
 import { bindReadiness } from './merchant-readiness.js';
-import { action, date, field, form, grid, h, input, item, list, notice, panel, path, select } from './live-ui.js';
+import { action, date, field, form, h, input, item, list, notice, panel, path, select } from './live-ui.js';
 import { badge, logs, rowActions, sectionTitle } from './merchant-ui.js';
 
 function releaseControl(feature) {

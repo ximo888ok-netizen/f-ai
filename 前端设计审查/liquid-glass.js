@@ -1,7 +1,7 @@
 // Compile from the repository root with tsc --strict --target ES2022 --module ES2022 前端设计审查/liquid-glass.ts
 const surfaceSelector = '.topline, .app-shell .rail, .card, .live-panel, dialog, .ui-dialog, .composerShell';
 const glassSelector = surfaceSelector + ', button, a:is(.smallbtn, .primary, .plain, .start), .uploadButton, .navitem, #queueLink';
-const highlightSelector = '.topline, .agent-composer, .primary, .workspace-new, .quick-drop';
+const highlightSelector = '.topline, .primary, .workspace-new, .quick-drop, [data-spotlight], .glass-card';
 const filterId = 'fai-liquid-refraction';
 const root = document.documentElement;
 let initialized = false;
@@ -32,7 +32,7 @@ function markSurfaces(container) {
     }
 }
 function bindMouseHighlight() {
-    const motion = matchMedia('(any-hover: hover) and (any-pointer: fine) and (prefers-reduced-motion: no-preference) and (forced-colors: none)');
+    const motion = matchMedia('(any-hover: hover) and (any-pointer: fine) and (forced-colors: none)');
     const contrast = matchMedia('(prefers-contrast: more), (prefers-reduced-transparency: reduce)');
     let target = null;
     let active = null;
@@ -43,7 +43,14 @@ function bindMouseHighlight() {
         active?.classList.remove('liquid-highlight');
         active?.style.removeProperty('--mouse-x');
         active?.style.removeProperty('--mouse-y');
+        active?.style.removeProperty('--mx');
+        active?.style.removeProperty('--my');
         active = null;
+    }
+    function clearGlowItems() {
+        for (const el of document.querySelectorAll('.glass-glow-item')) {
+            el.style.setProperty('--glow-opacity', '0');
+        }
     }
     function clear() {
         if (frame !== null)
@@ -51,32 +58,59 @@ function bindMouseHighlight() {
         frame = null;
         target = null;
         clearActive();
+        clearGlowItems();
+    }
+    function paintGlowItems() {
+        const proximity = 220;
+        for (const el of document.querySelectorAll('.glass-glow-item')) {
+            const bounds = el.getBoundingClientRect();
+            if (!bounds.width || !bounds.height) continue;
+            const dx = Math.max(bounds.left - clientX, 0, clientX - bounds.right);
+            const dy = Math.max(bounds.top - clientY, 0, clientY - bounds.bottom);
+            const dist = Math.hypot(dx, dy);
+            if (dist < proximity) {
+                const prox = Math.max(0, 1 - dist / proximity);
+                const eased = dist === 0 ? 1 : prox * prox * (3 - 2 * prox);
+                el.style.setProperty('--mx', (clientX - bounds.left).toFixed(1) + 'px');
+                el.style.setProperty('--my', (clientY - bounds.top).toFixed(1) + 'px');
+                el.style.setProperty('--glow-opacity', eased.toFixed(3));
+            } else {
+                el.style.setProperty('--glow-opacity', '0');
+            }
+        }
     }
     function paint() {
         frame = null;
         if (target !== active || !target?.isConnected)
             clearActive();
         active = target?.isConnected ? target : null;
-        if (!active)
-            return;
-        const bounds = active.getBoundingClientRect();
-        active.style.setProperty('--mouse-x', (clientX - bounds.left) + 'px');
-        active.style.setProperty('--mouse-y', (clientY - bounds.top) + 'px');
-        active.classList.add('liquid-highlight');
+        if (active) {
+            const bounds = active.getBoundingClientRect();
+            const lx = (clientX - bounds.left) + 'px';
+            const ly = (clientY - bounds.top) + 'px';
+            active.style.setProperty('--mouse-x', lx);
+            active.style.setProperty('--mouse-y', ly);
+            active.style.setProperty('--mx', lx);
+            active.style.setProperty('--my', ly);
+            active.classList.add('liquid-highlight');
+        }
+        paintGlowItems();
     }
-    document.addEventListener('pointermove', event => {
-        if (event.pointerType !== 'mouse' || !motion.matches || contrast.matches || root.dataset.motion === 'off') {
+    window.addEventListener('pointermove', event => {
+        if (event.pointerType === 'touch' || root.dataset.motion === 'off') {
             clear();
             return;
         }
-        const surface = event.target instanceof Element ? event.target.closest(highlightSelector) : null;
-        if (!(surface instanceof HTMLElement) || surface.matches(':disabled, [aria-disabled="true"]')) {
-            clear();
-            return;
-        }
-        target = surface;
         clientX = event.clientX;
         clientY = event.clientY;
+        const surface = motion.matches && !contrast.matches && event.target instanceof Element
+            ? event.target.closest(highlightSelector)
+            : null;
+        if (surface instanceof HTMLElement && !surface.matches(':disabled, [aria-disabled="true"]')) {
+            target = surface;
+        } else {
+            target = null;
+        }
         frame ??= requestAnimationFrame(paint);
     }, { passive: true });
     root.addEventListener('pointerleave', clear);

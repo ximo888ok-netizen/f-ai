@@ -2,9 +2,13 @@ import { mkdir } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { buildApp } from './app.js';
-import { seedPreviewAdmin } from './auth.js';
+import { loadIntegrations } from './integration-config.js';
+import { getWorkspaces, seedPreviewAdmin } from './auth.js';
+import { provisionCredits } from './wallet.js';
 import { migrate } from './db.js';
 import { createProviders } from './providers.js';
+import { modelDefinitions } from './config.js';
+import { installModels } from './models.js';
 import { startWorker } from './worker.js';
 import { createVideoDelivery } from './video-delivery.js';
 import { createRealtimeBindings } from './realtime-provider.js';
@@ -22,11 +26,19 @@ const db = new PGlite(stateDir ? join(stateDir,'database') : undefined);
 let app;
 try {
   await migrate(db);
-  const dependencies = { db, providers: createProviders(), shops: new Map(),
+  const dependencies = { db, providers: installModels(createProviders(), modelDefinitions()), shops: new Map(),
     realtimeVoice: createRealtimeBindings(), sms: createSmsBindings() };
   const previewPassword = !stateDir && process.env.FAI_PREVIEW_ADMIN_PASSWORD;
-  if (previewPassword) await seedPreviewAdmin(db, previewPassword);
-  app = await buildApp({ ...dependencies, videoDelivery: createVideoDelivery(),
+  if (previewPassword) {
+    const account = await seedPreviewAdmin(db, previewPassword);
+    const credits = Number(process.env.FAI_PREVIEW_ADMIN_CREDITS ?? 0);
+    if (!Number.isSafeInteger(credits) || credits < 0 || credits > 2147483647) throw new Error('Invalid preview credit balance');
+    if (credits) {
+      const [workspace] = await getWorkspaces(db, account.id);
+      await provisionCredits(db, workspace.id, account.id, credits, 'preview-opening');
+    }
+  }
+  app = await buildApp({ ...dependencies, integrations: loadIntegrations(), videoDelivery: createVideoDelivery(),
     loopbackOnly: Boolean(stateDir || previewPassword), previewAdmin: Boolean(previewPassword) });
   const location = await app.listen({ host: '127.0.0.1', port });
   const stopWorker = startWorker(dependencies, app.log);

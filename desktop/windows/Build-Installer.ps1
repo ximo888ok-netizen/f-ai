@@ -39,9 +39,9 @@ $media = Join-Path $app 'media'
 $licenses = Join-Path $payload 'licenses'
 New-Item -ItemType Directory -Path $target,$media,$licenses,(Split-Path -Parent $output) -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $backend 'package.json'),(Join-Path $backend 'package-lock.json') -Destination $target
-foreach ($folder in @('src','migrations')) {
+foreach ($folder in @('src','migrations','integrations')) {
     $subdirectory = New-Item -ItemType Directory -Path (Join-Path $target $folder)
-    $extension = if ($folder -eq 'src') { '*.js' } else { '*.sql' }
+    $extension = if ($folder -eq 'src') { '*.js' } elseif ($folder -eq 'integrations') { '*.py' } else { '*.sql' }
     $tracked | Where-Object { $_ -like "backend/$folder/$extension" } | ForEach-Object {
         Copy-Item -LiteralPath (Join-Path $repo $_) -Destination $subdirectory.FullName
     }
@@ -52,6 +52,11 @@ $help = New-Item -ItemType Directory -Path (Join-Path $target 'src/help')
 Copy-Item -LiteralPath (Join-Path $backend 'src/help/workbench-v1.md') -Destination $help.FullName
 
 # Include only files served by the workbench.
+$runtime = Join-Path $target 'media-runtime'
+New-Item -ItemType Directory -Force (Join-Path $runtime 'aidge') | Out-Null
+foreach ($file in @('prepare.mjs','Dockerfile','README.md','aidge/SKILL.md','aidge/run.py')) {
+    Copy-Item -LiteralPath (Join-Path $backend "media-runtime/$file") -Destination (Join-Path $runtime $file)
+}
 $studio = '前端设计审查'
 $root = Join-Path $app $studio
 New-Item -ItemType Directory -Path (Join-Path $root 'assets') -Force | Out-Null

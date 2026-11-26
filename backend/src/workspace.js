@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { row, rows } from './db.js';
 import { customerScope } from './contracts.js';
 import { ensureKnowledgeCategory, lockKnowledgeBase, registerKnowledgeCategories } from './knowledge-categories.js';
-import { ApiError, array, choice, invalid, notFound, object, page, paginate, requireEnterprise, route, text, uuid } from './http.js';
+import { array, invalid, notFound, object, page, paginate, requireEnterprise, route, text, uuid } from './http.js';
 
 const idParams = object({ id: uuid });
 const knowledgeTags = ['Knowledge'];

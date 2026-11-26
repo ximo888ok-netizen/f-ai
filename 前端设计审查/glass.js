@@ -17,8 +17,8 @@ const StudioGlass = (() => {
   const observed = new Set();
 
   function syncMotion() {
-    moving = preferred == null ? !reduced.matches : preferred === 'on';
-    root.dataset.motion = moving ? 'on' : 'off';
+    moving = preferred == null ? true : preferred === 'on';
+    root.dataset.motion = !moving ? 'off' : (preferred == null && reduced.matches ? 'reduced' : 'on');
     root.dataset.visible = document.hidden ? 'no' : 'yes';
     document.querySelectorAll('[data-motion-toggle]').forEach(button => {
       const label = moving ? '暂停动效' : '播放动效';

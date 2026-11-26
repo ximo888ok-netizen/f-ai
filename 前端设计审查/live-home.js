@@ -1,4 +1,4 @@
-import { deskSections } from './studio-workflows.js';
+import { bindDualModePanel, deskSections, dualModePanel } from './studio-workflows.js';
 import { customerPage } from './live-customer.js';
 import { operationsPage } from './live-operations.js';
 import { copyReviewPage } from './live-copy-review.js';
@@ -6,7 +6,7 @@ import { onboarding, bindOnboarding } from './live-onboarding.js';
 import { date, generationModeTabs, h, heading, item, link, list, notice, panel, path } from './live-ui.js';
 import { cardTitle } from './live-task-fields.js';
 import { capabilityLinks } from './live-catalog.js';
-import { bindImageGeneration, imageGenerationForm } from './image-generation/index.js';
+import { bindImageGeneration, imageGenerationForm, imageGenerationTabs } from './image-generation/index.js';
 import { mainImageCapabilityId } from './image-generation/options.js';
 import { agentImagePlannerId } from './image-generation/agent.js';
 import { assetPreview } from './live-asset-preview.js';
@@ -21,6 +21,7 @@ const videoModes = [
   ['prompt', 'desk/video', '提示词成片'],
   ['quick', 'desk/video/quick', '智能快创'],
   ['director', 'desk/video/director', '智能导演'],
+  ['skills','desk/video/skills','视频制作技能'],
 ];
 
 function recentDrafts(drafts) {
@@ -40,10 +41,14 @@ function recentDrafts(drafts) {
 function videoDesk(ctx, plugin, wallet, tools, render, planning, tasks) {
   const [mode, route] = videoModes.find(([id]) => id === ctx.args[1]) ?? videoModes[0];
   const tabs = generationModeTabs('视频生成模式', videoModes, mode);
-  const embedded = { ...ctx, html: body => render('<div class="live-video-generation">' + tabs +
-    '<div class="live-video-workflow">' + body + '</div></div>' +
-    '<details class="live-fold"><summary>更多视频工具</summary><div class="live-row">' +
-    link('视频导出', 'media/video') + '</div>' + tools + '</details>') };
+  const embedded = { ...ctx, html: body => {
+    render('<div class="live-video-generation">' + tabs + dualModePanel('video') +
+      '<div class="live-video-workflow">' + body + '</div></div>' +
+      '<details class="live-fold"><summary>更多视频工具</summary><div class="live-row">' +
+      link('视频导出', 'media/video') + '</div>' + tools + '</details>');
+    bindDualModePanel(document.querySelector('#main'), 'video');
+  } };
+  if(mode==='skills')return import('./media-skill-desk.js').then(m=>m.mediaSkillDesk(embedded,plugin,wallet,ctx.args[2]));
   if (mode === 'director') {
     const id = ctx.args[2];
     if (!id) return videoDirectorPage(embedded, plugin, wallet, planning, tasks, route + '/storyboards');
@@ -91,9 +96,19 @@ export async function dashboard(ctx) {
     (operations ? onboarding(settings.preferences) : '') + '</div></div>');
   if (current === 'video') return videoDesk(ctx, plugin, wallet, tools, render, planning, tasks.items);
   if (imageGeneration) {
-    render(imageGenerationForm(wallet, mainImage, mode, planning) +
-      '<details class="live-fold"><summary>更多图片工具</summary>' + tools + '</details>');
+    if(ctx.args[1]==='skills'){
+      const nav = imageGenerationTabs('skills');
+      const {mediaSkillDesk}=await import('./media-skill-desk.js');
+      return mediaSkillDesk({...ctx,html:body=>{
+        render(nav + dualModePanel('image') + body);
+        bindDualModePanel(document.querySelector('#main'), 'image');
+      }},plugin,wallet,ctx.args[2]);
+    }
+    render(dualModePanel('image') + imageGenerationForm(wallet, mainImage, mode, planning) +
+      '<details class="live-fold"><summary>更多图片工具</summary><div class="live-row">' +
+      link('图片处理', 'media/images') + link('PSD 分层设计', 'psd') + '</div>' + tools + '</details>');
     bindImageGeneration(ctx, mainImage, wallet, planning);
+    bindDualModePanel(document.querySelector('#main'), 'image');
     return;
   }
   const scene = { 'customer-service': customerPage, operations: operationsPage, copywriting: copyReviewPage }[current];

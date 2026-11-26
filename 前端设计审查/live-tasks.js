@@ -188,6 +188,7 @@ async function tasks(ctx) {
   if (!ctx.active()) return;
   const capability = plugins.flatMap(plugin => plugin.capabilities).find(entry => entry.id === task.capabilityId);
   const output = task.result;
+  const outputFiles = Array.isArray(output?.files) ? output.files : [];
   const voice = task.capabilityId === 'model.voice-turn';
   const showStream = task.streamed && pending(task);
   const externalUrl = httpsUrl(output?.url);
@@ -197,7 +198,7 @@ async function tasks(ctx) {
     if (voice) outputPanel += '<h3>录音转写</h3>' + result(output.transcript) + '<h3>模型回答</h3>' + result(output.answer);
     if (['image','video'].includes(output.type)) outputPanel += notice('AI 生成');
     if (output.assetId) {
-      outputPanel += action('下载结果', 'asset-download', output.assetId) + link('在素材库查看', 'assets') + '<div id="media-result"></div>';
+      outputPanel += action('下载结果', 'asset-download', output.assetId) + link('在素材库查看', 'assets/' + path(output.assetId)) + '<div id="media-result"></div>';
       if (['image/png','image/jpeg'].includes(output.mediaType)) {
         outputPanel += action('下载带标识图片','delivery-download',output.assetId) + link('用作新草稿主图', 'drafts/new/image/' + path(output.assetId));
       } else if (output.mediaType==='video/mp4') {
@@ -206,6 +207,11 @@ async function tasks(ctx) {
           link('调整画幅或导出音轨','media/video/'+output.assetId);
         else outputPanel += notice('当前部署未启用视频标识导出。');
       }
+      if (outputFiles.length > 1) {
+        outputPanel += '<h3>成品文件</h3>' + list(outputFiles, file => item(file.name, file.mediaType,
+          link('查看素材', 'assets/' + path(file.assetId)) + action('下载成品', 'task-file-download', file.assetId)));
+      }
+      if (outputFiles.length && output.text) outputPanel += '<h3>制作说明</h3>' + result(output.text);
     }
     else if (externalUrl) outputPanel += mediaTag(externalUrl, output.type) + '<a class="smallbtn" href="' + h(externalUrl) +
       '" target="_blank" rel="noopener noreferrer">打开生成结果</a>';
@@ -253,6 +259,10 @@ async function tasks(ctx) {
   });
   ctx.click('asset-download', asset => downloadAsset(ctx, asset, task.id + extension));
   ctx.click('delivery-download',asset=>downloadAsset(ctx,asset,'delivery-'+task.id+extension,'delivery'));
+  ctx.click('task-file-download', asset => {
+    const file = outputFiles.find(entry => entry.assetId === asset);
+    if (file) return downloadAsset(ctx, asset, file.name);
+  });
   if (output?.assetId && ['image','audio','video'].includes(output.type)) {
     try {
       const response = await ctx.api('/v1/assets/' + path(output.assetId) + '/content', { raw: true });

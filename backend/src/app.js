@@ -1,3 +1,4 @@
+import metadata from '../package.json' with { type: 'json' };
 import { catalog } from './catalog.js';
 import { registerMerchantConnections } from './merchant-connections.js';
 import { registerMerchantMembers } from './merchant-members.js';
@@ -47,9 +48,15 @@ import { registerProductImagePlans } from './product-image-plans.js';
 import { registerImagePreflight } from './image-preflight.js';
 import { registerStoryboards } from './video-storyboards.js';
 import { registerCopywritingReview } from './copywriting-review.js';
+import { installIntegrations, registerIntegrations } from './plugin-integrations.js';
+import { installMediaSkills, registerMediaSkills } from './media-skill-runtime.js';
+import { registerDeskShops } from './desk-shops.js';
+import { taobaoSettings, registerShopAuth } from './shop-authorization.js';
+
 import { registerCopywritingDrafts } from './copywriting-drafts.js';
 
 export async function buildApp({
+  integrations = {}, integrationRunner, mediaRuntime, shopAuth = taobaoSettings(), shopTokenExchange,
   db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null,
   dedicatedDatabases = new Map(), previewAdmin = false, packagedStudio = false,
   cloudAssets = new Map(), feishu = new Map(), wechat = new Map(), sms = new Map(), realtimeVoice = new Map(),
@@ -76,7 +83,7 @@ export async function buildApp({
   await app.register(swagger, {
     openapi: {
       openapi: '3.1.0',
-      info: { title: 'f-ai Platform API', version: '0.1.0' },
+      info: { title: 'f-ai Platform API', version: metadata.version },
       components: {
         securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } },
       },
@@ -127,6 +134,8 @@ export async function buildApp({
   const requiredMigrations = await migrationFiles();
   const databaseRouter = workspaceDatabaseRouter(db, dedicatedDatabases, requiredMigrations);
   const workspaceDb = databaseRouter.db;
+  const runtimes = await installIntegrations(providers, integrations, integrationRunner);
+  const mediaDirectory=await installMediaSkills(providers,mediaRuntime,loopbackOnly);
   app.decorate('workspaceDatabaseRouter', databaseRouter);
   app.decorate('withWorkspaceDatabase', (id, handler) => databaseRouter.run(id, handler));
   app.get('/health', { schema: { tags: ['Health'], summary: 'Check server liveness' } }, async () => ({ status: 'ok' }));
@@ -154,7 +163,7 @@ export async function buildApp({
   registerMerchantAudit(app, db, workspaceDb);
   registerMerchantFeatures(app, workspaceDb, providers, releases);
   registerProjects(app, workspaceDb);
-  registerMerchantConnections(app, workspaceDb, { providers, shops, cloudAssets, feishu });
+  registerMerchantConnections(app, workspaceDb, { providers, shops, cloudAssets, feishu, integrations });
   route(app, 'GET', '/v1/merchant/context', {
     manager: true, enterprise: true, database: 'identity', tags: ['Merchant'], summary: 'Read access to the merchant workspace',
   }, request => ({ role: request.context.role, workspaceId: request.context.workspaceId }));
@@ -187,7 +196,11 @@ export async function buildApp({
   registerWechatChannels(app,workspaceDb,wechat);
   registerSmsChannel(app,workspaceDb,sms);
   registerSupport(app, workspaceDb);
-  registerCustomerService(app, workspaceDb, customerAnswer);
+  registerCustomerService(app, workspaceDb, customerAnswer, integrations);
+  registerDeskShops(app, workspaceDb, integrations, shopAuth);
+  registerShopAuth(app, workspaceDb, shopAuth, shopTokenExchange);
+  registerIntegrations(app, workspaceDb, integrations, runtimes, integrationRunner, shopAuth);
+  registerMediaSkills(app,workspaceDb,providers,mediaDirectory);
   registerModels(app, providers, workspaceDb);
   registerRealtimeVoice(app, workspaceDb, realtimeVoice);
   registerTasks(app, workspaceDb, providers, shops, retryProductImageTask);

@@ -274,12 +274,25 @@ async function render() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#main') void render(); });
 async function start() {
   const connection = document.querySelector('#connection');
+  const callback = new URL(location.href);
+  const oauthState = callback.searchParams.get('state');
+  const oauthCode = callback.searchParams.get('code');
+  const oauthError = callback.searchParams.get('error');
+  if (oauthState && (oauthCode || oauthError)) history.replaceState(null,'',location.pathname+'#desk/operations/shops');
   try {
     await request('/ready', { auth: false });
     connection.textContent = '服务已连接';
     connection.dataset.connected = 'yes';
     if (token) {
       setIdentity(await request('/v1/auth/me', { tenant: false }));
+    }
+    if (oauthState && (oauthCode || oauthError)) {
+      if (oauthError) toast('平台授权已取消。');
+      else if (!workspace) toast('请登录工作区后，从店铺管理重新发起授权。');
+      else {
+        try { await request('/v1/desk-shops/authorization/complete',{method:'POST',workspaceId:workspace.id,body:{state:oauthState,code:oauthCode}}); toast('淘宝店铺已授权'); }
+        catch(error) { toast(describeError(error)); }
+      }
     }
   } catch (error) {
     connection.textContent = error.code === 'UNAUTHENTICATED' ? '服务已连接' : '连接异常';

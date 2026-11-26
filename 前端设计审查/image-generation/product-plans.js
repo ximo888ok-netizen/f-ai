@@ -1,6 +1,7 @@
 import { assetPreview } from '../live-asset-preview.js';
 import { downloadFile } from '../live-files.js';
 import { action, date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, retryKey, select, textarea } from '../live-ui.js';
+import { imageGenerationTabs } from './index.js';
 
 const endpoint = '/v1/media/images/product-plans';
 const draftsEndpoint = '/v1/studio/pinduoduo-drafts';
@@ -16,7 +17,7 @@ async function listPlans(ctx) {
     field('商品原图（最多 6 张）', select('assetId', images.map(asset => [asset.id, asset.name]), '', 'multiple required')) +
     field('详情图张数（另生成一张主图）', input('detailCount', 'type="number" min="0" max="7" value="5" required'));
   ctx.html(heading('商品组图方案', '先编辑逐张方案，确认后才提交生图任务。') +
-    '<div class="live-row">' + link('返回图片生成', 'desk/image') + link('上传商品原图', 'assets') + '</div>' +
+    imageGenerationTabs('plans') + '<div class="live-row">' + link('上传商品原图', 'assets') + '</div>' +
     grid(panel('新建方案', images.length ? form('image-plan-create', fields, '创建组图方案') : notice('请先上传 PNG 或 JPEG 商品图。')),
       panel('已有方案', list(plans, plan => item(plan.productName, (plan.confirmedAt ? '已确认' : '草稿') + ' · ' + date(plan.updatedAt),
         link('打开方案', route + '/' + path(plan.id)))))));
