@@ -1,4 +1,4 @@
-import { deskSections } from './studio-workflows.js';
+import { bindDualModePanel, deskSections, dualModePanel } from './studio-workflows.js';
 import { customerPage } from './live-customer.js';
 import { operationsPage } from './live-operations.js';
 import { copyReviewPage } from './live-copy-review.js';
@@ -41,10 +41,13 @@ function recentDrafts(drafts) {
 function videoDesk(ctx, plugin, wallet, tools, render, planning, tasks) {
   const [mode, route] = videoModes.find(([id]) => id === ctx.args[1]) ?? videoModes[0];
   const tabs = generationModeTabs('视频生成模式', videoModes, mode);
-  const embedded = { ...ctx, html: body => render('<div class="live-video-generation">' + tabs +
-    '<div class="live-video-workflow">' + body + '</div></div>' +
-    '<details class="live-fold"><summary>更多视频工具</summary><div class="live-row">' +
-    link('视频导出', 'media/video') + '</div>' + tools + '</details>') };
+  const embedded = { ...ctx, html: body => {
+    render('<div class="live-video-generation">' + tabs + dualModePanel('video') +
+      '<div class="live-video-workflow">' + body + '</div></div>' +
+      '<details class="live-fold"><summary>更多视频工具</summary><div class="live-row">' +
+      link('视频导出', 'media/video') + '</div>' + tools + '</details>');
+    bindDualModePanel(document.querySelector('#main'), 'video');
+  } };
   if(mode==='skills')return import('./media-skill-desk.js').then(m=>m.mediaSkillDesk(embedded,plugin,wallet,ctx.args[2]));
   if (mode === 'director') {
     const id = ctx.args[2];
@@ -96,11 +99,15 @@ export async function dashboard(ctx) {
     if(ctx.args[1]==='skills'){
       const nav=generationModeTabs('图片生成模式',[['quick','desk/image','快速模式'],['advanced','desk/image/advanced','高级模式'],['agent','desk/image/agent','Agent 生图'],['skills','desk/image/skills','平台图片技能']],'skills');
       const {mediaSkillDesk}=await import('./media-skill-desk.js');
-      return mediaSkillDesk({...ctx,html:body=>render(nav+body)},plugin,wallet,ctx.args[2]);
+      return mediaSkillDesk({...ctx,html:body=>{
+        render(nav + dualModePanel('image') + body);
+        bindDualModePanel(document.querySelector('#main'), 'image');
+      }},plugin,wallet,ctx.args[2]);
     }
-    render(imageGenerationForm(wallet, mainImage, mode, planning) +
+    render(dualModePanel('image') + imageGenerationForm(wallet, mainImage, mode, planning) +
       '<details class="live-fold"><summary>更多图片工具</summary>' + tools + '</details>');
     bindImageGeneration(ctx, mainImage, wallet, planning);
+    bindDualModePanel(document.querySelector('#main'), 'image');
     return;
   }
   const scene = { 'customer-service': customerPage, operations: operationsPage, copywriting: copyReviewPage }[current];

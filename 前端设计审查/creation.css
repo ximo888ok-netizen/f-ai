@@ -11,7 +11,7 @@
   --violet: #c4b1ff;
   --rail: 164px;
 }
-body{background:var(--bg);color:var(--ink);font-family:Inter,"Microsoft YaHei","Microsoft YaHei UI",sans-serif}
+body{background:var(--bg);color:var(--ink);font-family:var(--font,"SF Pro Text","Segoe UI Variable Text","HarmonyOS Sans SC","PingFang SC","MiSans","Microsoft YaHei UI",system-ui,sans-serif)}
 button,input,select,textarea{color:inherit}button,a,input,textarea,select{outline-offset:3px}
 button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,label:focus-within:has(input[type=file]){outline:2px solid #c8b8ff}
 svg{display:inline-block;width:19px;height:19px;vertical-align:middle;flex:none}

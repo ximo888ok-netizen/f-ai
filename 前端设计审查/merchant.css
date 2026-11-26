@@ -1,6 +1,6 @@
 .merchant-head{min-height:64px;gap:12px}
-.merchant-brand{font-weight:750;text-decoration:none;font-size:18px;color:var(--ink)}
-.merchant-brand span{margin-inline-start:8px;color:var(--sub);font-size:14px;font-weight:550}
+.merchant-brand{font-family:var(--font-display);font-weight:600;text-decoration:none;font-size:1.125rem;color:var(--ink)}
+.merchant-brand span{margin-inline-start:8px;color:var(--sub);font-size:0.875rem;font-weight:500}
 .merchant-layout{display:grid;grid-template-columns:232px minmax(0,1fr);gap:24px;max-width:1340px;margin:auto;padding:28px 24px}
 .merchant-layout:has(.merchant-menu[hidden]){grid-template-columns:minmax(0,620px);justify-content:center}
 .merchant-menu{align-self:start;height:auto;min-height:0;padding:16px;position:sticky;top:16px}

@@ -480,9 +480,9 @@
       const thumbR = Math.max(2, r - 1);
       thumbMover.style.width = `${thumb}px`;
 
-      const auraPadX = isCompact ? 44 : 120;
-      const auraPadY = isCompact ? 34 : 96;
-      const rimPad = isCompact ? 24 : 52;
+      const auraPadX = isCompact ? 0 : 48;
+      const auraPadY = isCompact ? 0 : 40;
+      const rimPad = isCompact ? 8 : 16;
       const auraW = boxW + auraPadX, auraH = boxH + auraPadY;
       const rimW = boxW + rimPad, rimH = boxH + rimPad;
       const scale = h / 150;
@@ -681,10 +681,11 @@
     }
 
     /* -------------------------------------------------------------------
-       CANVAS 1: FAR STUDIO ATMOSPHERIC AURA (SOFT BLOOM ONLY, ZERO BORDER OVER-STACK)
+       CANVAS 1: RESTRAINED STUDIO ATMOSPHERIC AURA (ZERO BLEED / ZERO EDGE CLIPPING)
        ------------------------------------------------------------------- */
     function renderAura(lightMix, pal, breath, focus) {
-      const { boxW, boxH, auraW, auraH, scale } = geom;
+      if (isCompact) return;
+      const { boxW, boxH, auraW, auraH } = geom;
       const ctx = auraCtx;
       ctx.clearRect(0, 0, auraW, auraH);
 
@@ -692,26 +693,17 @@
       const oy = (auraH - boxH) * 0.5;
       const fx = ox + focus.x + 1;
       const fy = oy + focus.y + 1;
-      const lightDamp = lerp(1.0, 0.52, lightMix);
+      const lightDamp = lerp(1.0, 0.35, lightMix);
+      const maxSafeR = Math.max(16, Math.min(fx, auraW - fx, fy, auraH - fy) - 2);
 
       ctx.save();
       ctx.globalCompositeOperation = 'source-over';
 
-      const farR = 220 * scale * breath;
-      const farGrad = ctx.createRadialGradient(fx, fy, 2, fx, fy, farR);
-      farGrad.addColorStop(0, rgba(pal.auraMid, 0.22 * breath * lightDamp));
-      farGrad.addColorStop(0.34, rgba(pal.auraDeep, 0.11 * breath * lightDamp));
-      farGrad.addColorStop(0.70, rgba(pal.auraDeep, 0.03 * breath * lightDamp));
-      farGrad.addColorStop(1, rgba(pal.auraDeep, 0));
-      ctx.fillStyle = farGrad;
-      ctx.fillRect(0, 0, auraW, auraH);
-
-      const nearR = 116 * scale * breath;
-      const nearGrad = ctx.createRadialGradient(fx, fy, 1, fx, fy, nearR);
-      nearGrad.addColorStop(0, rgba(pal.auraMid, 0.24 * breath * lightDamp));
-      nearGrad.addColorStop(0.50, rgba(pal.auraDeep, 0.09 * breath * lightDamp));
-      nearGrad.addColorStop(1, rgba(pal.auraDeep, 0));
-      ctx.fillStyle = nearGrad;
+      const softGrad = ctx.createRadialGradient(fx, fy, 2, fx, fy, maxSafeR);
+      softGrad.addColorStop(0, rgba(pal.auraMid, 0.08 * breath * lightDamp));
+      softGrad.addColorStop(0.52, rgba(pal.auraDeep, 0.03 * breath * lightDamp));
+      softGrad.addColorStop(1, rgba(pal.auraDeep, 0));
+      ctx.fillStyle = softGrad;
       ctx.fillRect(0, 0, auraW, auraH);
       ctx.restore();
     }
@@ -890,7 +882,7 @@
     }
 
     /* -------------------------------------------------------------------
-       CANVAS 4: CLEAN SYMMETRICAL PERIMETER RIM (NO 0.1s OVER-EXPOSURE SPIKE)
+       CANVAS 4: CRISP HAIRLINE PERIMETER BEVEL (ZERO OUTER GLOW OVER-RENDERING)
        ------------------------------------------------------------------- */
     function renderRim(lightMix, pal, breath, focus) {
       const { boxW, boxH, r, rimW, rimH, scale } = geom;
@@ -901,33 +893,24 @@
       const oy = (rimH - boxH) * 0.5;
       const fx = ox + focus.x + 1;
       const fy = oy + focus.y + 1;
-      const lwMin = isCompact ? 0.9 : 1.0;
 
       ctx.save();
       ctx.globalCompositeOperation = 'source-over';
       traceRoundedRect(ctx, ox + 0.5, oy + 0.5, boxW - 1, boxH - 1, r);
 
-      // Continuous subtle base border tint (replaces CSS border-color transition so backdrop-filter never flickers!)
-      ctx.strokeStyle = rgba(pal.rimHot, lerp(0.16, 0.62, lightMix));
+      // Continuous subtle base hairline border (zero flicker on backdrop-filter)
+      ctx.strokeStyle = rgba(pal.rimHot, lerp(0.16, 0.56, lightMix));
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Restrained 2-layer plasma highlight arc (calm & evenly exposed during fast slides)
-      const g1 = ctx.createRadialGradient(fx, fy, 2, fx, fy, Math.max(18, 102 * scale * breath));
-      g1.addColorStop(0, rgba(pal.rimMid, lerp(0.36, 0.26, lightMix) * breath));
-      g1.addColorStop(0.55, rgba(pal.rimOuter, lerp(0.14, 0.10, lightMix) * breath));
-      g1.addColorStop(1, rgba(pal.rimOuter, 0));
-      ctx.strokeStyle = g1;
-      ctx.lineWidth = Math.max(lwMin * 2.4, 5.6 * scale);
-      ctx.stroke();
-
-      const g2 = ctx.createRadialGradient(fx, fy, 1, fx, fy, Math.max(14, 92 * scale * breath));
-      g2.addColorStop(0, rgba([255, 255, 255], lerp(0.82, 0.72, lightMix) * breath));
-      g2.addColorStop(0.55, rgba(pal.rimHot, lerp(0.52, 0.42, lightMix)));
-      g2.addColorStop(0.85, rgba(pal.rimMid, 0.16));
-      g2.addColorStop(1, rgba(pal.rimMid, 0));
-      ctx.strokeStyle = g2;
-      ctx.lineWidth = Math.max(lwMin, 1.5 * scale);
+      // Single crisp specular edge glint strictly on the 1px bevel (zero wide halo bleed)
+      const glintR = isCompact ? Math.max(16, boxH * 1.15) : Math.max(24, 78 * scale * breath);
+      const glint = ctx.createRadialGradient(fx, fy, 1, fx, fy, glintR);
+      glint.addColorStop(0, rgba([255, 255, 255], lerp(0.46, 0.58, lightMix) * breath));
+      glint.addColorStop(0.55, rgba(pal.rimHot, lerp(0.24, 0.28, lightMix)));
+      glint.addColorStop(1, rgba(pal.rimMid, 0));
+      ctx.strokeStyle = glint;
+      ctx.lineWidth = isCompact ? 1.05 : 1.3;
       ctx.stroke();
 
       ctx.restore();

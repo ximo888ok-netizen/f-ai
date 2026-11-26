@@ -67,21 +67,20 @@
   --dm-thumb-r: calc(var(--dm-r) - 1px);
 }
 
-/* Canvas 1: Far studio atmospheric bloom & outer plasma glow (behind track) */
+/* Canvas 1: Restrained studio atmospheric aura (hero popover only; disabled in compact header to avoid over-rendering) */
 .dm-aura-canvas {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: calc(100% + 120px);
-  height: calc(100% + 96px);
+  width: calc(100% + 48px);
+  height: calc(100% + 40px);
   transform: translate3d(-50%, -50%, 0);
   pointer-events: none;
   z-index: 1;
 }
 
 .dm-switch-wrap.dm-compact .dm-aura-canvas {
-  width: calc(100% + 44px);
-  height: calc(100% + 34px);
+  display: none;
 }
 
 /* Stationary recessed glass track: static border & shadow so backdrop-filter layer NEVER re-rasterizes/flashes during slide! */
@@ -97,7 +96,7 @@
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: transparent;
-  box-shadow: 0 10px 26px -10px rgba(0, 0, 0, 0.30);
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.22);
   -webkit-backdrop-filter: var(--card-optics, var(--studio-panel-filter));
   backdrop-filter: var(--card-optics, var(--studio-panel-filter));
 }
@@ -194,21 +193,21 @@
   pointer-events: none;
 }
 
-/* Canvas 4: 4-layer incandescent plasma perimeter arc hugging exact outer border symmetrically */
+/* Canvas 4: Crisp hairline perimeter bevel hugging exact outer border symmetrically (zero outer smudge) */
 .dm-rim-canvas {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: calc(100% + 52px);
-  height: calc(100% + 52px);
+  width: calc(100% + 16px);
+  height: calc(100% + 16px);
   transform: translate3d(-50%, -50%, 0);
   pointer-events: none;
   z-index: 14;
 }
 
 .dm-switch-wrap.dm-compact .dm-rim-canvas {
-  width: calc(100% + 24px);
-  height: calc(100% + 24px);
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
 }
 
 .dm-hero-meta {

@@ -58,14 +58,14 @@
     border-radius: 27px;
   }
 
-  .agent-home:not(.in-chat) .agent-composer {
+  .agent-home:not(.in-chat) .agent-composer:not(.glass-glow-item) {
     min-block-size: 176px;
     align-content: stretch;
     grid-template-rows: minmax(66px, 1fr) auto auto;
     gap: 5px;
   }
 
-  .agent-home.in-chat .agent-composer { display: grid; gap: 5px; }
+  .agent-home.in-chat .agent-composer:not(.glass-glow-item) { display: grid; gap: 5px; }
 
   :root[data-theme] #main .agent-composer textarea {
     min-block-size: 54px;
@@ -74,7 +74,7 @@
     font-weight: 500;
   }
 
-  .agent-composer > :is(.agent-bar, .composer-scope) {
+  .agent-composer :is(.agent-bar, .composer-scope) {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -292,10 +292,12 @@
   }
 
   .agent-heading h1 {
-    font-size: clamp(2rem, 3.4vw, 3rem);
-    font-weight: 680;
-    line-height: 1.15;
-    letter-spacing: -.032em;
+    font-family: var(--font-display);
+    font-size: clamp(1.75rem, 1.35rem + 1.5vw, 2.5rem);
+    font-weight: 600;
+    line-height: 1.18;
+    letter-spacing: -.028em;
+    text-wrap: balance;
   }
 
   .in-chat .agent-heading h1 { font-size: 1.25rem; }
@@ -303,32 +305,25 @@
   :root[data-theme] #main .agent-starters button {
     min-block-size: 36px;
     border: 1px solid var(--line);
-    border-radius: 9px;
+    border-radius: 999px;
     background: var(--studio-chrome);
     color: var(--ink);
-    font-weight: 550;
+    font-weight: 500;
   }
 
   :root[data-theme] body #main .agent-home .agent-composer {
-    background: var(--studio-sheet);
+    background: var(--frost-surface, var(--studio-sheet));
     border: 1px solid var(--studio-panel-border);
-    border-radius: 20px;
-    box-shadow: var(--liquid-rim), var(--studio-shadow);
-    --liquid-optics: none;
+    border-radius: 22px;
+    box-shadow: var(--studio-panel-shadow, var(--liquid-rim));
+    -webkit-backdrop-filter: var(--studio-panel-filter);
+    backdrop-filter: var(--studio-panel-filter);
   }
 
-  :root[data-theme] .agent-composer:focus-within { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+  :root[data-theme] .agent-composer:focus-within { outline: none; }
 
-  :root[data-theme] .agent-composer::before {
-    padding: 1px;
-    background: radial-gradient(ellipse 210px 55px at var(--mouse-x, 16%) 0,
-      color-mix(in srgb, var(--studio-accent) 56%, var(--studio-rim)), transparent);
-    opacity: 0;
-  }
-
-  :root[data-theme] .agent-composer::after { background: none; box-shadow: none; }
-  :root[data-theme] .agent-composer:focus-within::before { opacity: .42; }
-  :root[data-theme][data-motion="on"] .agent-composer.liquid-highlight::before { opacity: .8; }
+  :root[data-theme] .agent-composer::before,
+  :root[data-theme] .agent-composer::after { content: none; background: none; box-shadow: none; }
 
   :root[data-theme] .agent-composer .composer-scope { padding-block-start: 7px; }
   :root[data-theme] #main .agent-composer .agent-send {

@@ -1,10 +1,16 @@
 /* The window chrome and the editing views share the same glass material. */
+:root {
+  --frost-radius: 24px;
+  --frost-opacity: .50;
+  --frost-saturation: 165%;
+}
 #studio {
-  --font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-display: "SF Pro Display", "Segoe UI Variable Display", "HarmonyOS Sans SC", "PingFang SC", "MiSans", "Microsoft YaHei UI", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+  --font: "SF Pro Text", "Segoe UI Variable Text", "HarmonyOS Sans SC", "PingFang SC", "MiSans", "Microsoft YaHei UI", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", "JetBrains Mono", "Consolas", ui-monospace, monospace;
   --page-gutter: 16px; --panel-gap: 16px; --panel-padding: 20px;
   --radius: 20px; --panel-radius: 20px; --control-radius: 10px;
-  --text-body: 14px; --text-label: 13px;
-  --frost-radius: 24px; --frost-opacity: .50; --frost-saturation: 165%;
+  --text-body: 0.875rem; --text-label: 0.8125rem;
   --glass-rgb: 234 240 247; --edge: #f2f6fbcc; --ink-edge: #1d34462b;
   --studio-canvas: #cdd6e0; --studio-solid: #dce3ec; --studio-ink: #172332;
   --studio-secondary: #3e4c5c; --studio-accent: var(--palette-pigment);
@@ -12,7 +18,7 @@
   --studio-overlay: #e4eaf2eb; --line-strong: #63738699;
   --studio-sheet: rgb(var(--glass-rgb) / var(--frost-opacity));
   --studio-chrome: var(--studio-sheet); --studio-panel-border: var(--edge);
-  --studio-selection: color-mix(in srgb, var(--studio-accent) 13%, var(--studio-solid));
+  --studio-selection: color-mix(in oklab, var(--studio-accent) 13%, var(--studio-solid));
   --studio-action: var(--studio-accent); --line: var(--ink-edge);
   --frost-surface: linear-gradient(135deg, rgb(var(--glass-rgb) / clamp(0.14, calc(var(--frost-opacity) + .10), 0.90)), rgb(var(--glass-rgb) / clamp(0.08, calc(var(--frost-opacity) - .12), 0.82)));
   --studio-panel-shadow: inset 0 1px 0.5px var(--edge), inset 1px 0 0.5px #f2f6fb55, inset 0 -1px 0 #0f172a0f, 0 14px 32px -14px #1b293c2e;
@@ -44,14 +50,16 @@
 #studio body {
   color: var(--ink);
   background: transparent;
-  font: 400 13.5px/1.65 var(--font);
-  letter-spacing: 0.01em;
+  font: 400 0.875rem/1.65 var(--font);
+  letter-spacing: 0.008em;
   font-optical-sizing: auto;
+  font-kerning: normal;
+  font-synthesis-weight: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-#studio .aurora-field { opacity: 1; filter: none; }
+#studio .aurora-field { opacity: 1; filter: none; z-index: 0; }
 #studio .aurora-field canvas { display: block; width: 100%; height: 100%; opacity: 1; }
 #studio[data-custom-wallpaper] .aurora-field canvas { display: none; }
 #studio[data-type-shadow] :is(.commerce-copy h1,.commerce-metrics b,.entry-form h2,.live-title h1,.merchant-heading h1,.scene-header h1) { text-shadow: var(--key-shadow); }
@@ -147,23 +155,23 @@
 #studio #main { width: 100%; max-width: none; padding: 0; margin: 0; }
 #studio .live-main { width: 100%; max-width: 1600px; margin-inline: auto; }
 #studio .live-muted { opacity: 1; color: var(--sub); }
-#studio .live-title h1, #studio .merchant-heading h1 { font-size: clamp(22px,2vw,28px); font-weight: 650; line-height: 1.3; margin: 0; }
-#studio .live-panel h2 { font-size: 16px; }
+#studio .live-title h1, #studio .merchant-heading h1 { font-family: var(--font-display); font-size: clamp(1.4rem, 1.15rem + 1vw, 1.85rem); font-weight: 600; line-height: 1.24; letter-spacing: -.024em; text-wrap: balance; margin: 0; }
+#studio .live-panel h2 { font-family: var(--font-display); font-size: 1rem; font-weight: 600; }
 #studio .work :is(.live-main > .live-title,.live-home-title,.studio-directory > .live-title,.studio-data > .live-title) { padding: 12px 5px; }
 #studio :is(#main,#merchantContent,.ui-dialog) :is(.smallbtn,.plain,.primary,.start) { border-radius: var(--control-radius); box-shadow: none; }
 #studio :is(#main,#merchantContent,.ui-dialog) :is(.primary,.start):not(:disabled) { background: var(--studio-action); color: var(--studio-on-action); box-shadow: inset 0 1px 0 #ffffff40,0 4px 10px #2436481a; }
 #studio :is(.live-form,.quick-image-form,.merchant-filter,.merchant-menu,.studio-popover,.ui-dialog) :is(input:not([type=radio],[type=checkbox],[type=range],[type=file],[type=hidden]),select,textarea) { background: var(--studio-field); border: 1px solid var(--line-strong); color: var(--ink); box-shadow: none; border-radius: 9px; }
-#studio .ui-dialog, #studio .studio-popover { background: var(--studio-overlay); border: 1px solid var(--edge); backdrop-filter: var(--studio-panel-filter); border-radius: 18px; }
+#studio .ui-dialog, #studio .studio-popover { background: var(--studio-overlay); border: 1px solid var(--edge); -webkit-backdrop-filter: var(--studio-panel-filter); backdrop-filter: var(--studio-panel-filter); border-radius: 18px; }
 #studio .material-tuning { display: grid; gap: 10px; margin: 0 0 16px; padding: 12px; border: 1px solid var(--line); }
 #studio .material-tuning label { display: grid; grid-template-columns: 1fr auto; gap: 3px; margin: 0; }
 #studio .material-tuning input[type=range] { grid-column: 1/-1; width: 100%; }
 #studio .material-tuning label.material-shadow { display: flex; gap: 7px; align-items: center; }
 #studio .material-tuning input[type=checkbox] { width: auto; }
-#studio .merchant-head { margin: 14px 16px; height: auto; min-height: 56px; padding: 9px 16px; }
-#studio .merchant-layout { padding: 0 16px 20px; max-width: 1600px; }
+#studio .merchant-head { position: relative; z-index: 2; margin: 14px 16px; height: auto; min-height: 56px; padding: 9px 16px; }
+#studio .merchant-layout { position: relative; z-index: 1; padding: 0 16px 20px; max-width: 1600px; }
 #studio .merchant-brand span { color: var(--sub); margin-left: 4px; padding-left: 10px; border-left: 1px solid var(--line); }
 #studio .toast.show { background: var(--studio-overlay); color: var(--ink); z-index: 20; }
-#studio :is(button,a,select,textarea,input,summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#studio :is(button,a,select,textarea:not(.composer-input),input:not(#workbenchSearch),summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .studio-icon { flex: none; width: 17px; height: 17px; vertical-align: middle; }
 @media(max-width: 1050px) {
   #studio .app-shell { gap: 12px; padding: 12px; }

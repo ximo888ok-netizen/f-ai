@@ -64,7 +64,7 @@ export async function agentHome(ctx) {
   layout.querySelector('[data-chat-scope]').textContent = ctx.workspace.name + ' · 电商 AI 助手';
   layout.querySelector('.agent-starters').innerHTML = starters.map(([label, prompt, icon]) =>
     '<button class="skill-pill" type="button" data-prompt="' + h(prompt) + '">' + studioIcon(icon) + label + '</button>').join('');
-  layout.querySelector('form').insertAdjacentHTML('beforeend', agentControls(ctx));
+  (layout.querySelector('form .glow-body') ?? layout.querySelector('form')).insertAdjacentHTML('beforeend', agentControls(ctx));
   ctx.html(layout.firstElementChild.outerHTML);
   const view = document.querySelector('.agent-home');
   const log = view.querySelector('.agent-log'), next = view.querySelector('.agent-next'), form = view.querySelector('form');
