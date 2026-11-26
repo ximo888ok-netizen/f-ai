@@ -24,24 +24,24 @@
   --sheen: var(--palette-sheen);
   --bloom: var(--palette-bloom);
 }
-:is([data-theme="glass"], [data-chip="glass"]) { --palette-pigment: #6446b7; --palette-sheen: #c2acff; --palette-bloom: #9375e1; }
-:is([data-theme="paper"], [data-chip="paper"]) { --palette-pigment: #874638; --palette-sheen: #e8cea2; --palette-bloom: #d8a082; }
-:is([data-theme="jade"], [data-chip="jade"]) { --palette-pigment: #276145; --palette-sheen: #b6dda9; --palette-bloom: #70b298; }
-:is([data-theme="noir"], [data-chip="noir"]) { --palette-pigment: #745922; --palette-sheen: #eee0b9; --palette-bloom: #bd985b; }
-:is([data-theme="tide"], [data-chip="tide"]) { --palette-pigment: #126078; --palette-sheen: #99e4e1; --palette-bloom: #4cadd2; }
-:is([data-theme="rose"], [data-chip="rose"]) { --palette-pigment: #904260; --palette-sheen: #f8c9df; --palette-bloom: #da91af; }
-:is([data-theme="amber"], [data-chip="amber"]) { --palette-pigment: #9a4922; --palette-sheen: #ffda9b; --palette-bloom: #eb9968; }
+:is([data-theme="glass"], [data-chip="glass"]) { --palette-pigment: #2f4f6f; --palette-sheen: #c4d0dd; --palette-bloom: #8a9bb0; }
+:is([data-theme="paper"], [data-chip="paper"]) { --palette-pigment: #2f4f6f; --palette-sheen: #c4d0dd; --palette-bloom: #8a9bb0; }
+:is([data-theme="jade"], [data-chip="jade"]) { --palette-pigment: #2f4f6f; --palette-sheen: #c4d0dd; --palette-bloom: #8a9bb0; }
+:is([data-theme="noir"], [data-chip="noir"]) { --palette-pigment: #4e5864; --palette-sheen: #b8c2ce; --palette-bloom: #7d8794; }
+:is([data-theme="tide"], [data-chip="tide"]) { --palette-pigment: #2f4f6f; --palette-sheen: #c4d0dd; --palette-bloom: #8a9bb0; }
+:is([data-theme="rose"], [data-chip="rose"]) { --palette-pigment: #2f4f6f; --palette-sheen: #c4d0dd; --palette-bloom: #8a9bb0; }
+:is([data-theme="amber"], [data-chip="amber"]) { --palette-pigment: #2f4f6f; --palette-sheen: #c4d0dd; --palette-bloom: #8a9bb0; }
 
 :root[data-theme] { color-scheme: dark; }
 :root[data-scheme="light"] { color-scheme: light; }
 
 /* Palette-dependent base colors beneath the shared optical film. */
 :root[data-theme]:not([data-theme="glass"]), :root[data-theme][data-scheme="light"] {
-  --bg: color-mix(in srgb, var(--pigment) 6%, light-dark(#f7f8fb, #090c10));
-  --panel: color-mix(in srgb, var(--pigment) 10%, light-dark(#fff, #15181b));
-  --ink: light-dark(#18202c, #f6f5f8);
-  --sub: light-dark(#384556, #d4d4dc);
-  --muted: light-dark(#536071, #b3b4c1);
+  --bg: color-mix(in srgb, var(--pigment) 6%, light-dark(#cfd7e1, #090c10));
+  --panel: color-mix(in srgb, var(--pigment) 8%, light-dark(#dde4ed, #15181b));
+  --ink: light-dark(#172230, #f6f5f8);
+  --sub: light-dark(#344456, #d4d4dc);
+  --muted: light-dark(#465669, #b8bcc8);
   --line: color-mix(in srgb, var(--pigment) 24%, light-dark(#a3aab75e, #bdc4d53b));
   --line-strong: color-mix(in srgb, var(--pigment) 55%, light-dark(#a6abba, #cbceda));
   --accent: light-dark(var(--pigment), var(--sheen));

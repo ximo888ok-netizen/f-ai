@@ -180,7 +180,7 @@ export function mountGlassField(host) {
   const uniforms = Object.fromEntries(['uRes','uTime','uMouse','uBaseDeep','uBaseMid','uHighlight','uCaustic','uSpecular','uRidgeDark']
     .map(name => [name, gl.getUniformLocation(program, name)]));
   const colors = {
-    white: [[.745,.788,.842],[.875,.902,.934],[.985,.992,1],[1,1,1],.52,.16],
+    white: [[.595,.635,.688],[.715,.752,.798],[.835,.864,.898],[.895,.920,.948],.34,.20],
     gray: [[.165,.184,.212],[.275,.302,.34],[.54,.58,.635],[.78,.82,.875],.46,.22],
     black: [[.028,.036,.048],[.075,.092,.118],[.245,.285,.345],[.52,.58,.66],.48,.26],
   };

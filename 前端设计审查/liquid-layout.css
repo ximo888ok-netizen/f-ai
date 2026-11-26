@@ -128,27 +128,27 @@
 
 @media screen and (forced-colors: none) {
   :root[data-theme][data-scheme] {
-    --studio-canvas: color-mix(in srgb, var(--palette-bloom) 12%, light-dark(#f0effa, #232a3d));
-    --studio-middle: light-dark(#f4f3fa, #1d2435);
-    --studio-horizon: color-mix(in srgb, var(--palette-sheen) 27%, var(--studio-canvas));
-    --studio-light-pool: color-mix(in srgb, var(--palette-sheen) 20%, var(--studio-canvas));
-    --studio-color-pool: color-mix(in srgb, var(--palette-bloom) 32%, var(--studio-canvas));
-    --studio-solid: light-dark(#faf9ff, #252a40);
-    --studio-sheet: light-dark(rgb(255 255 255 / .61), rgb(39 46 72 / .73));
+    --studio-canvas: color-mix(in srgb, var(--palette-bloom) 10%, light-dark(#ccd5e0, #161b24));
+    --studio-middle: light-dark(#d5dde7, #1c222d);
+    --studio-horizon: color-mix(in srgb, var(--palette-sheen) 20%, var(--studio-canvas));
+    --studio-light-pool: color-mix(in srgb, var(--palette-sheen) 16%, var(--studio-canvas));
+    --studio-color-pool: color-mix(in srgb, var(--palette-bloom) 22%, var(--studio-canvas));
+    --studio-solid: light-dark(#dce3ec, #212733);
+    --studio-sheet: light-dark(rgb(238 243 248 / .56), rgb(34 40 52 / .72));
     --studio-inset: color-mix(in srgb, var(--studio-accent) 7%, var(--studio-solid));
-    --studio-ink: light-dark(#252640, #f2f2fc);
-    --studio-secondary: light-dark(#5a5d77, #bdc3dd);
+    --studio-ink: light-dark(#172230, #f2f5fa);
+    --studio-secondary: light-dark(#3e4c5c, #c4ccd8);
     --studio-action: var(--studio-accent);
-    --studio-on-action: light-dark(#fff, #24203d);
+    --studio-on-action: light-dark(#fff, #101824);
     --studio-selection: color-mix(in srgb, var(--studio-accent) 13%, var(--studio-solid));
     --studio-nav-selection: linear-gradient(95deg, color-mix(in srgb, var(--studio-accent) 18%, transparent), color-mix(in srgb, var(--studio-accent) 8%, transparent));
     --studio-accent: light-dark(var(--palette-pigment), var(--palette-sheen));
-    --studio-chrome: light-dark(rgb(255 255 255 / .54), rgb(38 44 68 / .77));
-    --studio-overlay: light-dark(rgb(250 250 255 / .96), rgb(35 39 61 / .97));
-    --studio-shadow: 0 14px 32px -14px light-dark(#4a44875c, #111525b3);
-    --studio-panel-shadow: 0 5px 24px -14px light-dark(#46448345, #1415269c);
-    --studio-rim: light-dark(#ffffffdf, #e5e4ff26);
-    --studio-panel-border: light-dark(#ffffffd4, #e1ddff26);
+    --studio-chrome: light-dark(rgb(236 242 248 / .52), rgb(30 36 46 / .74));
+    --studio-overlay: light-dark(rgb(230 237 245 / .94), rgb(28 33 43 / .95));
+    --studio-shadow: 0 14px 32px -14px light-dark(#1b293c42, #050810b8);
+    --studio-panel-shadow: 0 5px 24px -14px light-dark(#1b293c33, #050810a0);
+    --studio-rim: light-dark(#f2f6fbcc, #ffffff29);
+    --studio-panel-border: light-dark(#eef3f8c8, #ffffff24);
     --studio-panel-filter: blur(22px) saturate(1.18);
     --studio-field: color-mix(in srgb, var(--studio-inset) 50%, var(--studio-solid));
     --ink: var(--studio-ink);
@@ -166,8 +166,8 @@
     --on-primary: var(--studio-on-action);
     --radius: 16px;
     --control-radius: 9px;
-    --liquid-border: light-dark(#41417728, #d8d9ff29);
-    --line-strong: light-dark(#77749c, #8187a7);
+    --liquid-border: light-dark(#1d344626, #dce6f62e);
+    --line-strong: light-dark(#5c6b7c, #8da0b8);
     --liquid-tint-light: transparent;
     --liquid-tint: var(--studio-inset);
     --liquid-tint-strong: var(--studio-selection);
@@ -180,15 +180,15 @@
   }
 
   :root[data-theme="glass"][data-scheme] {
-    --studio-canvas: light-dark(#e9eafa, #242c44);
-    --studio-middle: light-dark(#f0effa, #1d2439);
-    --studio-horizon: light-dark(#d9e6f9, #30334f);
-    --studio-light-pool: light-dark(#d9e7fc, #313955);
-    --studio-color-pool: light-dark(#d3d5fb, #38385c);
+    --studio-canvas: light-dark(#cdd6e0, #10141c);
+    --studio-middle: light-dark(#d7dfe9, #161b25);
+    --studio-horizon: light-dark(#c3cdd9, #1d2330);
+    --studio-light-pool: light-dark(#dce3ec, #232a38);
+    --studio-color-pool: light-dark(#bcc7d5, #2a3342);
   }
 
   :root[data-theme] body {
-    font-family: system-ui, "Microsoft YaHei UI", sans-serif;
+    font-family: var(--font, "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Noto Sans SC", system-ui, sans-serif);
     font-size: .875rem;
     line-height: 1.55;
     font-optical-sizing: auto;

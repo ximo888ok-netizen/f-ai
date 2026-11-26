@@ -73,29 +73,29 @@
       --card-optics: blur(var(--blur)) saturate(var(--sat));
       --popup-optics: blur(calc(var(--blur) + 12px)) saturate(calc(var(--sat) + 15%));
 
-      /* 银白玻璃默认主题 (Silver White) */
+      /* 柔光银白玻璃默认主题 (Soft Silver White，克制防刺眼) */
       color-scheme: light;
-      --canvas-bg: linear-gradient(145deg, #E4E9EF 0%, #F4F7FA 52%, #DCE3EC 100%);
-      --card-rgb: 255, 255, 255;
-      --card-end-rgb: 238, 243, 249;
-      --card-fade: 0.16;
-      --popup-rgb: 252, 254, 255;
+      --canvas-bg: linear-gradient(145deg, #C7D0DB 0%, #D6DEE8 52%, #BFC9D5 100%);
+      --card-rgb: 238, 243, 248;
+      --card-end-rgb: 214, 222, 233;
+      --card-fade: 0.14;
+      --popup-rgb: 236, 241, 247;
       --popup-alpha-boost: 0.22;
 
-      --edge: rgba(255, 255, 255, 0.82);
-      --edge-subtle: rgba(15, 23, 34, 0.08);
-      --edge-strong: rgba(15, 23, 34, 0.18);
-      --cut-highlight: rgba(255, 255, 255, 0.94);
-      --cut-side: rgba(255, 255, 255, 0.55);
-      --cut-shade: rgba(15, 23, 42, 0.06);
-      --cast-shadow: rgba(15, 23, 42, 0.08);
-      --cast-shadow-elev: rgba(15, 23, 42, 0.13);
+      --edge: rgba(246, 249, 253, 0.72);
+      --edge-subtle: rgba(15, 23, 34, 0.10);
+      --edge-strong: rgba(15, 23, 34, 0.20);
+      --cut-highlight: rgba(248, 251, 255, 0.78);
+      --cut-side: rgba(242, 247, 252, 0.44);
+      --cut-shade: rgba(15, 23, 42, 0.07);
+      --cast-shadow: rgba(15, 23, 42, 0.09);
+      --cast-shadow-elev: rgba(15, 23, 42, 0.15);
 
       --hq-ink: 15, 23, 34;
       --text-primary: rgba(var(--hq-ink), 0.92);
-      --text-secondary: rgba(var(--hq-ink), 0.70);
-      --text-tertiary: rgba(var(--hq-ink), 0.54);
-      --text-muted: rgba(var(--hq-ink), 0.44);
+      --text-secondary: rgba(var(--hq-ink), 0.74);
+      --text-tertiary: rgba(var(--hq-ink), 0.62);
+      --text-muted: rgba(var(--hq-ink), 0.56);
 
       /* 克制单一交互强调色：冷钢蓝 */
       --action: #2F4F6F;
@@ -104,30 +104,30 @@
       --selected-ink: #244361;
 
       /* 选择性光学微阴影：仅用于大标题、核心指标与主行动按钮 */
-      --type-shadow: 0 1px 2px rgba(255, 255, 255, 0.72);
+      --type-shadow: 0 1px 2px rgba(235, 241, 248, 0.55);
       --micro-shadow: var(--type-shadow);
 
-      --bg-input: rgba(var(--hq-ink), 0.045);
-      --bg-input-hover: rgba(var(--hq-ink), 0.07);
-      --track: rgba(var(--hq-ink), 0.16);
+      --bg-input: rgba(var(--hq-ink), 0.05);
+      --bg-input-hover: rgba(var(--hq-ink), 0.08);
+      --track: rgba(var(--hq-ink), 0.18);
       --rail: var(--action);
-      --thumb: #FFFFFF;
-      --veil: rgba(226, 232, 240, 0.36);
-      --opaque-surface: #EEF2F7;
-      --spotlight: rgba(255, 255, 255, 0.42);
+      --thumb: #F3F6FA;
+      --veil: rgba(185, 196, 210, 0.44);
+      --opaque-surface: #DCE3EC;
+      --spotlight: rgba(248, 251, 255, 0.34);
       --grain-opacity: 0.022;
 
       /* 主题自适应品牌徽章与光学球体滤镜 */
       --orb-contrast: 0.62;
-      --orb-gain: 1.48;
+      --orb-gain: 1.38;
       --orb-opacity: 0.92;
-      --logo-box-start: rgba(255, 255, 255, 0.88);
-      --logo-box-end: rgba(214, 224, 236, 0.72);
-      --logo-box-stroke: rgba(255, 255, 255, 0.95);
+      --logo-box-start: rgba(238, 243, 248, 0.88);
+      --logo-box-end: rgba(196, 208, 222, 0.74);
+      --logo-box-stroke: rgba(246, 249, 253, 0.85);
       --logo-rim: rgba(47, 79, 111, 0.82);
       --logo-flow: #2F4F6F;
       --logo-digit: rgba(30, 48, 68, 0.72);
-      --bottle-label-bg: rgba(255, 255, 255, 0.86);
+      --bottle-label-bg: rgba(236, 242, 248, 0.86);
       --bottle-label-ink: rgba(15, 23, 34, 0.88);
     }
 
@@ -154,9 +154,9 @@
 
       --hq-ink: 248, 250, 252;
       --text-primary: rgba(var(--hq-ink), 0.94);
-      --text-secondary: rgba(var(--hq-ink), 0.76);
-      --text-tertiary: rgba(var(--hq-ink), 0.58);
-      --text-muted: rgba(var(--hq-ink), 0.48);
+      --text-secondary: rgba(var(--hq-ink), 0.78);
+      --text-tertiary: rgba(var(--hq-ink), 0.64);
+      --text-muted: rgba(var(--hq-ink), 0.58);
 
       --action: #7BA8D1;
       --action-hover: #8BB6DD;
@@ -208,9 +208,9 @@
 
       --hq-ink: 248, 250, 252;
       --text-primary: rgba(var(--hq-ink), 0.95);
-      --text-secondary: rgba(var(--hq-ink), 0.74);
-      --text-tertiary: rgba(var(--hq-ink), 0.56);
-      --text-muted: rgba(var(--hq-ink), 0.46);
+      --text-secondary: rgba(var(--hq-ink), 0.78);
+      --text-tertiary: rgba(var(--hq-ink), 0.64);
+      --text-muted: rgba(var(--hq-ink), 0.58);
 
       --action: #73A2CC;
       --action-hover: #86B3DB;
@@ -661,7 +661,7 @@
     }
     .material-dot.black { background: linear-gradient(135deg, #646B75, #14171C 80%); }
     .material-dot.gray  { background: linear-gradient(135deg, #B5BCC6, #5B626D 82%); }
-    .material-dot.white { background: linear-gradient(135deg, #FFFFFF, #C9D2DC 85%); }
+    .material-dot.white { background: linear-gradient(135deg, #E8EEF5, #B8C4D2 85%); }
 
     .credit-pill {
       display: inline-flex;

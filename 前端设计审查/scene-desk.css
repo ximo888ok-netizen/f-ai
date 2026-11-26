@@ -1,18 +1,29 @@
 /* Work surfaces inside the native studio shell. */
 #studio .scene-desk {
-  --tone: #315b89; --tint: #b6d0ec; --surface: color-mix(in srgb,var(--studio-solid) 55%,rgb(var(--glass-rgb)));
-  --pane: rgb(var(--glass-rgb) / .95); --hair: color-mix(in srgb,var(--studio-secondary) 20%,transparent);
-  --soft: color-mix(in srgb,var(--tint) 14%,var(--surface)); --on-tone:white;
+  --tone: #2f4f6f; --tint: #b6c4d4;
+  --surface: linear-gradient(135deg, rgb(var(--glass-rgb) / clamp(0.20, var(--frost-opacity, .50), 0.78)), rgb(var(--glass-rgb) / clamp(0.12, calc(var(--frost-opacity, .50) - 0.14), 0.68)));
+  --pane: rgb(var(--glass-rgb) / clamp(0.22, calc(var(--frost-opacity, .50) - 0.08), 0.72));
+  --hair: color-mix(in srgb,var(--studio-secondary) 22%,transparent);
+  --soft: color-mix(in srgb,var(--tint) 10%,rgb(var(--glass-rgb) / clamp(0.20, calc(var(--frost-opacity, .50) - 0.10), 0.65)));
+  --on-tone:white;
+  position:relative; isolation:isolate;
   color:var(--ink); border-radius:22px; background:var(--surface); overflow:clip;
   border:1px solid var(--edge); box-shadow:var(--studio-panel-shadow);
+  -webkit-backdrop-filter:var(--studio-panel-filter); backdrop-filter:var(--studio-panel-filter);
 }
+#studio .scene-desk::after {
+  content:""; position:absolute; inset:0; border-radius:inherit;
+  background-image:var(--frost-grain); background-size:140px 140px;
+  opacity:var(--grain-opacity, .024); pointer-events:none; z-index:0;
+}
+#studio .scene-desk > * { position:relative; z-index:1; }
 #studio [data-scene-kind=operations] {--tone:#226251;--tint:#a7d9c8}
 #studio [data-scene-kind=copywriting] {--tone:#644583;--tint:#d5bde7}
-#studio[data-scheme=dark] .scene-desk {--tone:#afcdec;--on-tone:#14212e}
+#studio[data-scheme=dark] .scene-desk {--tone:#c4d0dd;--on-tone:#14212e}
 #studio[data-scheme=dark] [data-scene-kind=operations] {--tone:#a2d8c8}
 #studio[data-scheme=dark] [data-scene-kind=copywriting] {--tone:#dec3f4}
 #studio #main .scene-header {position:relative;isolation:isolate;display:flex;align-items:center;min-height:94px;padding:13px clamp(18px,2.3vw,34px);overflow:hidden;
-  background:radial-gradient(ellipse at 87% 8%,color-mix(in srgb,var(--tint) 48%,transparent),transparent 53%),linear-gradient(112deg,var(--surface) 28%,var(--soft) 66%,color-mix(in srgb,var(--tint) 30%,var(--surface)));}
+  background:radial-gradient(ellipse at 87% 8%,color-mix(in srgb,var(--tint) 30%,transparent),transparent 53%),linear-gradient(112deg,transparent 24%,var(--soft) 72%);}
 .scene-header::after {content:"";position:absolute;width:49%;inset:0 0 0 auto;background-image:radial-gradient(var(--tone) .65px,transparent .9px);background-size:11px 11px;opacity:.22;mask-image:linear-gradient(90deg,transparent,#000);pointer-events:none}
 .scene-heading {position:relative;z-index:2;max-width:70%}
 #studio #main .scene-crumb {display:inline-flex;align-items:center;gap:6px;color:var(--sub);font-size:12px;font-weight:550;text-decoration:none}
@@ -31,7 +42,7 @@
 #studio #main .scene-toolbar nav a,.scene-related a,#studio #main .inbox-context-links a,#studio #main .shop-external {display:inline-flex;align-items:center;gap:4px;min-height:32px;font:550 12px/1.4 var(--font);padding:5px;color:var(--tone);background:transparent;border:0;box-shadow:none;text-decoration:none}
 .scene-toolbar .studio-icon,.shop-external .studio-icon {width:15px;height:15px}
 .scene-tab-count {border-radius:6px;padding:1px 5px;background:var(--soft);font:600 11px/1.45 var(--font)}
-#studio #main .scene-page {padding:17px;background:var(--surface);min-width:0}
+#studio #main .scene-page {padding:17px;background:transparent;min-width:0}
 #studio #main .scene-page[hidden],#studio #main .scene-desk dialog:not([open]) {display:none}
 #studio #main .scene-desk :is(.scene-sheet,.scene-work,[data-engine],.scene-page .live-panel,.inbox-layout) {padding:0;border:1px solid var(--hair);border-radius:16px;background:var(--pane);box-shadow:0 5px 18px -14px #11263965;backdrop-filter:none;min-width:0}
 #studio #main .scene-desk :is(.scene-sheet,.scene-page .live-panel:not([data-engine])) {padding:20px}

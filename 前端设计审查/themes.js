@@ -1,10 +1,8 @@
 /* Apply the saved palette before the first paint. Mode and palette are independent. */
 (() => {
   const palettes = {
-    glass: ['冷钢玻璃', '银白 · 黑曜'], paper: ['暖白纸笺', '暖白 · 朱砂'],
-    jade: ['雨后青玉', '松绿 · 玉石'], noir: ['雾灰玻璃', '岩灰 · 冷银'],
-    tide: ['海盐青蓝', '海蓝 · 薄荷'], rose: ['玫瑰石英', '灰粉 · 莓红'],
-    amber: ['琥珀晚霞', '蜜橙 · 赤铜']
+    glass: ['银白 · 黑曜', '柔光银白 · 深邃黑曜'],
+    noir: ['雾灰玻璃', '建筑岩灰 · 冷雾银']
   };
   const modes = { light: '浅色模式', dark: '深色模式', system: '跟随系统' };
   const key = 'fai.studio.appearance.v2';
@@ -15,11 +13,12 @@
   try {
     cached = JSON.parse(localStorage.getItem(key)) ?? { studioTheme: localStorage.getItem('fai.studio.theme.v1') };
   } catch { /* Storage may be unavailable in an offline preview. */ }
-  const defaultMode = id => ['glass', 'paper', 'rose'].includes(id) ? 'light' : 'dark';
+  const defaultMode = id => id === 'glass' ? 'light' : 'dark';
   const presets = { black: ['glass', 'dark', '黑'], gray: ['noir', 'dark', '灰'], white: ['glass', 'light', '白'] };
-  const linkedPalette = Object.hasOwn(palettes, params.get('theme'));
-  let palette = linkedPalette ? params.get('theme') : cached.studioTheme;
-  if (!Object.hasOwn(palettes, palette)) palette = 'glass';
+  const legacyThemes = new Set(['paper', 'jade', 'tide', 'rose', 'amber']);
+  const normalizePalette = id => Object.hasOwn(palettes, id) ? id : (legacyThemes.has(id) ? 'glass' : null);
+  const linkedPalette = normalizePalette(params.get('theme'));
+  let palette = linkedPalette ?? normalizePalette(cached.studioTheme) ?? 'glass';
   let mode = params.get('mode') ?? (linkedPalette ? null : cached.theme);
   if (!Object.hasOwn(modes, mode)) mode = defaultMode(palette);
   let modeMotion;
@@ -50,9 +49,10 @@
   }
 
   function setAppearance(id, display = defaultMode(id), remember = false, animate = false) {
-    if (!Object.hasOwn(palettes, id) || !Object.hasOwn(modes, display)) return;
+    const resolved = normalizePalette(id);
+    if (!resolved || !Object.hasOwn(modes, display)) return;
     const previous = mode, previousScheme = root.dataset.scheme;
-    palette = id;
+    palette = resolved;
     mode = display;
     if (remember) {
       try { localStorage.setItem(key, JSON.stringify({ studioTheme: palette, theme: mode, scope: root.dataset.workspaceAppearance })); } catch {}
@@ -109,7 +109,7 @@
       '<label>' + label + '<output for="' + id + '"></output><input id="' + id + '" type="range" min="' + min +
       '" max="' + max + '" step="' + step + '" value="' + initial + '"></label>').join('') +
       '<label class="material-shadow"><input type="checkbox" checked>标题微阴影</label>' +
-      '<div><button type="button" data-reset-material>重置材质</button> <button type="button" data-motion-toggle><span>暂停动效</span></button></div>';
+      '<div><button type="button" class="smallbtn" data-reset-material>重置材质</button> <button type="button" class="smallbtn" data-motion-toggle><span>暂停动效</span></button></div>';
     dialog.querySelector('.appearanceModes').after(material);
     let settings = {};
     try { settings = JSON.parse(localStorage.getItem('fai.glass.material.v1')) || {}; } catch {}

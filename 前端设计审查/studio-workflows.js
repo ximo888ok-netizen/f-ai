@@ -1,4 +1,4 @@
-import { h } from './live-ui.js';
+import { confirmDialog, h } from './live-ui.js';
 import { studioIcon } from './studio-icons.js';
 
 export const deskSections = {
@@ -144,7 +144,7 @@ export async function commerceHome(ctx) {
     button.addEventListener('click', async () => {
       if (button.disabled) return;
       const enabled = !status;
-      if (!enabled && !confirm('停用「' + plugin.name + '」将阻止提交该插件的新任务。继续？')) return;
+      if (!enabled && !(await confirmDialog('停用场景插件', '停用「' + plugin.name + '」将阻止提交该插件的新任务。继续？'))) return;
       button.disabled = true;
       try {
         if (policy) {
