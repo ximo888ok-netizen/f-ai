@@ -1,7 +1,9 @@
 /* =========================================================================
-   100% FLICKER-FREE 3-STATE MONOCHROME (BLACK / GRAY / WHITE)
+   ULTRA-SILKY 3-STATE MONOCHROME (BLACK / GRAY / WHITE)
    DOT-MATRIX FROSTED-GLASS SWITCH ENGINE
-   Faithful full 4-canvas replication unified with the workbench glass tokens
+   - Zero threshold pops (continuous lightMix across all 4 canvases)
+   - Flush 0px top/bottom alignment inside the track border
+   - Continuous canvas-painted track crossfade + quintic dissolve + liquid-light sweep
    ========================================================================= */
 (() => {
   'use strict';
@@ -14,6 +16,8 @@
 
   // Unified monochrome optical palettes matching workbench 黑曜 / 雾灰 / 柔光银白
   const PAL_BLACK = {
+    trackTop:     [10, 14, 21, 0.76],
+    trackBot:     [18, 23, 33, 0.80],
     auraDeep:     [72, 114, 178],
     auraMid:      [148, 192, 246],
     rimOuter:     [110, 158, 224],
@@ -29,11 +33,13 @@
     ledAlt:       [216, 228, 248],
     rimBaseTop:   0.32,
     rimBaseMid:   0.15,
-    rimBaseBot:   0.09,
-    dotUnlit:     [255, 255, 255, 0.038]
+    rimBaseBot:   0.10,
+    dotUnlit:     [255, 255, 255, 0.040]
   };
 
   const PAL_GRAY = {
+    trackTop:     [46, 52, 62, 0.68],
+    trackBot:     [64, 72, 84, 0.74],
     auraDeep:     [112, 128, 148],
     auraMid:      [190, 202, 218],
     rimOuter:     [156, 170, 188],
@@ -48,12 +54,14 @@
     ledCore:      [252, 254, 255],
     ledAlt:       [214, 222, 234],
     rimBaseTop:   0.38,
-    rimBaseMid:   0.18,
-    rimBaseBot:   0.11,
-    dotUnlit:     [255, 255, 255, 0.045]
+    rimBaseMid:   0.19,
+    rimBaseBot:   0.12,
+    dotUnlit:     [255, 255, 255, 0.048]
   };
 
   const PAL_WHITE = {
+    trackTop:     [178, 189, 203, 0.60],
+    trackBot:     [206, 216, 228, 0.66],
     auraDeep:     [68, 98, 132],
     auraMid:      [172, 194, 218],
     rimOuter:     [96, 126, 160],
@@ -65,12 +73,11 @@
     glassScatter: [152, 174, 200],
     glassHot:     [255, 255, 255],
     glassRim:     [255, 255, 255],
-    // Crisp high-contrast steel-ink dot-matrix LEDs on soft silver-white frosted glass
     ledCore:      [24, 38, 54],
     ledAlt:       [58, 86, 116],
     rimBaseTop:   0.82,
     rimBaseMid:   0.48,
-    rimBaseBot:   0.26,
+    rimBaseBot:   0.28,
     dotUnlit:     [15, 23, 34, 0.058]
   };
 
@@ -80,17 +87,27 @@
     const t = clamp((x - e0) / (e1 - e0), 0, 1);
     return t * t * (3 - 2 * t);
   };
+  // Quintic C2-continuous easing (zero velocity AND zero acceleration jump at both ends)
+  const smootherstep = (e0, e1, x) => {
+    const t = clamp((x - e0) / (e1 - e0), 0, 1);
+    return t * t * t * (t * (t * 6 - 15) + 10);
+  };
 
-  function samplePalette(p) {
-    const [A, B, t] = p <= 0.5
-      ? [PAL_BLACK, PAL_GRAY, clamp(p * 2, 0, 1)]
-      : [PAL_GRAY, PAL_WHITE, clamp((p - 0.5) * 2, 0, 1)];
+  function lerpPalettes(A, B, t) {
     const mixRGB = k => [
       Math.round(lerp(A[k][0], B[k][0], t)),
       Math.round(lerp(A[k][1], B[k][1], t)),
       Math.round(lerp(A[k][2], B[k][2], t))
     ];
+    const mixRGBA = k => [
+      Math.round(lerp(A[k][0], B[k][0], t)),
+      Math.round(lerp(A[k][1], B[k][1], t)),
+      Math.round(lerp(A[k][2], B[k][2], t)),
+      lerp(A[k][3], B[k][3], t)
+    ];
     return {
+      trackTop:     mixRGBA('trackTop'),
+      trackBot:     mixRGBA('trackBot'),
       auraDeep:     mixRGB('auraDeep'),
       auraMid:      mixRGB('auraMid'),
       rimOuter:     mixRGB('rimOuter'),
@@ -107,17 +124,19 @@
       rimBaseTop:   lerp(A.rimBaseTop, B.rimBaseTop, t),
       rimBaseMid:   lerp(A.rimBaseMid, B.rimBaseMid, t),
       rimBaseBot:   lerp(A.rimBaseBot, B.rimBaseBot, t),
-      dotUnlit:     [
-        Math.round(lerp(A.dotUnlit[0], B.dotUnlit[0], t)),
-        Math.round(lerp(A.dotUnlit[1], B.dotUnlit[1], t)),
-        Math.round(lerp(A.dotUnlit[2], B.dotUnlit[2], t)),
-        lerp(A.dotUnlit[3], B.dotUnlit[3], t)
-      ]
+      dotUnlit:     mixRGBA('dotUnlit')
     };
   }
 
+  function samplePalette(p) {
+    const [A, B, t] = p <= 0.5
+      ? [PAL_BLACK, PAL_GRAY, clamp(p * 2, 0, 1)]
+      : [PAL_GRAY, PAL_WHITE, clamp((p - 0.5) * 2, 0, 1)];
+    return lerpPalettes(A, B, t);
+  }
+
   function rgba(rgb, alpha) {
-    return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha.toFixed(4)})`;
+    return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${clamp(alpha, 0, 1).toFixed(4)})`;
   }
 
   function traceRoundedRect(ctx, x, y, w, h, r) {
@@ -138,7 +157,6 @@
   /* -----------------------------------------------------------------------
      PRE-BAKED STATIC OFFSCREEN TEXTURES (ZERO PER-FRAME ALLOCATION)
      ----------------------------------------------------------------------- */
-  // A. Bead-blasted frosted-glass procedural grain texture
   const frostGrainCanvas = document.createElement('canvas');
   frostGrainCanvas.width = 256;
   frostGrainCanvas.height = 256;
@@ -155,7 +173,6 @@
     gCtx.putImageData(img, 0, 0);
   })();
 
-  // B. Pre-baked soft micro-LED bloom sprites
   function createLedGlowSprite(rgb, coreRgb = [255, 255, 255], boost = 1) {
     const c = document.createElement('canvas');
     c.width = 24; c.height = 24;
@@ -186,7 +203,7 @@
 
     for (let row = 0; row < gridSize; row++) {
       for (let col = 0; col < gridSize; col++) {
-        // 1) Black / Night: Exact crescent moon + checkerboard shadow + stars
+        // 1) Black / Night: Crescent moon + checkerboard shadow + stars
         let nightVal = 0, nightKind = 0;
         const dm = Math.hypot(col - moonCx, row - moonCy);
         const ds = Math.hypot(col - shadowCx, row - shadowCy);
@@ -211,7 +228,7 @@
           }
         }
 
-        // 2) Gray / Mist: Sculpted half-eclipse ring + drifting mist pixel horizon
+        // 2) Gray / Mist: Sculpted half-eclipse ring + drifting mist horizon
         let grayVal = 0, grayKind = 0;
         const dRing = Math.hypot(col - mid, row - mid);
         if (dRing >= 3.1 * sc && dRing <= 5.25 * sc) {
@@ -227,7 +244,7 @@
           grayKind = 3;
         }
 
-        // 3) White / Day: Exact radiant sun + 8 pulsing directional pixel rays
+        // 3) White / Day: Radiant sun + 8 pulsing directional pixel rays
         let dayVal = 0, dayKind = 0;
         const dSun = Math.hypot(col - mid, row - mid);
         if (dSun <= 2.35 * sc) {
@@ -267,7 +284,10 @@
           morphDelay,
           angle,
           phase: col * 1.65 + row * 2.15,
-          _lum: 0
+          _lum: 0,
+          _domP: 0,
+          _fromLum: 0,
+          _toLum: 0
         });
       }
     }
@@ -278,7 +298,7 @@
   const matrix9  = buildDotMatrix(9);
 
   /* -----------------------------------------------------------------------
-     3-LAYER WEB AUDIO SYNTHESIZED GLASS-CLICK TACTILE SOUND (EXACT ORIGINAL)
+     3-LAYER WEB AUDIO SYNTHESIZED GLASS-CLICK TACTILE SOUND
      ----------------------------------------------------------------------- */
   let audioCtx = null;
   let soundEnabled = true;
@@ -297,7 +317,6 @@
     if (!audioCtx) return;
     try {
       const now = audioCtx.currentTime;
-      // 1) Crisp filtered crystal micro-snap
       const len = Math.floor(audioCtx.sampleRate * 0.016);
       const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
       const ch = buf.getChannelData(0);
@@ -314,7 +333,6 @@
       src.connect(filter); filter.connect(snapGain); snapGain.connect(audioCtx.destination);
       src.start(now);
 
-      // 2) Soft magnetic detent thud
       const bodyOsc = audioCtx.createOscillator();
       bodyOsc.type = 'triangle';
       bodyOsc.frequency.setValueAtTime([180, 200, 220][idx] || 200, now);
@@ -325,7 +343,6 @@
       bodyOsc.connect(bodyGain); bodyGain.connect(audioCtx.destination);
       bodyOsc.start(now); bodyOsc.stop(now + 0.045);
 
-      // 3) Subtle optical glass overtone ping
       const pingOsc = audioCtx.createOscillator();
       pingOsc.type = 'sine';
       pingOsc.frequency.setValueAtTime([1180, 1360, 1560][idx] || 1360, now + 0.003);
@@ -338,7 +355,6 @@
     } catch {}
   }
 
-  // Live workbench glass opacity sync (cached, never polled with getComputedStyle per frame)
   let cachedGlassAlpha = 0.50;
   function refreshGlassAlpha() {
     const raw = parseFloat(document.documentElement.style.getPropertyValue('--alpha')
@@ -360,8 +376,6 @@
   function applyPreset(idx, withSound = false) {
     const preset = PRESETS[clamp(idx, 0, 2)];
     if (withSound) playGlassClick(idx);
-    // CRITICAL: animate=false prevents ViewTransition's 160ms full-page raster freeze,
-    // keeping the 60/120fps critically-damped spring slide & plasma sweep 100% silky!
     if (typeof window.applyStudioTheme === 'function') {
       window.applyStudioTheme(preset.theme, preset.scheme, true, false);
     }
@@ -401,6 +415,7 @@
     slots.innerHTML = PRESETS.map((pr, idx) =>
       `<span class="dm-slot-btn" data-glass-preset="${pr.key}" data-idx="${idx}" aria-pressed="false">${isCompact ? pr.label : pr.name.slice(0, 2)}</span>`
     ).join('');
+    const slotEls = Array.from(slots.querySelectorAll('.dm-slot-btn'));
 
     const thumbMover = document.createElement('div');
     thumbMover.className = 'dm-thumb-mover';
@@ -448,7 +463,7 @@
     const rimCtx = rimCanvas.getContext('2d', { alpha: true });
 
     let geom = {
-      w: 0, h: 0, r: 0, pad: 0, thumb: 0, thumbR: 0, travel: 1,
+      w: 0, h: 0, boxW: 0, boxH: 0, r: 0, thumb: 0, thumbR: 0, travel: 1,
       auraW: 0, auraH: 0, rimW: 0, rimH: 0, scale: 1
     };
 
@@ -456,33 +471,40 @@
       const w = track.clientWidth;
       const h = track.clientHeight;
       if (!w || !h) return;
+      const boxW = track.offsetWidth || w;
+      const boxH = track.offsetHeight || h;
       const cs = getComputedStyle(stage);
-      const pad = parseFloat(cs.getPropertyValue('--dm-pad')) || (isCompact ? 3 : 6);
-      const thumb = parseFloat(cs.getPropertyValue('--dm-thumb')) || (h - pad * 2);
       const r = parseFloat(cs.getPropertyValue('--dm-r')) || (isCompact ? 13 : 30);
-      const thumbR = parseFloat(cs.getPropertyValue('--dm-thumb-r')) || (isCompact ? 10 : 23);
+      // 100% flush vertical fit inside track's client box (0px top/bottom gap!)
+      const thumb = h;
+      const thumbR = Math.max(2, r - 1);
+      thumbMover.style.width = `${thumb}px`;
+
       const auraPadX = isCompact ? 44 : 120;
       const auraPadY = isCompact ? 34 : 96;
       const rimPad = isCompact ? 24 : 52;
-      const auraW = w + auraPadX, auraH = h + auraPadY;
-      const rimW = w + rimPad, rimH = h + rimPad;
-      const scale = h / 150; // Normalized to original 150px track height
+      const auraW = boxW + auraPadX, auraH = boxH + auraPadY;
+      const rimW = boxW + rimPad, rimH = boxH + rimPad;
+      const scale = h / 150;
       geom = {
-        w, h, r, pad, thumb, thumbR,
-        travel: Math.max(1, w - thumb - pad * 2),
+        w, h, boxW, boxH, r, thumb, thumbR,
+        travel: Math.max(1, w - thumb),
         auraW, auraH, rimW, rimH, scale
       };
 
-      const dpr = Math.min(window.devicePixelRatio || 1, 3);
-      for (const [c, ctx, cw, ch] of [
-        [auraCanvas, auraCtx, auraW, auraH],
-        [floorCanvas, floorCtx, w, h],
-        [thumbCanvas, thumbCtx, thumb, thumb],
-        [rimCanvas, rimCtx, rimW, rimH]
+      const dpr = window.devicePixelRatio || 1;
+      // Soft blurred layers run at <=1.5x DPR (4x lighter on 3x phones), crisp layers at <=2x DPR
+      const softDpr = Math.min(dpr, 1.5);
+      const sharpDpr = Math.min(dpr, 2);
+      for (const [c, ctx, cw, ch, d] of [
+        [auraCanvas, auraCtx, auraW, auraH, softDpr],
+        [floorCanvas, floorCtx, w, h, softDpr],
+        [thumbCanvas, thumbCtx, thumb, thumb, sharpDpr],
+        [rimCanvas, rimCtx, rimW, rimH, sharpDpr]
       ]) {
-        c.width = Math.round(cw * dpr);
-        c.height = Math.round(ch * dpr);
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        c.width = Math.round(cw * d);
+        c.height = Math.round(ch * d);
+        ctx.setTransform(d, 0, 0, d, 0, 0);
       }
     }
 
@@ -493,8 +515,18 @@
     const initIdx = getActiveIndex();
     const state = {
       p: PRESETS[initIdx].p,
+      prevP: PRESETS[initIdx].p,
+      trailP: PRESETS[initIdx].p,
       target: PRESETS[initIdx].p,
       vel: 0,
+      flowEnergy: 0,
+      flowPhase: 0.8,
+      flowDir: 1,
+      fadeActive: false,
+      fadeFromP: PRESETS[initIdx].p,
+      fadeToP: PRESETS[initIdx].p,
+      fadeProgress: 1,
+      fadeDir: 1,
       isDragging: false,
       dragMoved: false,
       pointerId: null,
@@ -507,12 +539,42 @@
 
     const hover = { x: 0, y: 0, alpha: 0, targetAlpha: 0, rx: 0, ry: 0, targetRx: 0, targetRy: 0 };
 
+    // Pre-allocated fixed pool of micro-pixel meteor stardust sparks (zero GC allocation per frame)
+    const emberCount = isCompact ? 14 : 28;
+    const embers = Array.from({ length: emberCount }, () => ({
+      x: 0, y: 0, vx: 0, vy: 0, size: 1.5, life: 0, maxLife: 0.5, phase: 0, bright: 1
+    }));
+    let emberCursor = 0;
+    let emberAccum = 0;
+
+    function spawnMeteorEmber(x, cy, h, dir, speedScale) {
+      const e = embers[emberCursor];
+      emberCursor = (emberCursor + 1) % emberCount;
+      const spread = (Math.random() - 0.5) * 2; // -1..1
+      // Concentrate more sparks near the meteor core, fewer near the outer coma
+      const yOffset = Math.sign(spread) * Math.pow(Math.abs(spread), 1.35) * (h * 0.34);
+      e.x = x - dir * (Math.random() * (isCompact ? 4 : 10));
+      e.y = cy + yOffset;
+      e.vx = -dir * (10 + Math.random() * 24) * (isCompact ? 0.5 : 1) * (0.6 + speedScale * 0.6);
+      e.vy = yOffset * (0.18 + Math.random() * 0.25);
+      e.size = isCompact ? (0.9 + Math.random() * 0.8) : (1.3 + Math.random() * 1.6);
+      e.maxLife = 0.36 + Math.random() * 0.34;
+      e.life = e.maxLife;
+      e.phase = Math.random() * Math.PI * 2;
+      e.bright = 0.55 + Math.random() * 0.45;
+    }
+
     function syncTarget(nextP) {
+      if (Math.abs(nextP - state.target) > 0.01) {
+        state.fadeFromP = clamp(state.p, 0, 1);
+        state.fadeToP = nextP;
+        state.fadeProgress = 0;
+        state.fadeActive = true;
+        state.fadeDir = nextP >= state.fadeFromP ? 1 : -1;
+      }
       state.target = nextP;
       const idx = nextP < 0.25 ? 0 : nextP < 0.75 ? 1 : 2;
-      slots.querySelectorAll('.dm-slot-btn').forEach((el, i) => {
-        el.setAttribute('aria-pressed', String(i === idx));
-      });
+      slotEls.forEach((el, i) => el.setAttribute('aria-pressed', String(i === idx)));
       if (stateLabel) stateLabel.textContent = '当前材质：' + PRESETS[idx].name;
     }
 
@@ -522,11 +584,11 @@
 
     syncTarget(state.target);
 
-    // Pointer capture & physics controller (exact original mechanics)
     track.addEventListener('pointerdown', e => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       ensureAudio();
       state.isDragging = true;
+      state.fadeActive = false;
       state.dragMoved = false;
       state.pointerId = e.pointerId;
       state.startX = e.clientX;
@@ -545,14 +607,14 @@
         if (Math.abs(dx) > 4) state.dragMoved = true;
         if (state.dragMoved) {
           const rawP = state.startP + dx / geom.travel;
-          if (rawP < 0) state.p = Math.max(-0.04, rawP * 0.12);
-          else if (rawP > 1) state.p = Math.min(1.04, 1 + (rawP - 1) * 0.12);
+          if (rawP < 0) state.p = Math.max(-0.035, rawP * 0.10);
+          else if (rawP > 1) state.p = Math.min(1.035, 1 + (rawP - 1) * 0.10);
           else state.p = rawP;
 
           const now = performance.now();
           const dt = Math.max(now - state.lastTime, 4) / 1000;
           const instVel = ((e.clientX - state.lastX) / geom.travel) / dt;
-          state.flickVel = lerp(state.flickVel, instVel, 0.45);
+          state.flickVel = lerp(state.flickVel, instVel, 0.42);
           state.lastX = e.clientX;
           state.lastTime = now;
         }
@@ -567,8 +629,8 @@
           hover.x = nx * geom.thumb;
           hover.y = ny * geom.thumb;
           hover.targetAlpha = 1;
-          hover.targetRy = (nx - 0.5) * 6.5;
-          hover.targetRx = (0.5 - ny) * 6.5;
+          hover.targetRy = (nx - 0.5) * 6.0;
+          hover.targetRx = (0.5 - ny) * 6.0;
         } else {
           hover.targetAlpha = hover.targetRx = hover.targetRy = 0;
         }
@@ -587,7 +649,7 @@
       } else {
         const projected = clamp(state.p + state.flickVel * 0.085, 0, 1);
         const idx = projected < 0.25 ? 0 : projected < 0.75 ? 1 : 2;
-        state.vel = clamp(state.flickVel * 0.38, -6, 6);
+        state.vel = clamp(state.flickVel * 0.32, -5, 5);
         const prevIdx = getActiveIndex();
         applyPreset(idx, true);
         if (prevIdx === idx && Math.abs(state.p - PRESETS[idx].p) > 0.16) playGlassClick(idx);
@@ -607,231 +669,392 @@
       else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); applyPreset((curr + 1) % 3, true); }
     });
 
+    // Vertically centered plasma focus so top & bottom edges of the border glow symmetrically!
     function getPlasmaFocus(p) {
       const arcDip = Math.sin(p * Math.PI);
-      const { w, h, pad, thumb } = geom;
+      const { w, h, thumb } = geom;
       return {
-        x: lerp(pad + thumb * 0.28, w - pad - thumb * 0.28, p),
-        y: h * 0.81 + arcDip * (h * 0.19),
+        x: lerp(thumb * 0.44, w - thumb * 0.44, p),
+        y: h * 0.50,
         arcDip
       };
     }
 
     /* -------------------------------------------------------------------
-       CANVAS 1: FAR STUDIO ATMOSPHERIC AURA + 3-PASS OUTER PLASMA STROKES
+       CANVAS 1: FAR STUDIO ATMOSPHERIC AURA (SOFT BLOOM ONLY, ZERO BORDER OVER-STACK)
        ------------------------------------------------------------------- */
-    function renderAura(p, pal, breath, focus) {
-      const { w, h, r, auraW, auraH, scale } = geom;
+    function renderAura(lightMix, pal, breath, focus) {
+      const { boxW, boxH, auraW, auraH, scale } = geom;
       const ctx = auraCtx;
       ctx.clearRect(0, 0, auraW, auraH);
 
-      const ox = (auraW - w) * 0.5;
-      const oy = (auraH - h) * 0.5;
-      const fx = ox + focus.x;
-      const fy = oy + focus.y;
-      const isLight = p > 0.72;
-      const lightDamp = isLight ? 0.62 : 1.0;
+      const ox = (auraW - boxW) * 0.5;
+      const oy = (auraH - boxH) * 0.5;
+      const fx = ox + focus.x + 1;
+      const fy = oy + focus.y + 1;
+      const lightDamp = lerp(1.0, 0.52, lightMix);
 
       ctx.save();
-      ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter';
+      ctx.globalCompositeOperation = 'source-over';
 
-      // 1. Wide studio atmospheric halo
-      const farR = 255 * scale * breath;
-      const farGrad = ctx.createRadialGradient(fx, fy - 6 * scale, 2, fx, fy - 6 * scale, farR);
-      farGrad.addColorStop(0, rgba(pal.auraMid, 0.25 * breath * lightDamp));
-      farGrad.addColorStop(0.28, rgba(pal.auraDeep, 0.14 * breath * lightDamp));
-      farGrad.addColorStop(0.62, rgba(pal.auraDeep, 0.04 * breath * lightDamp));
+      const farR = 220 * scale * breath;
+      const farGrad = ctx.createRadialGradient(fx, fy, 2, fx, fy, farR);
+      farGrad.addColorStop(0, rgba(pal.auraMid, 0.22 * breath * lightDamp));
+      farGrad.addColorStop(0.34, rgba(pal.auraDeep, 0.11 * breath * lightDamp));
+      farGrad.addColorStop(0.70, rgba(pal.auraDeep, 0.03 * breath * lightDamp));
       farGrad.addColorStop(1, rgba(pal.auraDeep, 0));
       ctx.fillStyle = farGrad;
       ctx.fillRect(0, 0, auraW, auraH);
 
-      // 2. Concentrated near-field scatter behind active corner
-      const nearR = 132 * scale * breath;
+      const nearR = 116 * scale * breath;
       const nearGrad = ctx.createRadialGradient(fx, fy, 1, fx, fy, nearR);
-      nearGrad.addColorStop(0, rgba(pal.auraMid, 0.34 * breath * lightDamp));
-      nearGrad.addColorStop(0.45, rgba(pal.auraDeep, 0.13 * breath * lightDamp));
+      nearGrad.addColorStop(0, rgba(pal.auraMid, 0.24 * breath * lightDamp));
+      nearGrad.addColorStop(0.50, rgba(pal.auraDeep, 0.09 * breath * lightDamp));
       nearGrad.addColorStop(1, rgba(pal.auraDeep, 0));
       ctx.fillStyle = nearGrad;
       ctx.fillRect(0, 0, auraW, auraH);
-
-      // 3. Multi-pass feathered wide outer plasma strokes along exact track perimeter
-      traceRoundedRect(ctx, ox, oy, w, h, r);
-      const outerLayers = [
-        { width: 42 * scale, r: 120 * scale * breath, a0: 0.14, a1: 0.055 },
-        { width: 28 * scale, r: 112 * scale * breath, a0: 0.22, a1: 0.09 },
-        { width: 17 * scale, r: 106 * scale * breath, a0: 0.32, a1: 0.12 }
-      ];
-      for (let i = 0; i < outerLayers.length; i++) {
-        const L = outerLayers[i];
-        const g = ctx.createRadialGradient(fx, fy, 2, fx, fy, Math.max(12, L.r));
-        g.addColorStop(0, rgba(pal.auraMid, L.a0 * breath * lightDamp));
-        g.addColorStop(0.55, rgba(pal.rimOuter, L.a1 * breath * lightDamp));
-        g.addColorStop(0.86, rgba(pal.auraDeep, L.a1 * 0.28 * breath * lightDamp));
-        g.addColorStop(1, rgba(pal.auraDeep, 0));
-        ctx.strokeStyle = g;
-        ctx.lineWidth = Math.max(1.5, L.width);
-        ctx.stroke();
-      }
       ctx.restore();
     }
 
+    function drawMeteorCone(ctx, xTail, xHead, cy, halfH) {
+      const ctrlX = lerp(xTail, xHead, 0.58);
+      ctx.beginPath();
+      ctx.moveTo(xTail, cy);
+      ctx.quadraticCurveTo(ctrlX, cy - halfH * 0.30, xHead, cy - halfH);
+      ctx.lineTo(xHead, cy + halfH);
+      ctx.quadraticCurveTo(ctrlX, cy + halfH * 0.30, xTail, cy);
+      ctx.closePath();
+    }
+
     /* -------------------------------------------------------------------
-       CANVAS 2: SOFT LIGHT REFLECTION ACROSS RECESSED GLASS TRACK FLOOR
+       CANVAS 2: CONTINUOUS TRACK FLOOR + METEOR COMET TAIL & PIXEL STARDUST
        ------------------------------------------------------------------- */
-    function renderTrackFloor(p, pal, breath, focus) {
-      const { w, h, scale } = geom;
+    function renderTrackFloor(p, trailP, lightMix, pal, breath, focus, timeSec) {
+      const { w, h, thumb, travel, scale } = geom;
       const ctx = floorCtx;
       ctx.clearRect(0, 0, w, h);
 
-      const grad = ctx.createRadialGradient(focus.x, focus.y, 2, focus.x, focus.y, Math.max(24, 128 * scale));
-      grad.addColorStop(0, rgba(pal.auraMid, 0.24 * breath));
-      grad.addColorStop(0.45, rgba(pal.auraDeep, 0.08 * breath));
-      grad.addColorStop(1, rgba(pal.auraDeep, 0));
-      ctx.fillStyle = grad;
+      // 1. Smoothly crossfaded frosted track background
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+      bgGrad.addColorStop(0, rgba(pal.trackTop, pal.trackTop[3]));
+      bgGrad.addColorStop(1, rgba(pal.trackBot, pal.trackBot[3]));
+      ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, w, h);
+
+      // 2. Symmetrical soft ambient spill around the thumb
+      const spillA = lerp(0.18, 0.13, lightMix) * breath;
+      const spillGrad = ctx.createRadialGradient(focus.x, focus.y, 2, focus.x, focus.y, Math.max(24, 120 * scale));
+      spillGrad.addColorStop(0, rgba(pal.auraMid, spillA));
+      spillGrad.addColorStop(0.50, rgba(pal.auraDeep, spillA * 0.28));
+      spillGrad.addColorStop(1, rgba(pal.auraDeep, 0));
+      ctx.fillStyle = spillGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // 3. Shooting-star / meteor tapered light trail inside the track channel
+      const cy = h * 0.5;
+      const spanP = Math.abs(p - trailP);
+      if (spanP > 0.002) {
+        const wakeAlpha = smoothstep(0.002, 0.085, spanP) * lerp(1.0, 0.78, lightMix);
+        const headCenter = p * travel + thumb * 0.5;
+        const tailCenter = trailP * travel + thumb * 0.5;
+        const dir = headCenter >= tailCenter ? 1 : -1;
+        // Anchor meteor head just behind the thumb center, tapering to a needle tip at xTail
+        const xHead = clamp(headCenter - dir * thumb * 0.10, 0, w);
+        const xTail = clamp(tailCenter - dir * thumb * 0.42, 0, w);
+        const wakeLen = Math.abs(xHead - xTail);
+
+        if (wakeLen > 2) {
+          ctx.save();
+
+          // 3a. Outer meteor coma (wide tapered translucent aura cone)
+          drawMeteorCone(ctx, xTail, xHead, cy, h * 0.40);
+          const comaGrad = ctx.createLinearGradient(xTail, cy, xHead, cy);
+          comaGrad.addColorStop(0, rgba(pal.glassScatter, 0));
+          comaGrad.addColorStop(0.35, rgba(pal.glassScatter, 0.14 * wakeAlpha));
+          comaGrad.addColorStop(0.75, rgba(pal.rimMid, 0.30 * wakeAlpha));
+          comaGrad.addColorStop(1, rgba(pal.rimHot, 0.40 * wakeAlpha));
+          ctx.fillStyle = comaGrad;
+          ctx.fill();
+
+          // 3b. Mid meteor plasma plume (sleeker, brighter tapered comet body)
+          drawMeteorCone(ctx, lerp(xTail, xHead, 0.10), xHead, cy, h * 0.20);
+          const plumeGrad = ctx.createLinearGradient(lerp(xTail, xHead, 0.10), cy, xHead, cy);
+          plumeGrad.addColorStop(0, rgba(pal.rimMid, 0));
+          plumeGrad.addColorStop(0.42, rgba(pal.rimMid, 0.28 * wakeAlpha));
+          plumeGrad.addColorStop(0.80, rgba(pal.rimHot, 0.56 * wakeAlpha));
+          plumeGrad.addColorStop(1, rgba([255, 255, 255], 0.68 * wakeAlpha));
+          ctx.fillStyle = plumeGrad;
+          ctx.fill();
+
+          // 3c. Incandescent meteor spine core (razor needle converging to the tail tip)
+          drawMeteorCone(ctx, lerp(xTail, xHead, 0.18), xHead, cy, Math.max(1.1, h * 0.055));
+          const spineGrad = ctx.createLinearGradient(lerp(xTail, xHead, 0.18), cy, xHead, cy);
+          spineGrad.addColorStop(0, rgba(pal.rimHot, 0));
+          spineGrad.addColorStop(0.45, rgba(pal.rimHot, 0.48 * wakeAlpha));
+          spineGrad.addColorStop(0.85, rgba([255, 255, 255], 0.88 * wakeAlpha));
+          spineGrad.addColorStop(1, rgba([255, 255, 255], 0.96 * wakeAlpha));
+          ctx.fillStyle = spineGrad;
+          ctx.fill();
+
+          // 3d. Twin delicate curved side slipstream filaments converging toward the meteor tip
+          const filGrad = ctx.createLinearGradient(xTail, cy, xHead, cy);
+          filGrad.addColorStop(0, rgba(pal.rimMid, 0));
+          filGrad.addColorStop(0.45, rgba(pal.rimMid, 0.26 * wakeAlpha));
+          filGrad.addColorStop(0.88, rgba(pal.rimHot, 0.52 * wakeAlpha));
+          filGrad.addColorStop(1, rgba([255, 255, 255], 0.60 * wakeAlpha));
+          ctx.strokeStyle = filGrad;
+          ctx.lineWidth = isCompact ? 0.8 : 1.15;
+          const ctrlX = lerp(xTail, xHead, 0.56);
+          const sideY = h * 0.25;
+          ctx.beginPath();
+          ctx.moveTo(xTail, cy);
+          ctx.quadraticCurveTo(ctrlX, cy - sideY * 0.34, xHead, cy - sideY);
+          ctx.moveTo(xTail, cy);
+          ctx.quadraticCurveTo(ctrlX, cy + sideY * 0.34, xHead, cy + sideY);
+          ctx.stroke();
+
+          // 3e. Restrained inner top & bottom channel wall refraction echo
+          const wallGrad = ctx.createLinearGradient(xTail, 0, xHead, 0);
+          wallGrad.addColorStop(0, rgba(pal.rimMid, 0));
+          wallGrad.addColorStop(0.55, rgba(pal.rimMid, 0.20 * wakeAlpha));
+          wallGrad.addColorStop(1, rgba(pal.rimHot, 0.48 * wakeAlpha));
+          ctx.strokeStyle = wallGrad;
+          ctx.lineWidth = isCompact ? 0.9 : 1.25;
+          ctx.beginPath();
+          ctx.moveTo(xTail, 0.8);
+          ctx.lineTo(xHead, 0.8);
+          ctx.moveTo(xTail, h - 0.8);
+          ctx.lineTo(xHead, h - 0.8);
+          ctx.stroke();
+
+          ctx.restore();
+        }
+      }
+
+      // 4. Micro-pixel stardust embers shed behind the meteor (unified with dot-matrix LED DNA, continuous tint!)
+      const emberRgb = [
+        Math.round(lerp(pal.rimHot[0], pal.ledAlt[0], lightMix)),
+        Math.round(lerp(pal.rimHot[1], pal.ledAlt[1], lightMix)),
+        Math.round(lerp(pal.rimHot[2], pal.ledAlt[2], lightMix))
+      ];
+      const emberCoreRgb = [
+        Math.round(lerp(255, pal.ledCore[0], lightMix)),
+        Math.round(lerp(255, pal.ledCore[1], lightMix)),
+        Math.round(lerp(255, pal.ledCore[2], lightMix))
+      ];
+      for (let i = 0; i < emberCount; i++) {
+        const e = embers[i];
+        if (e.life <= 0) continue;
+        const norm = e.life / e.maxLife; // 1 -> 0
+        const fade = norm * norm; // silky quadratic fade-out
+        const twinkle = 0.72 + 0.28 * Math.sin(timeSec * 14 + e.phase);
+        const alpha = fade * twinkle * e.bright * lerp(0.92, 0.62, lightMix);
+        if (alpha < 0.015) continue;
+
+        // Soft micro-halo on hero mode
+        if (!isCompact && e.size > 1.5) {
+          const hr = e.size * 2.6;
+          const hg = ctx.createRadialGradient(e.x, e.y, 0.2, e.x, e.y, hr);
+          hg.addColorStop(0, rgba(emberRgb, alpha * 0.48));
+          hg.addColorStop(1, rgba(emberRgb, 0));
+          ctx.fillStyle = hg;
+          ctx.fillRect(e.x - hr, e.y - hr, hr * 2, hr * 2);
+        }
+
+        // Crisp rounded micro-pixel square
+        const s = e.size * (0.55 + 0.45 * norm);
+        const hs = s * 0.5;
+        ctx.fillStyle = rgba(emberCoreRgb, alpha);
+        if (s >= 1.4) {
+          traceRoundedRect(ctx, e.x - hs, e.y - hs, s, s, s * 0.24);
+          ctx.fill();
+        } else {
+          ctx.fillRect(e.x - hs, e.y - hs, s, s);
+        }
+      }
+
+      // 5. Subtle symmetrical top & bottom recessed inner channel vignette
+      const edgeH = Math.max(2, h * 0.08);
+      const shadeA = lerp(0.24, 0.10, lightMix);
+      const topShadow = ctx.createLinearGradient(0, 0, 0, edgeH);
+      topShadow.addColorStop(0, `rgba(0,0,0,${shadeA.toFixed(4)})`);
+      topShadow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = topShadow;
+      ctx.fillRect(0, 0, w, edgeH);
+
+      const botShadow = ctx.createLinearGradient(0, h, 0, h - edgeH);
+      botShadow.addColorStop(0, `rgba(0,0,0,${shadeA.toFixed(4)})`);
+      botShadow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = botShadow;
+      ctx.fillRect(0, h - edgeH, w, edgeH);
     }
 
     /* -------------------------------------------------------------------
-       CANVAS 4: 4-LAYER RAZOR-SHARP INCANDESCENT PLASMA PERIMETER ARC
+       CANVAS 4: CLEAN SYMMETRICAL PERIMETER RIM (NO 0.1s OVER-EXPOSURE SPIKE)
        ------------------------------------------------------------------- */
-    function renderRim(p, pal, breath, focus) {
-      const { w, h, r, rimW, rimH, scale } = geom;
+    function renderRim(lightMix, pal, breath, focus) {
+      const { boxW, boxH, r, rimW, rimH, scale } = geom;
       const ctx = rimCtx;
       ctx.clearRect(0, 0, rimW, rimH);
 
-      const ox = (rimW - w) * 0.5;
-      const oy = (rimH - h) * 0.5;
-      const fx = ox + focus.x;
-      const fy = oy + focus.y;
-      const isLight = p > 0.72;
+      const ox = (rimW - boxW) * 0.5;
+      const oy = (rimH - boxH) * 0.5;
+      const fx = ox + focus.x + 1;
+      const fy = oy + focus.y + 1;
       const lwMin = isCompact ? 0.9 : 1.0;
 
       ctx.save();
-      ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter';
-      traceRoundedRect(ctx, ox + 0.5, oy + 0.5, w - 1, h - 1, r);
+      ctx.globalCompositeOperation = 'source-over';
+      traceRoundedRect(ctx, ox + 0.5, oy + 0.5, boxW - 1, boxH - 1, r);
 
-      // Layer 1: Soft outer plasma sheath
-      const g1 = ctx.createRadialGradient(fx, fy, 2, fx, fy, Math.max(20, 108 * scale * breath));
-      g1.addColorStop(0, rgba(pal.rimMid, (isLight ? 0.34 : 0.44) * breath));
-      g1.addColorStop(0.52, rgba(pal.rimOuter, (isLight ? 0.18 : 0.22) * breath));
-      g1.addColorStop(0.84, rgba(pal.rimOuter, 0.05 * breath));
+      // Continuous subtle base border tint (replaces CSS border-color transition so backdrop-filter never flickers!)
+      ctx.strokeStyle = rgba(pal.rimHot, lerp(0.16, 0.62, lightMix));
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Restrained 2-layer plasma highlight arc (calm & evenly exposed during fast slides)
+      const g1 = ctx.createRadialGradient(fx, fy, 2, fx, fy, Math.max(18, 102 * scale * breath));
+      g1.addColorStop(0, rgba(pal.rimMid, lerp(0.36, 0.26, lightMix) * breath));
+      g1.addColorStop(0.55, rgba(pal.rimOuter, lerp(0.14, 0.10, lightMix) * breath));
       g1.addColorStop(1, rgba(pal.rimOuter, 0));
       ctx.strokeStyle = g1;
-      ctx.lineWidth = Math.max(lwMin * 4, 12.5 * scale);
+      ctx.lineWidth = Math.max(lwMin * 2.4, 5.6 * scale);
       ctx.stroke();
 
-      // Layer 2: Focused bright mid-plasma halo
-      const g2 = ctx.createRadialGradient(fx, fy, 2, fx, fy, Math.max(18, 103 * scale * breath));
-      g2.addColorStop(0, rgba(pal.rimHot, (isLight ? 0.52 : 0.68) * breath));
-      g2.addColorStop(0.48, rgba(pal.rimMid, (isLight ? 0.32 : 0.44) * breath));
-      g2.addColorStop(0.82, rgba(pal.rimOuter, 0.11 * breath));
-      g2.addColorStop(1, rgba(pal.rimOuter, 0));
+      const g2 = ctx.createRadialGradient(fx, fy, 1, fx, fy, Math.max(14, 92 * scale * breath));
+      g2.addColorStop(0, rgba([255, 255, 255], lerp(0.82, 0.72, lightMix) * breath));
+      g2.addColorStop(0.55, rgba(pal.rimHot, lerp(0.52, 0.42, lightMix)));
+      g2.addColorStop(0.85, rgba(pal.rimMid, 0.16));
+      g2.addColorStop(1, rgba(pal.rimMid, 0));
       ctx.strokeStyle = g2;
-      ctx.lineWidth = Math.max(lwMin * 2.5, 6.2 * scale);
-      ctx.stroke();
-
-      // Layer 3: Intense inner plasma core
-      const g3 = ctx.createRadialGradient(fx, fy, 1, fx, fy, Math.max(16, 98 * scale * breath));
-      g3.addColorStop(0, rgba([255, 255, 255], (isLight ? 0.78 : 0.92) * breath));
-      g3.addColorStop(0.52, rgba(pal.rimHot, (isLight ? 0.54 : 0.72) * breath));
-      g3.addColorStop(0.82, rgba(pal.rimMid, 0.22 * breath));
-      g3.addColorStop(1, rgba(pal.rimMid, 0));
-      ctx.strokeStyle = g3;
-      ctx.lineWidth = Math.max(lwMin * 1.5, 3.2 * scale);
-      ctx.stroke();
-
-      // Layer 4: Razor-sharp pure incandescent filament
-      const g4 = ctx.createRadialGradient(fx, fy, 1, fx, fy, Math.max(14, 94 * scale * breath));
-      g4.addColorStop(0, rgba([255, 255, 255], 1.0));
-      g4.addColorStop(0.58, rgba(pal.rimHot, isLight ? 0.78 : 0.92));
-      g4.addColorStop(0.84, rgba(pal.rimMid, 0.34));
-      g4.addColorStop(1, rgba(pal.rimMid, 0));
-      ctx.strokeStyle = g4;
-      ctx.lineWidth = Math.max(lwMin, 1.75 * scale);
+      ctx.lineWidth = Math.max(lwMin, 1.5 * scale);
       ctx.stroke();
 
       ctx.restore();
     }
 
     /* -------------------------------------------------------------------
-       CANVAS 3: FULL 8-LAYER FROSTED GLASS THUMB + 17x17 / 9x9 LED MATRIX
+       CANVAS 3: FROSTED GLASS THUMB + LIQUID-LIGHT SHEEN + DOT-MATRIX LEDs
        ------------------------------------------------------------------- */
-    function renderThumb(p, pal, breath, timeSec) {
+    function renderThumb(p, lightMix, pal, breath, timeSec, fadeInfo, flow) {
       const { thumb: T, thumbR: R, scale } = geom;
       const ctx = thumbCtx;
       ctx.clearRect(0, 0, T, T);
 
-      const arcDip = Math.sin(p * Math.PI);
-      const litX = lerp(T * 0.045, T * 0.955, p);
-      const litY = T * 0.78 + arcDip * (T * 0.16);
-      const sideX = lerp(-2, T + 2, p);
-      const isLight = p > 0.72;
+      const litX = lerp(T * 0.12, T * 0.88, p);
+      const litY = T * 0.50;
+      const sideX = lerp(0, T, p);
+      const sheen = flow ? flow.sheen : 0;
+      const flowPh = flow ? flow.phase : timeSec * 0.7;
 
-      // Sync thumb translucency smoothly with the workbench's live --alpha slider
-      const aTop = clamp(cachedGlassAlpha * 0.72 + 0.38, 0.48, 0.92);
-      const aMid = clamp(cachedGlassAlpha * 0.72 + 0.44, 0.54, 0.95);
-      const aBot = clamp(cachedGlassAlpha * 0.72 + 0.48, 0.58, 0.97);
+      const aTop = clamp(cachedGlassAlpha * 0.72 + 0.42, 0.52, 0.94);
+      const aMid = clamp(cachedGlassAlpha * 0.72 + 0.46, 0.56, 0.96);
+      const aBot = clamp(cachedGlassAlpha * 0.72 + 0.50, 0.60, 0.98);
 
       ctx.save();
       traceRoundedRect(ctx, 0, 0, T, T, R);
       ctx.clip();
 
-      // Layer 1: Translucent frosted-glass base body (matched to workbench 黑曜/雾灰/银白)
+      // Layer 1: Translucent frosted-glass base body
       const baseGrad = ctx.createLinearGradient(lerp(0, T, p), 0, lerp(T, 0, p), T);
       baseGrad.addColorStop(0, rgba(pal.glassTop, aTop));
-      baseGrad.addColorStop(0.52, rgba(pal.glassMid, aMid));
+      baseGrad.addColorStop(0.50, rgba(pal.glassMid, aMid));
       baseGrad.addColorStop(1, rgba(pal.glassBot, aBot));
       ctx.fillStyle = baseGrad;
       ctx.fillRect(0, 0, T, T);
 
-      // Layer 2: Deep frosted subsurface light scattering inside the glass
+      // Layer 2: Symmetrical deep frosted subsurface scattering
       const deepScatter = ctx.createRadialGradient(litX, litY, 2, litX, litY, T * 0.88);
-      deepScatter.addColorStop(0, rgba(pal.glassHot, (isLight ? 0.52 : 0.62) * breath));
-      deepScatter.addColorStop(0.32, rgba(pal.glassScatter, (isLight ? 0.32 : 0.42) * breath));
-      deepScatter.addColorStop(0.66, rgba(pal.glassScatter, 0.14 * breath));
+      deepScatter.addColorStop(0, rgba(pal.glassHot, lerp(0.56, 0.46, lightMix) * breath));
+      deepScatter.addColorStop(0.35, rgba(pal.glassScatter, lerp(0.36, 0.26, lightMix) * breath));
+      deepScatter.addColorStop(0.70, rgba(pal.glassScatter, 0.11 * breath));
       deepScatter.addColorStop(1, rgba(pal.glassScatter, 0));
       ctx.fillStyle = deepScatter;
       ctx.fillRect(0, 0, T, T);
 
-      // Layer 3: Intense milky frosted sheen hugging active side & lower curve + upper bevel bounce
+      // Layer 2.5: Internal liquid-light dual fluid pools + dedicated silky diagonal sweep
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      const fluidAmp = lerp(0.30, 0.22, lightMix) + sheen * lerp(0.52, 0.36, lightMix);
+
+      const fx1 = T * (0.50 + 0.30 * Math.cos(flowPh));
+      const fy1 = T * (0.50 + 0.26 * Math.sin(flowPh * 1.15));
+      const fGrad1 = ctx.createRadialGradient(fx1, fy1, 1, fx1, fy1, T * 0.66);
+      fGrad1.addColorStop(0, rgba(pal.rimHot, 0.40 * fluidAmp));
+      fGrad1.addColorStop(0.42, rgba(pal.rimMid, 0.18 * fluidAmp));
+      fGrad1.addColorStop(1, rgba(pal.glassScatter, 0));
+      ctx.fillStyle = fGrad1;
+      ctx.fillRect(0, 0, T, T);
+
+      const fx2 = T * (0.50 - 0.28 * Math.sin(flowPh * 0.82));
+      const fy2 = T * (0.50 + 0.24 * Math.cos(flowPh * 0.90));
+      const fGrad2 = ctx.createRadialGradient(fx2, fy2, 1, fx2, fy2, T * 0.56);
+      fGrad2.addColorStop(0, rgba(pal.glassHot, 0.32 * fluidAmp));
+      fGrad2.addColorStop(0.50, rgba(pal.auraMid, 0.14 * fluidAmp));
+      fGrad2.addColorStop(1, rgba(pal.glassScatter, 0));
+      ctx.fillStyle = fGrad2;
+      ctx.fillRect(0, 0, T, T);
+
+      // Single-pass silky diagonal liquid-light refraction wave during transitions / drags
+      if (flow && flow.sweep > -1.4 && sheen > 0.008) {
+        const sweepCenter = flow.sweep * T;
+        const bandHalf = T * 0.52;
+        const sx0 = sweepCenter - bandHalf;
+        const sy0 = -T * 0.18;
+        const sx1 = sweepCenter + bandHalf;
+        const sy1 = T * 1.18;
+        const sa = sheen * lerp(0.68, 0.52, lightMix);
+        const sweepGrad = ctx.createLinearGradient(sx0, sy0, sx1, sy1);
+        sweepGrad.addColorStop(0, rgba(pal.glassScatter, 0));
+        sweepGrad.addColorStop(0.24, rgba(pal.glassScatter, 0.16 * sa));
+        sweepGrad.addColorStop(0.44, rgba(pal.rimMid, 0.38 * sa));
+        sweepGrad.addColorStop(0.50, rgba([255, 255, 255], 0.78 * sa));
+        sweepGrad.addColorStop(0.56, rgba(pal.rimMid, 0.36 * sa));
+        sweepGrad.addColorStop(0.76, rgba(pal.glassScatter, 0.14 * sa));
+        sweepGrad.addColorStop(1, rgba(pal.glassScatter, 0));
+        ctx.fillStyle = sweepGrad;
+        ctx.fillRect(0, 0, T, T);
+      }
+      ctx.restore();
+
+      // Layer 3: Soft milky caustic edge sheen + balanced subtle top/bottom glass reflection
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
-      const hotCaustic = ctx.createRadialGradient(sideX, T * 0.69 + arcDip * (T * 0.18), 1, sideX, T * 0.69 + arcDip * (T * 0.18), T * 0.54);
-      hotCaustic.addColorStop(0, rgba(pal.glassHot, (isLight ? 0.54 : 0.68) * breath));
-      hotCaustic.addColorStop(0.42, rgba(pal.glassScatter, 0.24 * breath));
+      const hotCaustic = ctx.createRadialGradient(sideX, T * 0.50, 1, sideX, T * 0.50, T * 0.58);
+      hotCaustic.addColorStop(0, rgba(pal.glassHot, lerp(0.48, 0.38, lightMix) * breath));
+      hotCaustic.addColorStop(0.45, rgba(pal.glassScatter, 0.18 * breath));
       hotCaustic.addColorStop(1, rgba(pal.glassScatter, 0));
       ctx.fillStyle = hotCaustic;
       ctx.fillRect(0, 0, T, T);
 
-      const topSheen = ctx.createLinearGradient(0, 0, 0, T * 0.39);
-      topSheen.addColorStop(0, `rgba(255, 255, 255, ${isLight ? 0.30 : 0.10})`);
+      const topSheen = ctx.createLinearGradient(0, 0, 0, T * 0.36);
+      topSheen.addColorStop(0, `rgba(255, 255, 255, ${lerp(0.11, 0.24, lightMix).toFixed(4)})`);
       topSheen.addColorStop(1, 'rgba(255, 255, 255, 0)');
       ctx.fillStyle = topSheen;
-      ctx.fillRect(0, 0, T, T * 0.40);
+      ctx.fillRect(0, 0, T, T * 0.38);
       ctx.restore();
 
-      // Layer 4: Inner glass slab caustic bevel (light refracting through thick frosted rim)
+      // Layer 4: Inner glass slab caustic bevel (continuous, zero blend pop)
       ctx.save();
-      ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter';
       const inset = Math.max(1.2, 2.2 * scale);
       traceRoundedRect(ctx, inset, inset, T - inset * 2, T - inset * 2, Math.max(2, R - inset));
-      const innerBevelGrad = ctx.createRadialGradient(litX, litY, 2, litX, litY, T * 0.72);
-      innerBevelGrad.addColorStop(0, rgba(pal.glassHot, (isLight ? 0.65 : 0.56) * breath));
-      innerBevelGrad.addColorStop(0.55, rgba(pal.glassScatter, 0.22 * breath));
+      const innerBevelGrad = ctx.createRadialGradient(litX, litY, 2, litX, litY, T * 0.78);
+      innerBevelGrad.addColorStop(0, rgba(pal.glassHot, lerp(0.50, 0.58, lightMix) * breath));
+      innerBevelGrad.addColorStop(0.55, rgba(pal.glassScatter, 0.20 * breath));
       innerBevelGrad.addColorStop(1, rgba(pal.glassScatter, 0));
       ctx.strokeStyle = innerBevelGrad;
-      ctx.lineWidth = Math.max(1.5, 4.6 * scale);
+      ctx.lineWidth = Math.max(1.4, 4.2 * scale);
       ctx.stroke();
       ctx.restore();
 
-      // Layer 5: Static procedural bead-blasted frost grain texture (zero shimmer)
+      // Layer 5: Static procedural bead-blasted frost grain texture
       ctx.save();
-      ctx.globalAlpha = 0.048;
+      ctx.globalAlpha = 0.045;
       ctx.globalCompositeOperation = 'overlay';
       ctx.drawImage(frostGrainCanvas, 0, 0, T, T);
       ctx.restore();
 
-      // Layer 6: Pointer-tracking hover specular sheen (immediately 0 on drag)
+      // Layer 6: Pointer-tracking hover specular sheen
       if (hover.alpha > 0.005) {
         const sp = ctx.createRadialGradient(hover.x, hover.y, 1, hover.x, hover.y, T * 0.54);
         sp.addColorStop(0, `rgba(255, 255, 255, ${(0.18 * hover.alpha).toFixed(4)})`);
@@ -841,11 +1064,11 @@
         ctx.fillRect(0, 0, T, T);
       }
 
-      // Layer 7: HiDPI Dot-Matrix LED Display
-      renderDotMatrix(ctx, T, p, pal, timeSec);
+      // Layer 7: HiDPI Dot-Matrix LED Display (crossfade + liquid shimmer coupling)
+      renderDotMatrix(ctx, T, p, lightMix, pal, timeSec, fadeInfo, flow);
 
-      // Layer 8: Ultra-fine hairline glass rim bevel + bright lit-edge catchlight
-      traceRoundedRect(ctx, 0.75, 0.75, T - 1.5, T - 1.5, Math.max(2, R - 0.6));
+      // Layer 8: Ultra-fine hairline glass rim bevel + traveling liquid rim flow
+      traceRoundedRect(ctx, 0.65, 0.65, T - 1.3, T - 1.3, Math.max(2, R - 0.65));
       const baseRimGrad = ctx.createLinearGradient(0, 0, T, T);
       baseRimGrad.addColorStop(0, `rgba(255, 255, 255, ${pal.rimBaseTop.toFixed(3)})`);
       baseRimGrad.addColorStop(0.5, `rgba(255, 255, 255, ${pal.rimBaseMid.toFixed(3)})`);
@@ -854,41 +1077,83 @@
       ctx.lineWidth = isCompact ? 1.0 : 1.15;
       ctx.stroke();
 
-      const litRimGrad = ctx.createRadialGradient(litX, litY, 2, litX, litY, T * 0.78);
-      litRimGrad.addColorStop(0, rgba([255, 255, 255], 0.96));
-      litRimGrad.addColorStop(0.45, rgba(pal.glassRim, 0.72));
-      litRimGrad.addColorStop(0.8, rgba(pal.glassScatter, 0.24));
+      const litRimGrad = ctx.createRadialGradient(litX, litY, 2, litX, litY, T * 0.80);
+      litRimGrad.addColorStop(0, rgba([255, 255, 255], 0.92));
+      litRimGrad.addColorStop(0.46, rgba(pal.glassRim, 0.66));
+      litRimGrad.addColorStop(0.82, rgba(pal.glassScatter, 0.20));
       litRimGrad.addColorStop(1, rgba(pal.glassScatter, 0));
       ctx.strokeStyle = litRimGrad;
-      ctx.lineWidth = isCompact ? 1.25 : 1.65;
+      ctx.lineWidth = isCompact ? 1.2 : 1.55;
+      ctx.stroke();
+
+      // Traveling liquid-light highlight orbiting smoothly along the inner edge
+      const rimOrbX = T * 0.5 + Math.cos(flowPh * 1.4) * (T * 0.48);
+      const rimOrbY = T * 0.5 + Math.sin(flowPh * 1.4) * (T * 0.48);
+      const rimFlowAlpha = 0.24 + 0.72 * sheen;
+      const flowRimGrad = ctx.createRadialGradient(rimOrbX, rimOrbY, 1, rimOrbX, rimOrbY, T * 0.58);
+      flowRimGrad.addColorStop(0, rgba([255, 255, 255], rimFlowAlpha));
+      flowRimGrad.addColorStop(0.45, rgba(pal.rimMid, rimFlowAlpha * 0.52));
+      flowRimGrad.addColorStop(1, rgba(pal.rimOuter, 0));
+      ctx.strokeStyle = flowRimGrad;
+      ctx.lineWidth = isCompact ? 1.35 : 1.9;
       ctx.stroke();
 
       ctx.restore();
     }
 
-    function renderDotMatrix(ctx, T, p, pal, timeSec) {
-      const spanRatio = isCompact ? 0.66 : 0.56;
+    function evalStateLum(pv, nLum, gLum, dLum, delay) {
+      if (pv <= 0.5) {
+        return lerp(nLum, gLum, smoothstep(delay, delay + 0.56, pv * 2));
+      }
+      return lerp(gLum, dLum, smoothstep(delay, delay + 0.56, (pv - 0.5) * 2));
+    }
+
+    function drawBloomForP(ctx, pv, bx, by, bloomSize, alpha) {
+      if (alpha <= 0.004) return;
+      if (pv <= 0.5) {
+        const blend = pv * 2;
+        if (blend < 0.98) { ctx.globalAlpha = alpha * (1 - blend); ctx.drawImage(blackLedSprite, bx, by, bloomSize, bloomSize); }
+        if (blend > 0.02) { ctx.globalAlpha = alpha * blend; ctx.drawImage(grayLedSprite, bx, by, bloomSize, bloomSize); }
+      } else {
+        const blend = (pv - 0.5) * 2;
+        if (blend < 0.98) { ctx.globalAlpha = alpha * (1 - blend); ctx.drawImage(grayLedSprite, bx, by, bloomSize, bloomSize); }
+        if (blend > 0.02) { ctx.globalAlpha = alpha * blend; ctx.drawImage(whiteLedSprite, bx, by, bloomSize, bloomSize); }
+      }
+    }
+
+    function renderDotMatrix(ctx, T, p, lightMix, pal, timeSec, fadeInfo, flow) {
+      const spanRatio = isCompact ? 0.64 : 0.54;
       const span = T * spanRatio;
       const step = span / gridSize;
       const pixelSize = step * 0.73;
       const origin = (T - ((gridSize - 1) * step + pixelSize)) * 0.5;
+      const sheen = flow ? flow.sheen : 0;
+      const sweepAxis = flow ? flow.sweep : -99;
+      const hasSweep = sheen > 0.008 && sweepAxis > -1.4;
 
-      // Pass A: Faint unlit hardware LED matrix dots
+      // Pass A: Faint unlit hardware LED matrix dots (with crystal glint when sweep passes)
+      const unlitBaseA = pal.dotUnlit[3];
       for (let i = 0; i < cells.length; i++) {
         const cell = cells[i];
         const x = origin + cell.col * step;
         const y = origin + cell.row * step;
-        ctx.fillStyle = rgba(pal.dotUnlit, pal.dotUnlit[3] * cell.unlitScale);
+        let a = unlitBaseA * cell.unlitScale;
+        if (hasSweep) {
+          const diag = (x + y * 0.24) / T;
+          const glint = Math.max(0, 1 - Math.abs(diag - sweepAxis) / 0.30);
+          a += glint * glint * sheen * 0.11 * cell.unlitScale;
+        }
+        ctx.fillStyle = rgba(pal.dotUnlit, a);
         ctx.fillRect(x + 0.15, y + 0.15, Math.max(0.7, pixelSize - 0.3), Math.max(0.7, pixelSize - 0.3));
       }
 
-      // Pass B: Soft pre-baked bloom behind bright LEDs
-      const isLight = p > 0.72;
-      const bloomSize = pixelSize * 4.5;
+      // Pass B: Pre-baked bloom behind bright LEDs (continuous source-over -> zero pop!)
+      const bloomSize = pixelSize * 4.4;
       const bloomOffset = (bloomSize - pixelSize) * 0.5;
+      const bloomDamp = lerp(1.0, 0.52, lightMix);
 
       ctx.save();
-      ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter';
+      ctx.globalCompositeOperation = 'source-over';
       for (let i = 0; i < cells.length; i++) {
         const cell = cells[i];
 
@@ -905,27 +1170,36 @@
         else if (cell.dayKind === 2) dLum *= 0.94 + 0.06 * Math.sin(timeSec * 2.1 + cell.phase);
 
         let lum;
-        if (p <= 0.5) {
-          const lt = smoothstep(cell.morphDelay, cell.morphDelay + 0.56, p * 2);
-          lum = lerp(nLum, gLum, lt);
+        let domP = p;
+        if (fadeInfo) {
+          const fromLum = evalStateLum(fadeInfo.fromP, nLum, gLum, dLum, cell.morphDelay) * fadeInfo.outAlpha;
+          const toLum = evalStateLum(fadeInfo.toP, nLum, gLum, dLum, cell.morphDelay) * fadeInfo.inAlpha;
+          lum = clamp(fromLum + toLum, 0, 1);
+          domP = toLum >= fromLum ? fadeInfo.toP : fadeInfo.fromP;
+          cell._fromLum = fromLum;
+          cell._toLum = toLum;
         } else {
-          const lt = smoothstep(cell.morphDelay, cell.morphDelay + 0.56, (p - 0.5) * 2);
-          lum = lerp(gLum, dLum, lt);
+          lum = evalStateLum(p, nLum, gLum, dLum, cell.morphDelay);
+        }
+
+        if (hasSweep && lum > 0.05) {
+          const diag = ((origin + cell.col * step) + (origin + cell.row * step) * 0.24) / T;
+          const glint = Math.max(0, 1 - Math.abs(diag - sweepAxis) / 0.30);
+          lum = clamp(lum + glint * glint * sheen * 0.22, 0, 1);
         }
         cell._lum = lum;
+        cell._domP = domP;
 
-        if (!isCompact && lum > 0.50) {
+        if (!isCompact && lum > 0.48) {
           const bx = origin + cell.col * step - bloomOffset;
           const by = origin + cell.row * step - bloomOffset;
-          const glowIntensity = (lum - 0.44) * 0.52;
-          if (p <= 0.5) {
-            const blend = p * 2;
-            if (blend < 0.98) { ctx.globalAlpha = glowIntensity * (1 - blend); ctx.drawImage(blackLedSprite, bx, by, bloomSize, bloomSize); }
-            if (blend > 0.02) { ctx.globalAlpha = glowIntensity * blend; ctx.drawImage(grayLedSprite, bx, by, bloomSize, bloomSize); }
+          const glowIntensity = (lum - 0.42) * 0.52 * bloomDamp;
+          if (fadeInfo) {
+            const total = cell._fromLum + cell._toLum || 1;
+            drawBloomForP(ctx, fadeInfo.fromP, bx, by, bloomSize, glowIntensity * (cell._fromLum / total));
+            drawBloomForP(ctx, fadeInfo.toP, bx, by, bloomSize, glowIntensity * (cell._toLum / total));
           } else {
-            const blend = (p - 0.5) * 2;
-            if (blend < 0.98) { ctx.globalAlpha = glowIntensity * (1 - blend); ctx.drawImage(grayLedSprite, bx, by, bloomSize, bloomSize); }
-            if (blend > 0.02) { ctx.globalAlpha = glowIntensity * blend; ctx.drawImage(whiteLedSprite, bx, by, bloomSize, bloomSize); }
+            drawBloomForP(ctx, p, bx, by, bloomSize, glowIntensity);
           }
         }
       }
@@ -935,10 +1209,11 @@
       for (let i = 0; i < cells.length; i++) {
         const cell = cells[i];
         const lum = cell._lum;
-        if (lum < 0.015) continue;
+        if (lum < 0.012) continue;
         const x = origin + cell.col * step;
         const y = origin + cell.row * step;
-        const isAlt = (p < 0.35 && cell.nightKind === 2) || (p >= 0.35 && p < 0.72 && cell.grayKind === 2) || (p >= 0.72 && cell.dayKind === 3);
+        const altP = cell._domP;
+        const isAlt = (altP < 0.35 && cell.nightKind === 2) || (altP >= 0.35 && altP < 0.72 && cell.grayKind === 2) || (altP >= 0.72 && cell.dayKind === 3);
         const rgb = isAlt ? pal.ledAlt : pal.ledCore;
         ctx.fillStyle = rgba(rgb, clamp(lum, 0, 1));
         if (pixelSize >= 1.5) {
@@ -950,31 +1225,38 @@
       }
     }
 
-    const SPRING_K = 320;
-    const SPRING_C = 2 * Math.sqrt(SPRING_K); // ~35.78 critically damped, zero bounce
+    // Velvety critically-damped liquid spring (zero bounce, silky ~380ms glide)
+    const SPRING_K = 148;
+    const SPRING_C = 2 * Math.sqrt(SPRING_K);
 
     const inst = {
       state, hover, syncTarget, updateSoundBtn,
       step(dt, timeSec, breath) {
-        // Skip invisible popovers/dialogs to keep frame budget 100% dedicated to visible UI
         if (stage.offsetParent === null) return;
         if (!geom.w || !geom.h) measureAndSize();
         if (!geom.w || !geom.h) return;
 
-        // 1. Step critically-damped spring physics
+        // 1. Step critically-damped liquid spring (clamped cleanly to [0, 1] so fast flicks never over-clip border)
         if (!state.isDragging) {
           const disp = state.target - state.p;
           const accel = disp * SPRING_K - state.vel * SPRING_C;
           state.vel += accel * dt;
           state.p += state.vel * dt;
-          if (Math.abs(disp) < 0.00025 && Math.abs(state.vel) < 0.0005) {
+          if (state.p < 0) { state.p = 0; state.vel = 0; }
+          else if (state.p > 1) { state.p = 1; state.vel = 0; }
+          if (Math.abs(disp) < 0.0002 && Math.abs(state.vel) < 0.0004) {
             state.p = state.target;
             state.vel = 0;
           }
         }
 
-        // 2. Smoothly update hover specular & 3D micro-tilt (locked flat while dragging)
-        const hoverRate = 1 - Math.exp(-14 * dt);
+        // Smooth lagging meteor tail inside the track border (~0.6s silky afterglow)
+        const trailRate = 1 - Math.exp(-3.6 * dt);
+        state.trailP = lerp(state.trailP, clamp(state.p, 0, 1), trailRate);
+        if (Math.abs(state.p - state.trailP) < 0.0005) state.trailP = clamp(state.p, 0, 1);
+
+        // 2. Hover specular & 3D micro-tilt
+        const hoverRate = 1 - Math.exp(-12 * dt);
         hover.alpha = lerp(hover.alpha, hover.targetAlpha, hoverRate);
         if (state.isDragging) {
           hover.rx = 0; hover.ry = 0;
@@ -983,24 +1265,107 @@
           hover.ry = lerp(hover.ry, hover.targetRy, hoverRate);
         }
 
-        // 3. Apply GPU-locked translation & hover tilt
-        const thumbX = geom.pad + state.p * geom.travel;
+        // 3. Flush GPU-locked translation (top:0; bottom:0 -> 0px vertical gap!)
+        const pClamped = clamp(state.p, 0, 1);
+        const thumbX = pClamped * geom.travel;
         thumbMover.style.transform = `translate3d(${thumbX.toFixed(3)}px, 0, 0)`;
         if (Math.abs(hover.rx) > 0.01 || Math.abs(hover.ry) > 0.01) {
-          thumbBody.style.transform = `rotateX(${hover.rx.toFixed(3)}deg) rotateY(${hover.ry.toFixed(3)}deg)`;
+          thumbBody.style.transform = `perspective(640px) rotateX(${hover.rx.toFixed(3)}deg) rotateY(${hover.ry.toFixed(3)}deg)`;
         } else {
           thumbBody.style.transform = 'none';
         }
 
-        // 4. Unified lighting & 4-canvas lockstep render
-        const pClamped = clamp(state.p, 0, 1);
-        const pal = samplePalette(pClamped);
-        const focus = getPlasmaFocus(pClamped);
+        // 4. Proximity-based continuous slot label fade (silky reveal/hide as thumb glides over)
+        const thumbCenterNorm = (thumbX + geom.thumb * 0.5) / geom.w;
+        for (let i = 0; i < slotEls.length; i++) {
+          const slotCenter = (i + 0.5) / 3;
+          const dist = Math.abs(thumbCenterNorm - slotCenter);
+          const slotOp = smoothstep(0.11, 0.24, dist);
+          slotEls[i].style.opacity = slotOp.toFixed(3);
+        }
 
-        renderAura(pClamped, pal, breath, focus);
-        renderTrackFloor(pClamped, pal, breath, focus);
-        renderThumb(pClamped, pal, breath, timeSec);
-        renderRim(pClamped, pal, breath, focus);
+        // 5. Quintic crossfade dissolve envelope (zero velocity/acceleration jump)
+        const useCrossfade = document.documentElement.dataset.dmTransition !== 'morph';
+        let fadeInfo = null;
+        if (state.fadeActive && useCrossfade) {
+          const fadeDuration = parseFloat(document.documentElement.dataset.dmFadeDuration) || 0.52;
+          state.fadeProgress = Math.min(1, state.fadeProgress + dt / fadeDuration);
+          if (state.fadeProgress >= 1) {
+            state.fadeActive = false;
+          } else {
+            const u = smootherstep(0, 1, state.fadeProgress);
+            fadeInfo = {
+              fromP: state.fadeFromP,
+              toP: state.fadeToP,
+              u,
+              outAlpha: Math.pow(1 - smoothstep(0.0, 0.62, u), 1.35),
+              inAlpha: Math.pow(smoothstep(0.24, 1.0, u), 1.25)
+            };
+          }
+        }
+
+        // 6. Cohesive liquid-light sheen + meteor stardust emission
+        const dp = state.p - state.prevP;
+        state.prevP = state.p;
+        if (Math.abs(dp) > 0.0003) state.flowDir = dp >= 0 ? 1 : -1;
+
+        // Emit micro-pixel meteor sparks behind the moving thumb & step existing sparks
+        const absDp = Math.abs(dp);
+        if (absDp > 0.0012) {
+          const speedScale = Math.min(1.5, (absDp / Math.max(dt, 0.008)) * 0.45);
+          emberAccum += absDp * (isCompact ? 18 : 34);
+          const emitX = pClamped * geom.travel + geom.thumb * 0.5 - state.flowDir * geom.thumb * 0.34;
+          while (emberAccum >= 1) {
+            emberAccum -= 1;
+            spawnMeteorEmber(emitX, geom.h * 0.5, geom.h, state.flowDir, speedScale);
+          }
+        }
+        const damp = Math.exp(-3.2 * dt);
+        for (let i = 0; i < emberCount; i++) {
+          const e = embers[i];
+          if (e.life <= 0) continue;
+          e.life -= dt;
+          e.x += e.vx * dt;
+          e.y += e.vy * dt;
+          e.vx *= damp;
+          e.vy *= damp;
+        }
+
+        const dragSpeed = state.isDragging ? Math.min(1, (absDp / Math.max(dt, 0.008)) * 0.55) : 0;
+        const springSpeed = Math.min(1, Math.abs(state.vel) * 0.34);
+        const targetEnergy = Math.max(dragSpeed, springSpeed);
+        const envRate = targetEnergy > state.flowEnergy ? 1 - Math.exp(-14 * dt) : 1 - Math.exp(-4.2 * dt);
+        state.flowEnergy = lerp(state.flowEnergy, targetEnergy, envRate);
+        state.flowPhase += dt * (0.55 + state.flowEnergy * 3.6 + (fadeInfo ? 2.4 * Math.sin(fadeInfo.u * Math.PI) : 0)) * state.flowDir;
+
+        let sweep = -99;
+        let sheen = state.flowEnergy;
+        if (fadeInfo) {
+          // Single-pass directional silk light wave gliding cleanly from -0.45 -> 1.45
+          const env = Math.sin(fadeInfo.u * Math.PI);
+          sheen = Math.max(sheen, env);
+          sweep = state.fadeDir >= 0
+            ? lerp(-0.45, 1.45, fadeInfo.u)
+            : lerp(1.45, -0.45, fadeInfo.u);
+        } else if (state.flowEnergy > 0.015) {
+          const raw = state.flowPhase * 0.50 + pClamped * 1.4;
+          sweep = ((((raw % 2.2) + 2.2) % 2.2) - 0.6);
+        }
+        const flow = { energy: state.flowEnergy, sheen, phase: state.flowPhase, dir: state.flowDir, sweep };
+
+        // 7. Continuous unified lighting & 4-canvas lockstep render (ZERO discrete jumps!)
+        const pal = fadeInfo
+          ? lerpPalettes(samplePalette(fadeInfo.fromP), samplePalette(fadeInfo.toP), fadeInfo.u)
+          : samplePalette(pClamped);
+        const matP = fadeInfo ? lerp(fadeInfo.fromP, fadeInfo.toP, fadeInfo.u) : pClamped;
+        const lightMix = smoothstep(0.42, 0.96, matP);
+        const focus = getPlasmaFocus(pClamped);
+        const breathFade = fadeInfo ? breath * (1 - 0.10 * Math.sin(fadeInfo.u * Math.PI)) : breath;
+
+        renderAura(lightMix, pal, breathFade, focus);
+        renderTrackFloor(pClamped, state.trailP, lightMix, pal, breathFade, focus, timeSec);
+        renderThumb(pClamped, lightMix, pal, breathFade, timeSec, fadeInfo, flow);
+        renderRim(lightMix, pal, breathFade, focus);
       }
     };
     instances.add(inst);
@@ -1008,10 +1373,9 @@
 
   let lastFrameTime = performance.now();
   function frame(now) {
-    const dt = Math.min((now - lastFrameTime) / 1000, 0.04);
+    const dt = Math.min((now - lastFrameTime) / 1000, 0.033);
     lastFrameTime = now;
     const timeSec = now * 0.001;
-    // Exact original 3.5-second organic breathing pulse
     const breath = 0.965 + 0.045 * Math.sin((timeSec * Math.PI * 2) / 3.5);
     for (const inst of instances) inst.step(dt, timeSec, breath);
     requestAnimationFrame(frame);
@@ -1030,7 +1394,6 @@
     refreshGlassAlpha();
     scanHosts();
 
-    // Lightweight attribute-only observer on <html> (ZERO subtree/childList overhead!)
     new MutationObserver(() => {
       refreshGlassAlpha();
       const mat = document.documentElement.dataset.material;
@@ -1038,7 +1401,6 @@
       for (const inst of instances) inst.syncTarget(p);
     }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-material', 'data-scheme', 'data-theme', 'style'] });
 
-    // Shallow body observer ONLY to catch dynamically appended #themeDialog
     new MutationObserver(scanHosts).observe(document.body, { childList: true });
     document.addEventListener('studio-material', refreshGlassAlpha);
 

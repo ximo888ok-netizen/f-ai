@@ -206,7 +206,7 @@ export function mountGlassField(host) {
       const dt = previous ? Math.min(.12, (now - previous) / 1000) : 0.016;
       if (moving && previous) time += dt * .22 * speed;
       previous = now;
-      const rate = blending ? (1 - Math.exp(-9.5 * dt)) : 1;
+      const rate = blending ? (1 - Math.exp(-6.2 * dt)) : 1;
       for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) current[i][j] += (target[i][j] - current[i][j]) * rate;
       current[4] += (target[4] - current[4]) * rate;
       current[5] += (target[5] - current[5]) * rate;
