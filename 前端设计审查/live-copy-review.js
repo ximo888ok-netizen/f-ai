@@ -1,7 +1,7 @@
 import { revisedCopy } from './live-copy-suggestions.js';
 import { bindContentAgent, editedProof, integrationSlot } from './live-agent-integrations.js';
 import { sceneDesk } from './studio-workflows.js';
-import { field, form, grid, h, heading, input, item, link, list, notice, panel, textarea, toast } from './live.js';
+import { field, form, grid, h, input, item, link, list, notice, panel, textarea, toast } from './live.js';
 
 const platforms={taobao:'淘宝',pinduoduo:'拼多多',douyin:'抖店'};
 const root='/v1/copywriting';
