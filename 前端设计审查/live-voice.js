@@ -13,7 +13,7 @@ const stages = [
 export async function voiceQuestion(ctx, { title, links, enabled, capability }) {
   if (!enabled || !capability.available) {
     ctx.html(title + links + notice(enabled
-      ? '请在服务端配置转写、对话和语音合成模型后使用语音问答。' : '当前工作区已停用模型工具。'));
+      ? '单轮语音在当前工作区不可用。请管理员核对能力权限及转写、对话和语音合成模型配置。' : '当前工作区已停用模型工具。'));
     return;
   }
   const [{ items: models }, wallet] = await Promise.all([ctx.api('/v1/models'), ctx.api('/v1/credits/wallet')]);

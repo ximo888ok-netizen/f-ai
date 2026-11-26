@@ -217,6 +217,7 @@ async function account(ctx) {
 async function inbox(ctx) {
   const [summary, messages] = await Promise.all([ctx.api('/v1/notifications?limit=1'), ctx.all('/v1/notifications')]);
   const types = { 'task.succeeded':'任务成功', 'task.failed':'任务失败', 'task.cancelled':'任务取消',
+    'member.joined':'已加入企业工作区', 'member.role-changed':'工作区角色已变更', 'member.state-changed':'成员状态已变更',
     ...Object.fromEntries(Object.entries(rightsActions).map(([key,label])=>['rights.'+key,label])),
   };
   ctx.html(heading('消息中心', summary.unread + ' 条未读') + link('全部通知','inbox') + link('仅看未读','inbox/unread') +

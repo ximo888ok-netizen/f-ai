@@ -4,7 +4,7 @@ import { skillResults } from './media-skill-output.js';
 import { describeError } from './studio-errors.js';
 import { downloadContent } from './live-text-delivery.js';
 
-const states={local_ready:'本机脚本已就绪',configured:'已配置执行服务',executor_required:'待配置技能执行服务',credentials_required:'待配置供应商授权',
+const states={local_ready:'本机脚本已就绪',configured:'已配置执行服务，授权以供应商响应为准',executor_required:'待配置技能执行服务',credentials_required:'待配置供应商授权',
   source_missing:'待安装固定版本的上游技能',python_required:'待配置 Python 运行环境',source_mismatch:'本机脚本版本不匹配',
   runtime_unavailable:'执行环境不可用',model_required:'待配置对应模型',disabled:'工作区已停用',service_required:'待配置服务端点或成品域名',planner_required:'待配置视觉策划模型'};
 const vendors={commerce:'电商图片技能集',linkpix:'青虎 LinkPix',dlazy:'dlazy',suite:'Ecommerce Image Suite',fal:'fal',wan:'阿里万相',aidge:'阿里云 Aidge',byte:'字节 AgentKit',kling:'可灵',vidu:'Vidu',firered:'FireRed OpenStoryline',minimax:'MiniMax',pixverse:'PixVerse',runway:'Runway',ark:'火山方舟'};
