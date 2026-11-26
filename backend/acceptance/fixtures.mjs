@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import { crc32, deflateSync } from 'node:zlib';
 import { setTimeout as delay } from 'node:timers/promises';
+import { catalog as releaseCatalog } from '../src/catalog.js';
 
 export function client(origin, session, workspace = session?.workspaces[0].id) {
   return async (method, path, expected, body) => {
@@ -66,7 +67,9 @@ export async function exerciseWorkspace(origin, owner) {
 
   const plugins = (await api('GET', '/v1/plugins', 200)).items;
   assert.equal(plugins.length, 5);
-  assert.equal(plugins.flatMap(plugin => plugin.capabilities).length, 42);
+  const expected = [...releaseCatalog.values()].filter(capability => capability.pluginId !== 'models');
+  const registered = plugins.flatMap(plugin => plugin.capabilities.map(capability => plugin.id + '/' + capability.id));
+  assert.deepEqual(registered.sort(), expected.map(capability => capability.pluginId + '/' + capability.id).sort());
   for (const plugin of plugins) {
     const state = '/v1/plugins/' + plugin.id + '/state';
     await api('PUT', state, 200, { enabled: false });
