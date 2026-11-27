@@ -198,6 +198,16 @@ test('platform owner manages members, access, credits, features, connections and
   await type(audit, { targetId: project.id });
   const auditResponse = await act('按对象筛选审计', submit(audit), route('GET', '/v1/merchant/audit-events'));
   assert.equal(new URL(auditResponse.url()).searchParams.get('targetId'), project.id);
+  const event = (await auditResponse.json()).items[0];
+  assert.ok(event);
+  const auditDetail = page.locator('#merchantContent article details').filter({ hasText: event.requestId });
+  const auditSummary = auditDetail.getByText('查看详情', { exact: true });
+  await act('展开商家审计条目', auditSummary);
+  const auditJson = auditDetail.locator('pre.live-result');
+  await auditJson.waitFor();
+  assert.deepEqual(JSON.parse(await auditJson.innerText()), event.detail);
+  await act('收起商家审计条目', auditSummary);
+  await auditJson.waitFor({ state: 'hidden' });
   const exported = page.waitForEvent('download');
   await act('下载筛选后的审计记录', page.locator('[data-audit-export]'), route('GET', '/v1/merchant/audit-events'));
   const records = JSON.parse(await readFile(await (await exported).path(), 'utf8'));

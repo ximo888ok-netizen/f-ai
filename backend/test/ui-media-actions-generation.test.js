@@ -10,6 +10,7 @@ import { MediaOutputs } from '../src/media-skill-files.js';
 
 const options = { skip: !process.env.FAI_TEST_PLAYWRIGHT_PATH, timeout: 240000 };
 const taskRoot = '/v1/tasks';
+const draftRoot = '/v1/studio/pinduoduo-drafts';
 const form = (page, name) => page.locator(`[data-form="${name}"]`);
 const field = (box, name) => box.locator(`[name="${name}"]`);
 const get = (path, status = 200) => ({ method: 'GET', path, status });
@@ -66,6 +67,21 @@ async function download(page, action, expectedFilename) {
 async function chooseFile(page, act, label, control, file) {
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), act(label, control)]);
   await chooser.setFiles(file);
+}
+
+async function saveResultDraft(page, act, read, label, title) {
+  const editor = form(page, 'save-draft');
+  for (const [name, value] of Object.entries({ title, specification: '350ml', sku: 'RESULT-DRAFT', price: '29.90', stock: '10' })) {
+    await field(editor, name).fill(value);
+  }
+  const response = await act(label, editor.getByRole('button', { name: '保存到工作台草稿', exact: true }), {
+    method: 'PUT', path: /^\/v1\/studio\/pinduoduo-drafts\/[0-9a-f-]+$/, status: 200,
+  });
+  const saved = await response.json();
+  await page.waitForURL(url => url.hash === '#drafts/' + saved.id);
+  const stored = await read(draftRoot + '/' + saved.id);
+  assert.equal(stored.title, title);
+  return stored;
 }
 
 test('media actions test quick image input, advanced prompt favorites and Agent confirmation in the served workbench', options, async t => {
@@ -162,6 +178,11 @@ test('media actions test quick image input, advanced prompt favorites and Agent 
   const marked = await download(page, () => act('media.task.download-marked', page.locator('[data-delivery-download]'), get('/v1/assets/' + asset + '/delivery')));
   assert.equal(marked.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
   assert.notDeepEqual(marked, png());
+  await act('media.task.new-draft-with-image', page.getByRole('link', { name: '用作新草稿主图', exact: true }), get('/v1/assets'));
+  assert.equal(await field(form(page, 'save-draft'), 'image-main').inputValue(), asset);
+  const imageDraft = await saveResultDraft(page, act, read, 'media.task.save-image-draft', '从任务成品带入主图');
+  assert.deepEqual(imageDraft.images, [{ role: 'main', assetId: asset }]);
+  await open('tasks/' + generation.id, '[data-asset-download]');
   await act('media.task.result-asset', page.getByRole('link', { name: '在素材库查看', exact: true }), get('/v1/assets/' + asset));
   await open('tasks/' + generation.id, '[data-asset-download]');
   await act('media.task.revise-inputs', page.getByRole('link', { name: '修改参数再提交', exact: true }), get(taskRoot + '/' + generation.id + '/inputs'));
@@ -190,6 +211,13 @@ test('media video actions exercise prompt popovers and each staged video submiss
   const prompt = form(page, 'video-prompt');
   const launch = prompt.locator('button[type=submit]');
   const pop = (box, key) => box.locator(`[popovertarget="video-${key}"]`);
+  const reopen = async (key, text) => {
+    const trigger = pop(prompt, key).filter({ hasText: text });
+    await act('media.video.prompt.reopen-' + key, trigger);
+    const panel = prompt.locator(`#video-${key}:popover-open`);
+    await panel.waitFor();
+    return panel;
+  };
   await open('desk/video');
   try {
     await prompt.waitFor();
@@ -230,14 +258,24 @@ test('media video actions exercise prompt popovers and each staged video submiss
   assert.equal(await prompt.locator('[name=videoModel][value=media-browser-video]').isChecked(), true);
   await act('media.video.prompt.choose-model', prompt.locator('[name=videoModel][value=media-browser-video-alt]'));
   await page.keyboard.press('Escape');
+  const modelPanel = await reopen('model', 'media-browser-video-alt');
+  assert.equal(await modelPanel.locator('[name=videoModel][value=media-browser-video-alt]').isChecked(), true);
+  await page.keyboard.press('Escape');
   await act('media.video.prompt.ratio-popover', pop(prompt, 'ratio'));
   await prompt.locator('[name=ratio][value="1:1"]').check();
+  await page.keyboard.press('Escape');
+  const ratioPanel = await reopen('ratio', '1:1');
+  assert.equal(await ratioPanel.locator('[name=ratio][value="1:1"]').isChecked(), true);
   await page.keyboard.press('Escape');
   await act('media.video.prompt.length-popover', pop(prompt, 'length'));
   await field(prompt, 'defaultDuration').uncheck();
   await field(prompt, 'duration').press('Home');
   await field(prompt, 'duration').press('ArrowRight');
   const duration = Number(await field(prompt, 'duration').inputValue());
+  await page.keyboard.press('Escape');
+  const lengthPanel = await reopen('length', duration + ' 秒');
+  assert.equal(await field(lengthPanel, 'duration').inputValue(), String(duration));
+  assert.equal(await field(lengthPanel, 'defaultDuration').isChecked(), false);
   await page.keyboard.press('Escape');
   const direct = await act('media.video.prompt.direct', launch, post(taskRoot));
   assert.equal(direct.request().postDataJSON().modelId, 'media-browser-video-alt');
@@ -259,6 +297,9 @@ test('media video actions exercise prompt popovers and each staged video submiss
   await act('media.video.prompt.plan-mode', page.locator('[data-video-mode=plan]'));
   await act('media.video.prompt.skill-popover', pop(prompt, 'skill'));
   await prompt.locator('[name=skill][value=story]').check();
+  await page.keyboard.press('Escape');
+  const skillPanel = await reopen('skill', '剧情演绎');
+  assert.equal(await skillPanel.locator('[name=skill][value=story]').isChecked(), true);
   await page.keyboard.press('Escape');
   const plan = await act('media.video.prompt.plan', launch, post(taskRoot));
   assert.match(plan.request().postDataJSON().parameters.messages[1].content, /简短场景/);
@@ -599,6 +640,8 @@ test('task stream resume reconnects the browser to a real pending task after tra
       return { type: 'text', text };
     };
   } });
+  const source = await api('POST', '/v1/assets', { name: '文字草稿主图.png', source: '合成素材', purpose: '任务草稿验收',
+    mediaType: 'image/png', dataBase64: png().toString('base64') });
   try {
     const task = await api('POST', taskRoot, { idempotencyKey: 'task-stream-resume-test', capabilityId: 'model.chat', mode: 'workflow',
       modelId: 'media-browser-text', parameters: { stream: true, messages: [{ role: 'user', content: '等待合成回复' }] } });
@@ -618,7 +661,14 @@ test('task stream resume reconnects the browser to a real pending task after tra
     release.resolve();
     await page.getByRole('heading', { name: '实际结果', exact: true }).waitFor();
     await page.getByText('恢复连接后收到合成回复。', { exact: true }).first().waitFor();
-    assert.equal((await read(taskPath)).result.text, '恢复连接后收到合成回复。');
+    const text = (await read(taskPath)).result.text;
+    assert.equal(text, '恢复连接后收到合成回复。');
+    await act('media.task.new-draft-with-text', page.getByRole('link', { name: '用作新草稿描述', exact: true }), get(taskPath));
+    const draft = form(page, 'save-draft');
+    assert.equal(await field(draft, 'description').inputValue(), text);
+    await field(draft, 'image-main').selectOption(source.id);
+    const saved = await saveResultDraft(page, act, read, 'media.task.save-text-draft', '从任务成品带入描述');
+    assert.equal(saved.description, text);
   } finally {
     release.resolve();
   }

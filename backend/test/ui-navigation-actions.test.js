@@ -14,7 +14,7 @@ function ready() {
 }
 
 test('follow every distinct local navigation destination and switch each scene tab in the served directory', {
-  skip: !enabled, timeout: 480000,
+  skip: !enabled, timeout: 900000,
 }, async t => {
   const { page, origin, api } = await createStudioFixture(t);
   for (const platform of ['taobao','pinduoduo','douyin']) {
@@ -38,13 +38,33 @@ test('follow every distinct local navigation destination and switch each scene t
     const tabs = await area.locator('[role=tab][aria-controls]:visible').evaluateAll(els=>els.map(e=>e.getAttribute('aria-controls')));
     for (const tab of tabs.length ? tabs : [null]) {
       if (tab) { await mount(view,tab); tabsChecked.add(view+' '+tab); }
-      const links = await area.locator('a[href]:visible').evaluateAll(els => [...new Set(els.map(e=>e.getAttribute('href')))]);
+      const links = await area.locator('a[href]').evaluateAll(els => [...new Set(els.filter(e => {
+        if (e.getClientRects().length) return true;
+        // Closed details are rendered by the browser. Hidden tabs and feature
+        // panels have a separate entry path in this traversal.
+        if (!e.closest('details:not([open])') || e.closest('[hidden]')) return false;
+        for (let node = e; node; node = node.parentElement) {
+          if (getComputedStyle(node).display === 'none') return false;
+        }
+        return true;
+      }).map(e=>e.getAttribute('href')))]);
       for (const href of links) {
-        if (!href || !/^(?:#|\/(?:merchant)?#)/.test(href) || /^#(?:main|merchantContent)$/.test(href)) continue;
+        if (!href || !/^(?:#|\/(?:merchant)?(?:#|$))/.test(href) || /^#(?:main|merchantContent)$/.test(href)) continue;
         const dest = new URL(href, origin+view);
         const key = dest.pathname + dest.hash;
         if (checked.has(key)) continue;
         await mount(view, tab);
+        const candidates = area.locator('a[href="'+href+'"]');
+        if (!await area.locator('a[href="'+href+'"]:visible').count()) {
+          for(const candidate of await candidates.all()){
+            if(await candidate.evaluate(el=>Boolean(el.closest('[hidden]')))) continue;
+            for(const fold of await candidate.locator('xpath=ancestor::details').all()){
+              const summary=fold.locator(':scope > summary');
+              if(!await fold.evaluate(n=>n.open) && await summary.isVisible()) await summary.click();
+            }
+            if(await candidate.isVisible()) break;
+          }
+        }
         const anchor = area.locator('a[href="'+href+'"]:visible').first();
         const visits = [page.url()];
         const record = frame => { if (frame === page.mainFrame()) visits.push(frame.url()); };

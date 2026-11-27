@@ -141,6 +141,14 @@ test('workspace shell, text and voice tasks, schedules, settings and notificatio
   await page.getByRole('link', { name: '已保存，打开知识文档' }).waitFor();
 
   await act('读取原输入并继续这段对话', page.getByRole('link', { name: '继续这段对话' }), request('GET', taskPath + '/inputs'));
+  const historyDetails = page.locator('#main details').filter({ has: page.getByText('本次带入的消息', { exact: true }) });
+  const historySummary = historyDetails.getByText('本次带入的消息', { exact: true });
+  await act('展开本次带入的消息', historySummary);
+  await historyDetails.getByText('任务初次问题', { exact: true }).waitFor();
+  const priorReply = historyDetails.getByText(textReply, { exact: true });
+  await priorReply.waitFor();
+  await act('收起本次带入的消息', historySummary);
+  await priorReply.waitFor({ state: 'hidden' });
   await message.fill('追问内容');
   const follow = await submitTask('提交续聊任务');
   assert.equal((await read('/v1/tasks/' + follow.id)).parentId, task.id);
