@@ -1,0 +1,66 @@
+name: Workbench button acceptance
+on:
+  push:
+    branches: ['ci/backend-ui-*']
+    paths: ['backend/**', '前端设计审查/**', '.github/workflows/ui-actions.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: ui-actions-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  buttons:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 24
+    strategy:
+      fail-fast: false
+      matrix:
+        area: [media, platform, commerce, copy, navigation]
+    defaults:
+      run:
+        shell: bash
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Install test tools
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --prefix "$RUNNER_TEMP/browser" --no-audit --no-fund --ignore-scripts playwright@1.62.1
+          if ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          echo "FAI_TEST_PLAYWRIGHT_PATH=$RUNNER_TEMP/browser/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "FAI_TEST_FFMPEG_PATH=$(command -v ffmpeg)" >> "$GITHUB_ENV"
+          echo "FAI_TEST_FFPROBE_PATH=$(command -v ffprobe)" >> "$GITHUB_ENV"
+      - name: Click controls against an isolated application and database
+        env:
+          AREA: ${{ matrix.area }}
+          FAI_UI_REPORT_DIR: ${{ runner.temp }}/ui-controls
+        run: |
+          if [[ "$AREA" == navigation ]]; then
+            suites=(test/studio-browser.test.js test/studio-navigation-browser.test.js test/ui-navigation*.test.js)
+          else
+            suites=(test/ui-"$AREA"*.test.js)
+          fi
+          files=()
+          for suite in "${suites[@]}"; do [[ ! -f "$suite" ]] || files+=("$suite"); done
+          (( ${#files[@]} > 0 ))
+          node --test --test-concurrency=1 --test-reporter=tap "${files[@]}" | tee "$RUNNER_TEMP/actions.tap"
+      - name: Save observed controls and action results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: controls-${{ matrix.area }}
+          path: |
+            ${{ runner.temp }}/ui-controls/*.json
+            ${{ runner.temp }}/actions.tap
+          retention-days: 14
+

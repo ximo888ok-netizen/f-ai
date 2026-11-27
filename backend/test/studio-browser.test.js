@@ -12,6 +12,7 @@ import { createProviders, ProviderError } from '../src/providers.js';
 import { createVideoDelivery } from '../src/video-delivery.js';
 import { provisionCredits } from '../src/wallet.js';
 import { startWorker } from '../src/worker.js';
+import { watchControls } from '../test-support/ui-control-report.js';
 
 const playwrightPath = process.env.FAI_TEST_PLAYWRIGHT_PATH;
 const ffmpeg = process.env.FAI_TEST_FFMPEG_PATH;
@@ -95,6 +96,7 @@ test('the served workbench completes tasks, merchant settings, drafts, ledger, s
       channel: 'chrome', headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader'],
     });
     const page = await browser.newPage({ reducedMotion: 'reduce' });
+    await watchControls(t, page.context());
     const errors = [];
     page.on('response', response => {
       if (response.status() >= 400 && new URL(response.url()).pathname.startsWith('/v1/')) {
@@ -139,6 +141,7 @@ test('the served workbench completes tasks, merchant settings, drafts, ledger, s
     await page.locator('[data-ticket]').waitFor();
     const invitation = await page.locator('[data-ticket]').inputValue();
     const invitee = await browser.newPage({ reducedMotion: 'reduce' });
+    await watchControls(t, invitee.context());
     await invitee.goto(invitation);
     await invitee.getByRole('button', { name: '创建账号', exact: true }).click();
     await save(invitee, 'auth', { email: inviteEmail, password: 'invitee-fixture-password', displayName: '邀请验收' });

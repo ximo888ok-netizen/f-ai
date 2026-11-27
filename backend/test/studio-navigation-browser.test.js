@@ -6,6 +6,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { buildApp } from '../src/app.js';
 import { migrate, postgres } from '../src/db.js';
 import { createProviders } from '../src/providers.js';
+import { watchControls } from '../test-support/ui-control-report.js';
 
 const playwrightPath = process.env.FAI_TEST_PLAYWRIGHT_PATH;
 const studioRoutes = [
@@ -64,6 +65,7 @@ test('Chrome renders all registered business routes and key categories against t
       channel: 'chrome', headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader'],
     });
     const page = await browser.newPage({ reducedMotion: 'reduce' });
+    await watchControls(t, page.context());
     await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
     await page.addInitScript(({ token, workspace }) => {
       sessionStorage.setItem('fai.live.session', token);

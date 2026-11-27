@@ -73,7 +73,8 @@ function renderItem(record, model, kind, base, bookRoute) {
   if (kind === 'inventory' && d.stock <= d.threshold) values.push('库存预警');
   if (kind === 'performance' && d.visitors > 0) values.push('支付转化率 ' + (d.buyers*100/d.visitors).toFixed(2) + '%');
   const related = d.orderRef ? link('查询关联订单',pageRoute(bookRoute + '/orders',new URLSearchParams({q:d.orderRef}))) : '';
-  return item(record.reference + ' · ' + d.title,values.join(' · '),link('编辑',base + '/edit/' + path(record.reference)) + related);
+  const title = d.title ? record.reference + ' · ' + d.title : record.reference;
+  return item(title,values.join(' · '),link('编辑',base + '/edit/' + path(record.reference)) + related);
 }
 
 async function recordsPage(ctx, book, kind, model, view, key) {
