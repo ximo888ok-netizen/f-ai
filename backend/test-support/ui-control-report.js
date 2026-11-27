@@ -24,7 +24,7 @@ export async function watchControls(t, context) {
     function describe(node) {
       const main = node.closest('#main,#merchantContent,#commerce-directory');
       const view = location.pathname + (main ? '#' + clean(location.hash.slice(1) || 'home') : '#(shell)');
-      const form = node.form?.dataset.form;
+      const form = clean(node.form?.dataset.form);
       const attr = Array.from(node.attributes).filter(a => a.name.startsWith('data-') && a.name !== 'data-pending');
       const href = node.getAttribute('href');
       const name = clean(node.getAttribute('aria-label') || node.title || node.textContent || node.value);

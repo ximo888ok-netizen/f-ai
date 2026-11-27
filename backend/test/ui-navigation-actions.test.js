@@ -89,6 +89,28 @@ test('follow every distinct local navigation destination and switch each scene t
   t.diagnostic('Navigation clicks verified: '+checked.size+' destinations, '+tabsChecked.size+' scene tabs');
 });
 
+test('sidebar opens capabilities and knowledge through the API and both skip links focus the current content', {
+  skip: !enabled, timeout: 90000,
+}, async t => {
+  const {page, open, act} = await createStudioFixture(t);
+  await open('home', page.locator('[data-switch-scene]').first());
+  for (const [route, path, title] of [
+    ['capabilities', '/v1/library', '能力中心'],
+    ['data', '/v1/knowledge/bases', '资料库'],
+  ]) {
+    await act('侧栏打开' + title, page.locator('#nav a[href="#' + route + '"]'), {method: 'GET', path});
+    await page.locator('#main').getByRole('heading', {name: title, exact: true}).waitFor();
+  }
+  for (const [id, heading] of [['main', '资料库'], ['merchantContent', '管理操作记录']]) {
+    if (id === 'merchantContent') await open('/merchant#audit', '#merchantContent h1');
+    const link = page.locator('a.skip[href="#' + id + '"]');
+    await link.focus();
+    await link.press('Enter');
+    await page.waitForFunction(target => document.activeElement?.id === target, id);
+    await page.locator('#' + id).getByRole('heading', {name: heading, exact: true}).waitFor();
+  }
+});
+
 test('directory feature switches, cancellation, shell search, theme, motion, about and mobile navigation', {
   skip: !enabled, timeout: 150000,
 }, async t => {

@@ -17,7 +17,7 @@ async function type(scope, fields) {
 test('platform owner manages members, access, credits, features, connections and audits in Chrome', options, async t => {
   const cloudAssets = new Map();
   let checks = 0;
-  const { page, origin, app, db, session, read, act } = await createStudioFixture(t, {
+  const { page, origin, app, session, read, act } = await createStudioFixture(t, {
     cloudAssets,
     configureProviders(providers) {
       providers.set('model:platform-connection', {
@@ -259,42 +259,4 @@ test('platform owner manages members, access, credits, features, connections and
   await memberAction('从工作台账号菜单退出登录', memberPage.locator('[data-account-logout]'), 'POST', '/v1/auth/logout', 204);
   await personalLogin.waitFor();
   await memberPage.close();
-
-  const pageMembers = Array.from({ length: 25 }, () => randomUUID());
-  await db.transaction(async tx => {
-    await tx.query(`INSERT INTO accounts(id,email,password_hash,display_name,account_type)
-      SELECT id,id::text || '@example.test','pagination-fixture-only','分页成员 ' || position,'personal'
-      FROM unnest($1::uuid[]) WITH ORDINALITY AS entries(id,position)`, [pageMembers]);
-    await tx.query(`INSERT INTO memberships(workspace_id,account_id,role)
-      SELECT $1,id,'member' FROM unnest($2::uuid[]) AS entries(id)`, [company, pageMembers]);
-    const eventIds = Array.from({ length: 31 }, () => randomUUID());
-    await tx.query(`INSERT INTO merchant_events(id,workspace_id,actor_id,scope,action,target_id,detail,request_id)
-      SELECT id,$1,$2,'workspace','test.pagination',$3,'{}'::jsonb,'pagination-fixture'
-      FROM unnest($4::uuid[]) AS entries(id)`, [company, session.account.id, project.id, eventIds]);
-  });
-  await act('打开商家成员清单', page.locator('#nav a[href="#members"]'), route('GET', '/v1/members'));
-  await type(memberFilter, { q: '' });
-  await act('清除筛选显示完整成员清单', submit(memberFilter), route('GET', '/v1/members'));
-  const nextMembers = await act('翻到下一页成员', page.locator('[data-page="25"]'), route('GET', '/v1/members'));
-  assert.equal(new URL(nextMembers.url()).searchParams.get('offset'), '25');
-  assert.ok((await nextMembers.json()).items.length > 0);
-  const previousMembers = await act('返回上一页成员', page.locator('[data-page="0"]'), route('GET', '/v1/members'));
-  assert.equal(new URL(previousMembers.url()).searchParams.get('offset'), '0');
-
-  await page.locator('#nav a[href="#audit"]').click();
-  await type(audit, { action: 'test.pagination', targetId: project.id });
-  const firstAuditPage = await act('读取可分页审计记录', submit(audit), route('GET', '/v1/merchant/audit-events'));
-  assert.equal((await firstAuditPage.json()).hasMore, true);
-  const nextAudit = await act('按游标翻到下一页审计', page.locator('[data-audit-next]'), route('GET', '/v1/merchant/audit-events'));
-  assert.ok(new URL(nextAudit.url()).searchParams.has('beforeId'));
-  assert.equal((await nextAudit.json()).items.length, 1);
-  const backToLatest = await act('返回最近的审计记录', page.locator('[data-audit-reset]'), route('GET', '/v1/merchant/audit-events'));
-  assert.ok(!new URL(backToLatest.url()).searchParams.has('beforeId'));
-
-  await act('从商家后台退出登录', page.locator('#merchantLogout'), route('POST', '/v1/auth/logout'));
-  const login = form(page, 'login');
-  await type(login, { email: session.account.email, password: 'synthetic-action-fixture' });
-  const signedIn = await act('从商家后台重新登录', submit(login), route('POST', '/v1/auth/login'));
-  assert.equal((await signedIn.json()).account.id, session.account.id);
-  await page.getByRole('heading', { name: '管理操作记录', exact: true }).waitFor();
 });

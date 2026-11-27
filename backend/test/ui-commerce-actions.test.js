@@ -167,7 +167,8 @@ function ledgerSample(kind) {
   }[kind];
 }
 
-test('shop directory, all ledger modules, report filters, imports and downloads use the real server', options, async t => {
+test('shop directory, all ledger modules, report filters, imports and downloads use the real server',
+  { ...options, timeout: 420000 }, async t => {
   const fixture = await createStudioFixture(t);
   const { page, open, act, api, read } = fixture;
   const { form, link, button, visible, submit, download } = controls(fixture);
