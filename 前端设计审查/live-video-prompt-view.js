@@ -1,5 +1,6 @@
 import { date, h, link, notice, path } from './live-ui.js';
-import { videoInputs, videoRatios, videoSkills, videoTemplates } from './live-video-prompt-options.js';
+import { videoInputs, videoSkills, videoTemplates } from './live-video-prompt-options.js';
+import { videoSettingsMarkup } from './live-video-settings.js';
 
 function popover(id, label, body, attrs = '') {
   return '<button type="button" class="smallbtn video-control" popovertarget="video-' + id + '" ' + attrs + '>' + h(label) +
@@ -12,6 +13,7 @@ function option(group, value, label, description = '') {
 }
 
 function toolbar() {
+  const settings = videoSettingsMarkup();
   return '<div class="video-toolbar" aria-label="视频设置">' +
     popover('skill', '编导技能', videoSkills.map(([id, name, description]) => option('skill', id, name, description)).join(''), 'hidden') +
     popover('media', '添加素材', '<button type="button" class="plain" data-video-upload>本地上传</button>' +
@@ -19,13 +21,9 @@ function toolbar() {
     popover('input', '文字生成视频', Object.entries(videoInputs).map(([id, item]) => option('inputType', id, item.label)).join('') +
       link('视频编辑与导出', 'media/video')) +
     popover('model', '视频模型', '<div data-video-models></div>') +
-    popover('ratio', '画幅与清晰度', '<fieldset><legend>画幅比例</legend><div class="video-ratios">' +
-      videoRatios.map(([id, name]) => option('ratio', id, name)).join('') + '</div></fieldset>' +
-      '<p class="live-muted">清晰度由所选模型决定。</p>') +
-    popover('length', '视频时长', '<label class="video-duration-auto"><input type="checkbox" name="defaultDuration" checked>使用模型默认时长</label>' +
-      '<div class="video-duration"><label for="video-duration-range">时长（秒）</label><output for="video-duration-range" data-video-duration></output>' +
-      '<input id="video-duration-range" type="range" name="duration" step="1" min="1" max="10" value="5"></div>') +
-    popover('audio', '声音', notice('音轨由生成模型决定。可在视频导出中选择保留音轨或静音。') + link('视频导出', 'media/video')) + '</div>';
+    popover('ratio', '画幅与清晰度', settings.ratio) +
+    popover('length', '视频时长', settings.length) +
+    popover('audio', '声音', settings.audio + link('视频导出', 'media/video')) + '</div>';
 }
 
 export function videoModelOptions(models, available) {

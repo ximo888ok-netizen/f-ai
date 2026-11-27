@@ -1,12 +1,22 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres } from '../src/db.js';
 import { createProviders } from '../src/providers.js';
 import { provisionCredits } from '../src/wallet.js';
 import { workOnce } from '../src/worker.js';
+
+test('a video gateway without declared model settings preserves its original submission contract', () => {
+  const gateway = createProviders({url:'https://gateway.example.test/generate', token:'test', capabilities:['video.compose']}).get('gateway');
+  const validate = params => gateway.validate({id:'video.compose'}, params);
+  assert.doesNotThrow(() => validate({prompt:'商品展示', ratio:'16:9', options:{durationSeconds:10}}));
+  for (const params of [{options:{resolution:'720p'}}, {options:{generateAudio:false}}, {options:{durationSeconds:31}}, {ratio:'77:1'}]) {
+    assert.throws(() => validate(params), {statusCode:400, code:'INVALID_INPUT'});
+  }
+});
 
 test('gateway media jobs require deliverable results before charging the submitting account', async t => {
   const db = process.env.FAI_TEST_DATABASE_URL ? postgres(process.env.FAI_TEST_DATABASE_URL) : new PGlite();
@@ -22,9 +32,9 @@ test('gateway media jobs require deliverable results before charging the submitt
     return result.json();
   };
   const signUp = async name => {
-    const session = await api('POST','/v1/auth/register',201,{},{
+    const session = await api('POST','/v1/auth/register',201,{},await registrationPayload(app, {
       email:name+'@example.test', password:'regression-local', type:'personal', displayName:name,
-    });
+    }));
     const workspace = session.workspaces[0].id;
     return {workspace,account:session.account.id,headers:{authorization:'Bearer '+session.token,'x-workspace-id':workspace}};
   };

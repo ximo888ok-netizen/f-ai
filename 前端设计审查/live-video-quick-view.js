@@ -1,5 +1,5 @@
 import { h, link, select } from './live-ui.js';
-import { videoRatios } from './live-video-prompt-options.js';
+import { videoSettingsMarkup } from './live-video-settings.js';
 
 export const quickVideoLimit = 9;
 export const quickVideoSteps = ['准备素材', '生成脚本', '确认脚本', '生成视频'];
@@ -21,14 +21,8 @@ function sources() {
 }
 
 function outputSettings() {
-  return '<fieldset><legend>视频时长</legend><div class="video-duration">' +
-    '<label for="video-quick-duration">时长（秒）</label><output for="video-quick-duration" data-video-quick-seconds></output>' +
-    '<input id="video-quick-duration" name="duration" type="range" min="1" max="10" step="1" value="5"></div>' +
-    '<div class="video-quick-range-labels" aria-hidden="true"><span data-video-quick-min></span><span data-video-quick-max></span></div></fieldset>' +
-    '<fieldset><legend>视频比例</legend><div class="video-quick-ratios">' + videoRatios.map(([value, label]) =>
-      '<label class="video-option"><input type="radio" name="ratio" value="' + h(value) + '"' + (value ? '' : ' checked') +
-      '><span>' + h(label) + '</span></label>').join('') + '</div></fieldset>' +
-    '<fieldset><legend>清晰度</legend><p class="live-muted">跟随所选模型的默认设置。</p></fieldset>';
+  const settings = videoSettingsMarkup();
+  return '<fieldset><legend>视频时长</legend>' + settings.length + '</fieldset>' + settings.ratio + settings.audio;
 }
 
 export function videoCreationForm(models, available, { title, description, submit }) {

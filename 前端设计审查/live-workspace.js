@@ -31,10 +31,9 @@ async function projects(ctx) {
   const [id] = ctx.args;
   const base = '/v1/projects';
   const manage = ctx.manager && !ctx.enterprise;
-  const merchant = ctx.manager && ctx.enterprise ? '<a class="smallbtn" href="/merchant#projects">在商家后台管理</a>' : '';
   if (!id) {
     const entries = await ctx.all(base + '?state=all');
-    ctx.html(heading('我的项目') + merchant + (manage ? panel('新建项目', form('project', nameField('项目名称'), '创建项目')) : '') +
+    ctx.html(heading('我的项目') + (manage ? panel('新建项目', form('project', nameField('项目名称'), '创建项目')) : '') +
       panel('项目清单', list(entries, project => item(project.name, project.archivedAt ? '已归档' : '进行中',
         link('项目详情', 'projects/' + project.id)))));
     ctx.submit('project', async data => {
@@ -46,7 +45,7 @@ async function projects(ctx) {
   const endpoint = base + '/' + path(id);
   const project = await ctx.api(endpoint);
   ctx.html(heading(project.name, project.archivedAt ? '已归档 · ' + date(project.archivedAt) : '创建于 ' + date(project.createdAt)) +
-    merchant + (manage ? panel('项目设置', form('rename', nameField('项目名称', project.name), '保存名称') +
+    (manage ? panel('项目设置', form('rename', nameField('项目名称', project.name), '保存名称') +
       action(project.archivedAt ? '恢复项目' : '归档项目', 'project-state')) : '') +
     link('返回项目清单', 'projects'));
   ctx.submit('rename', async data => { await patch(ctx, endpoint, body(data)); ctx.reload(); });
@@ -59,7 +58,6 @@ async function projects(ctx) {
 async function team(ctx) {
   const token = /^[A-Za-z0-9_-]{43}$/.test(ctx.args[0] ?? '') ? ctx.args[0] : '';
   ctx.html(heading('企业邀请', '使用由企业管理员生成的一次性邀请码加入工作区。') +
-    (ctx.enterprise && ctx.manager ? '<p><a class="smallbtn" href="/merchant#members">在商家后台管理成员</a></p>' : '') +
     panel('接受企业邀请', form('accept', field('一次性邀请码',
       input('token', 'required minlength="43" maxlength="43" autocomplete="off" value="' + h(token) + '"')), '接受邀请')));
   ctx.submit('accept', async data => ctx.acceptInvitation(await ctx.api('/v1/invitations/accept', {

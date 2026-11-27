@@ -1,3 +1,4 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -5,7 +6,7 @@ import { createServer } from 'node:http';
 import { setTimeout as pause } from 'node:timers/promises';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { backupDatabases } from '../src/database-archive.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -93,9 +94,9 @@ async function fixture(t) {
     return response.json();
   }
   async function register(name) {
-    const user=await call('POST','/v1/auth/register',201,{},{
+    const user=await call('POST','/v1/auth/register',201,{},await registrationPayload(app, {
       email:name+'@example.test',password:'isolated-stream-voice-fixtures',displayName:name,type:'personal',
-    });
+    }));
     const workspace=user.workspaces[0].id;
     await provisionCredits(db,workspace,user.account.id,30,'initial-balance');
     return {authorization:'Bearer '+user.token,'x-workspace-id':workspace};

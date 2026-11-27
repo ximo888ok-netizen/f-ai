@@ -15,7 +15,8 @@ export async function requestStudio(url, { token, workspaceId, method = 'GET', b
   }
   if (!response.ok) {
     const data = (await response.json().catch(() => ({}))).error ?? {};
-    throw Object.assign(new Error(data.message ?? 'HTTP ' + response.status), data, { status: response.status });
+    const retryAfter = Number(response.headers.get('Retry-After'));
+    throw Object.assign(new Error(data.message ?? 'HTTP ' + response.status), data, { status: response.status, retryAfter });
   }
   if (raw) return response;
   return response.status === 204 ? null : response.json();

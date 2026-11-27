@@ -44,6 +44,13 @@ export function featureAllowed(state, capability) {
     (!capability || !state?.capabilities || state.capabilities.includes(capability));
 }
 
+export async function memberFeatureSettings(db, {workspaceId, accountId}) {
+  const settings = await rows(db, `SELECT plugin_id,enabled,release_mode AS mode,release_capabilities AS capabilities,
+    EXISTS (SELECT 1 FROM merchant_plugin_members m WHERE m.workspace_id=s.workspace_id AND m.plugin_id=s.plugin_id
+      AND m.account_id=$2) AS included FROM plugin_settings s WHERE workspace_id=$1`, [workspaceId, accountId]);
+  return new Map(settings.map(setting => [setting.plugin_id, setting]));
+}
+
 export async function requireFeature(db, context, plugin, capability, lock = false) {
   if (lock) await db.query('INSERT INTO plugin_settings(workspace_id,plugin_id,enabled) VALUES($1,$2,true) ON CONFLICT DO NOTHING',
     [context.workspaceId, plugin]);

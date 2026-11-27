@@ -1,10 +1,11 @@
 import { waitForModelTask } from './live-agent-model.js';
 import { describeError } from './studio-errors.js';
 import { uid } from './live-ui.js';
-import { videoLimits, videoTaskInput } from './live-video-prompt-options.js';
+import { videoLimits, videoPlanSettings, videoTaskInput } from './live-video-prompt-options.js';
+import { readVideoSettings, updateVideoSettings } from './live-video-settings.js';
 import { bindVideoQuickMedia } from './live-video-quick-media.js';
 import { videoQuickView } from './live-video-quick-view.js';
-import { bindVideoResult, frameVideoCapabilityId, loadFrameVideo, updateFrameVideoSettings, updateVideoProgress,
+import { bindVideoResult, frameVideoCapabilityId, loadFrameVideo, updateVideoProgress,
   videoTaskLink as taskLink, videoTaskPending as pending } from './live-video-workflow.js';
 
 function scriptInput(input, maxLength) {
@@ -12,7 +13,7 @@ function scriptInput(input, maxLength) {
     { role: 'system', content: '你是商品短视频编导。按镜头分行写可直接用于图生视频的成片脚本，描述镜头、主体动作、运镜、节奏与衔接。' +
       '脚本总长不超过 ' + maxLength + ' 字。你只收到文字，不能声称识别过图片。保留画面主体和商标，避免添加未提供的商品属性。' +
       '只输出脚本文字。' },
-    { role: 'user', content: ['视频时长 ' + input.duration + ' 秒。', input.ratio && '画幅 ' + input.ratio + '。',
+    { role: 'user', content: [videoPlanSettings(input),
       '生成时将提供用户指定的商品首帧。', input.notes ? '用户描述：' + input.notes : '编排一段适用于首帧商品的镜头，优先使用平稳运镜。'].filter(Boolean).join('\n') },
   ] } };
 }
@@ -39,14 +40,14 @@ export async function videoQuickPage(ctx, plugin, wallet, planner, tasks) {
 
   const media = bindVideoQuickMedia(ctx, root, assets, recentIds, { change: refresh, report, locked: () => busy });
   const draft = () => ({ frameKey: media.frame()?.key, modelId: fields.modelId.value, notes: fields.notes.value.trim(),
-    ratio: fields.ratio.value, duration: Number(fields.duration.value) });
+    ...readVideoSettings(fields) });
   const current = input => workflow?.signature === JSON.stringify(input) ? workflow : undefined;
   const videoCost = capability?.cost ?? 0;
   const planCost = planner?.cost ?? 0;
 
   function refresh() {
     const bounds = limits();
-    updateFrameVideoSettings(root, fields, bounds);
+    updateVideoSettings(root, fields, bounds);
     editor.maxLength = bounds.promptMax;
 
     const input = draft();
@@ -78,6 +79,7 @@ export async function videoQuickPage(ctx, plugin, wallet, planner, tasks) {
     }
     submit.disabled = busy || completed || Boolean(issue);
     if (!busy) report(issue);
+    form.dispatchEvent(new Event('video-settings-change'));
   }
 
   function start(payload, idempotencyKey) {

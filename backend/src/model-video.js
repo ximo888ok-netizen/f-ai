@@ -30,7 +30,8 @@ export async function startVideo(route, payload, call) {
   if (route.protocol === 'minimax-h3-video') {
     const content = [{ type: 'text', text: prompt }];
     if (image) content.push({ type: 'image_url', image_url: { url: image }, role: 'first_frame' });
-    const data = await call('video_generation', { model, content, resolution: '768P', duration: duration ?? 5,
+    const data = await call('video_generation', { model, content, resolution: options?.resolution?.toUpperCase() ?? '768P',
+      generate_audio: options?.generateAudio, duration: duration ?? 5,
       ratio: image ? 'adaptive' : ratio ?? '16:9' });
     return new PendingModelJob(data?.task_id);
   }
@@ -38,12 +39,14 @@ export async function startVideo(route, payload, call) {
     const contents = [{ type: 'prompt', text: prompt }];
     if (asset) contents.push({ type: 'first_frame', id: 'start', url: asset.dataBase64 });
     const path = (asset ? 'image-to-video/' : 'text-to-video/') + encodeURIComponent(model);
-    const data = await call(path, { contents, settings: { duration, aspect_ratio: asset ? undefined : ratio } });
+    const data = await call(path, { ...(asset ? { contents } : { prompt }), settings: {
+      duration, resolution: options?.resolution, aspect_ratio: asset ? undefined : ratio } });
     if (data?.code !== 0) throw new ProviderError('PROVIDER_REJECTED');
     return new PendingModelJob(data.data?.id);
   }
   if (route.protocol === 'runway-video') {
-    const sizes = { '16:9': '1280:720', '9:16': '720:1280', '1:1': '960:960' };
+    const sizes = { '16:9': '1280:720', '9:16': '720:1280', '1:1': '960:960', '4:3': '1104:832',
+      '3:4': '832:1104', '21:9': '1584:672', '9:21': '672:1584' };
     const data = await call(image ? 'image_to_video' : 'text_to_video', {
       model, promptText: prompt, promptImage: image, ratio: sizes[ratio ?? '16:9'], duration: duration ?? 5,
     });
@@ -54,13 +57,14 @@ export async function startVideo(route, payload, call) {
     for(const [i,ref] of payload.assets.entries()) content.push({type:'image_url',
       image_url:{url:'data:'+ref.mediaType+';base64,'+ref.dataBase64},
       role:payload.parameters.frameMode==='references'?'reference_image':i===0?'first_frame':'last_frame'});
-    const data = await call('contents/generations/tasks', { model, content, ratio, duration });
+    const data = await call('contents/generations/tasks', { model, content, ratio, duration, resolution: options?.resolution, generate_audio: options?.generateAudio });
     return new PendingModelJob(data?.id);
   }
   if (route.protocol === 'wan-video' || route.protocol === 'wan3-video') {
     const input = { prompt };
     if (image && route.protocol === 'wan3-video') input.media = [{ type: 'first_frame', url: image }];
-    const data = await call('services/aigc/video-generation/video-synthesis', { model, input, parameters: { ratio, duration } }, { 'X-DashScope-Async': 'enable' });
+    const data = await call('services/aigc/video-generation/video-synthesis', { model, input,
+      parameters: { ratio, duration, resolution: options?.resolution?.toUpperCase(), audio: options?.generateAudio } }, { 'X-DashScope-Async': 'enable' });
     return new PendingModelJob(data?.output?.task_id);
   }
   const data = await call('video_generation', { model, prompt, duration, first_frame_image: image });

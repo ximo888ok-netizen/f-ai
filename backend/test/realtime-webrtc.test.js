@@ -1,10 +1,11 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres } from '../src/db.js';
 import { createRealtimeBindings } from '../src/realtime-provider.js';
 import { provisionCredits } from '../src/wallet.js';
@@ -114,8 +115,8 @@ test('two WebRTC peers exchange identifiable audio and events through backend si
       } catch(error) { fixtureError=error; res.writeHead(500); res.end(); }
     });
     await new Promise(resolve=>provider.listen(0,'127.0.0.1',resolve));
-    const registered=await app.inject({method:'POST',url:'/v1/auth/register',payload:{type:'personal',displayName:'Voice test',
-      email:randomUUID()+'@example.test',password:'synthetic-voice-test'}});
+    const registered=await app.inject({method:'POST',url:'/v1/auth/register',payload:await registrationPayload(app, {type:'personal',displayName:'Voice test',
+      email:randomUUID()+'@example.test',password:'synthetic-voice-test'})});
     assert.equal(registered.statusCode,201);
     const member=registered.json(), workspace=member.workspaces[0].id;
     const definition={workspaceId:workspace,model:'local-rtc-fixture',voice:'marin',credits:2,durationSeconds:120,

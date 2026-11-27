@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { client, exerciseCustomer, exerciseFilesAndWorker, exerciseImagePreflight, exercisePsd, exerciseWorkspace, reviewPicture, verifyAsset } from './fixtures.mjs';
+import { client, exerciseCustomer, exerciseFilesAndWorker, exerciseImagePreflight, exercisePsd, exerciseWorkspace, identityPayload, reviewPicture, verifyAsset } from './fixtures.mjs';
 import { rotationFixture } from './credential-rotation.mjs';
 import { publishFixtureTemplates } from './image-templates.mjs';
 import { verifyOfflineRelease, sha256File } from '../src/verify-offline-release.js';
@@ -171,8 +171,9 @@ try {
   const guide=await anonymous('GET',help.url,200);
   assert.equal(createHash('sha256').update(guide).digest('hex'),help.sha256);
   assert.match(guide.toString(),/商品草稿与运营台账/);
+  const proofs = (action, details) => identityPayload(node, application, databaseEnv, action, details);
   const login = { email: 'deployment@example.test', password: randomBytes(24).toString('hex') };
-  const registered = await anonymous('POST', '/v1/auth/register', 201, { ...login, displayName: 'QA', type: 'enterprise', workspaceName: 'Deployment QA' });
+  const registered = await anonymous('POST', '/v1/auth/register', 201, proofs('register', { ...login, displayName: 'QA', type: 'enterprise', workspaceName: 'Deployment QA' }));
   const workspace = registered.workspaces[0].id;
   const initial=client(origin,registered);
   await publishFixtureTemplates(initial);
@@ -192,7 +193,7 @@ try {
   assert.equal(sql('tenant', marker), '1');
   admin('credits', workspace, registered.account.id, '5', 'deployment-qa-funding');
   origin = await startService();
-  const session = await client(origin)('POST', '/v1/auth/login', 200, login);
+  const session = await client(origin)('POST', '/v1/auth/login', 200, proofs('login', login));
   const api = client(origin, session);
   const directories=(await api('GET','/v1/diagnostics',200)).directories;
   assert.ok(directories.some(d=>d.id==='credentials' && d.read==='ok'));
@@ -220,7 +221,7 @@ try {
     console.log(JSON.stringify({packagedVideoExport:'passed',frames:48,aacPacketsPreserved:true}));
   }
   assert.deepEqual(await api('GET', '/v1/workspace/database', 200), { mode: 'dedicated', state: 'ready' });
-  await exerciseWorkspace(origin, session);
+  await exerciseWorkspace(origin, session, proofs);
   const { asset, taskId } = await exerciseFilesAndWorker(api);
   const {createWorkspaceHttpRequest,bindPluginV1}=await import(pathToFileURL(join(application,'sdk','workspace-v1.mjs')));
   const sdk=bindPluginV1(createWorkspaceHttpRequest({origin,workspaceId:workspace,getToken:()=>session.token}),
@@ -273,7 +274,7 @@ try {
   databaseEnv = connect('restore_control', 4);
   assert.deepEqual(JSON.parse(admin('restore-backup', backup, '--confirm-empty-targets')).restored, ['control', 'tenant:qa']);
   const restored = await startService();
-  const restoredSession = await client(restored)('POST', '/v1/auth/login', 200, login);
+  const restoredSession = await client(restored)('POST', '/v1/auth/login', 200, proofs('login', login));
   const restoredApi = client(restored, restoredSession);
   assert.equal(restoredSession.workspaces[0].id, workspace);
   assert.deepEqual(await restoredApi('GET',seriesUrl+'?revision=1',200),savedSeries);

@@ -1,3 +1,4 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -7,7 +8,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres } from '../src/db.js';
 import { createVideoDelivery } from '../src/video-delivery.js';
 
@@ -21,9 +22,9 @@ const confirmed={aiGenerated:true};
 const placeholder=Buffer.from('000000106674797069736f6d00000000','hex');
 
 async function register(app,name) {
-  const result=await app.inject({method:'POST',url:'/v1/auth/register',payload:{
+  const result=await app.inject({method:'POST',url:'/v1/auth/register',payload:await registrationPayload(app, {
     email:name+'@example.test',password:'integration-test-password',displayName:'Video QA',type:'personal',
-  }});
+  })});
   assert.equal(result.statusCode,201,result.body);
   const {token,account,workspaces}=result.json();
   return {account:account.id,workspace:workspaces[0].id,headers:{authorization:'Bearer '+token,'x-workspace-id':workspaces[0].id}};

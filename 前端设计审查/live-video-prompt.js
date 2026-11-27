@@ -5,6 +5,7 @@ import { link, path, retryKey } from './live-ui.js';
 import { bindVideoMedia } from './live-video-prompt-media.js';
 import { videoInputs, videoLimits, videoPlanInput, videoSkills, videoTaskInput, videoTemplates } from './live-video-prompt-options.js';
 import { videoModelOptions, videoPromptView } from './live-video-prompt-view.js';
+import { readVideoSettings, updateVideoSettings } from './live-video-settings.js';
 
 export async function videoPromptPage(ctx, plugin, wallet, planner, tasks, states) {
   const [directory, assets] = await Promise.all([ctx.api('/v1/models'), ctx.all('/v1/assets')]);
@@ -23,7 +24,7 @@ export async function videoPromptPage(ctx, plugin, wallet, planner, tasks, state
   const choices = name => [...form.querySelectorAll('[type=radio][name="' + name + '"]')];
   const activeModel = () => directory.items.find(model => model.id === modelId);
   const activeCapability = () => plugin?.capabilities.find(capability => capability.id === videoInputs[type].capabilityId);
-  const isAvailable = () => plugin?.enabled && activeCapability()?.available;
+  const isAvailable = (key = type) => plugin?.enabled && plugin.capabilities.some(cap => cap.id === videoInputs[key].capabilityId && cap.available);
   let mode = 'direct', type = 'text', modelId, planned, busy = false;
   let planKey = retryKey();
   const submitKey = retryKey();
@@ -41,7 +42,7 @@ export async function videoPromptPage(ctx, plugin, wallet, planner, tasks, state
 
   function draft() {
     return { capabilityId: videoInputs[type].capabilityId, modelId, prompt: prompt.value.trim(),
-      asset: media.selected(), ratio: fields.ratio.value, duration: fields.defaultDuration.checked ? undefined : Number(fields.duration.value),
+      asset: media.selected(), ...readVideoSettings(fields),
       skill: fields.skill.value };
   }
 
@@ -64,21 +65,17 @@ export async function videoPromptPage(ctx, plugin, wallet, planner, tasks, state
     const limits = videoLimits(activeModel(), type, activeCapability());
     prompt.maxLength = limits.promptMax;
     planText.maxLength = limits.promptMax;
-    for (const radio of choices('ratio')) radio.disabled = Boolean(radio.value && !limits.ratios.includes(radio.value));
-    if (!limits.ratios.includes(fields.ratio.value)) fields.ratio.value = '';
-    fields.duration.min = limits.min;
-    fields.duration.max = limits.max;
-    fields.duration.disabled = fields.defaultDuration.checked;
+    updateVideoSettings(root, fields, limits);
 
     const input = draft();
     const readyPlan = prepared(input);
     plan.hidden = !readyPlan;
     find('[data-video-count]').textContent = prompt.value.length + ' / ' + limits.promptMax;
-    find('[data-video-duration]').textContent = fields.duration.value + ' 秒';
     control('input').textContent = videoInputs[type].label;
     control('model').textContent = modelId ?? (isAvailable() ? '工作区网关' : '视频模型');
-    control('ratio').textContent = input.ratio ? input.ratio + ' · 默认清晰度' : '画幅与清晰度';
+    control('ratio').textContent = [input.ratio, input.resolution].filter(Boolean).join(' · ') || '画幅与清晰度';
     control('length').textContent = input.duration ? input.duration + ' 秒' : '视频时长';
+    control('audio').textContent = input.audio === undefined ? '声音' : input.audio ? '有声' : '无声';
     control('skill').hidden = mode !== 'plan';
     control('skill').textContent = '编导技能 · ' + (videoSkills.find(([id]) => id === input.skill)?.[1] ?? videoSkills[0][1]);
     const videoCost = activeCapability()?.cost ?? 0;
@@ -90,6 +87,7 @@ export async function videoPromptPage(ctx, plugin, wallet, planner, tasks, state
     submit.textContent = mode === 'direct' ? '生成视频' : readyPlan ? '确认并生成' : waiting ? '继续查看编导' : '生成编导方案';
     submit.disabled = busy || Boolean(reason);
     if (!busy) report(reason || (readyPlan ? '可修改成片方案，确认后再提交。' : ''));
+    form.dispatchEvent(new Event('video-settings-change'));
   }
 
   const media = bindVideoMedia(ctx, root, assets, {
@@ -126,7 +124,7 @@ export async function videoPromptPage(ctx, plugin, wallet, planner, tasks, state
   form.addEventListener('change', event => {
     if (event.target.name === 'inputType') setInputType(event.target.value);
     else if (event.target.name === 'videoModel') { modelId = event.target.value; refresh(); }
-    else if (event.target.name === 'defaultDuration' || event.target.name === 'ratio' || event.target.name === 'skill') refresh();
+    else refresh();
   });
   form.addEventListener('input', event => {
     if ([prompt, planText, fields.duration].includes(event.target)) refresh();
@@ -192,6 +190,9 @@ export async function videoPromptPage(ctx, plugin, wallet, planner, tasks, state
   });
 
   fields.skill.value = videoSkills[0][0];
-  fields.ratio.value = '';
-  setInputType('text');
+  for (const radio of choices('inputType')) {
+    radio.disabled = !isAvailable(radio.value);
+    if (radio.disabled) radio.nextElementSibling.querySelector('strong').append(' · 未配置');
+  }
+  setInputType(Object.keys(videoInputs).find(isAvailable) ?? 'text');
 }

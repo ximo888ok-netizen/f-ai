@@ -6,7 +6,7 @@ const channel='/v1/channels/feishu';
 export async function cloudAssetsPage(ctx) {
   const [status,copies]=await Promise.all([ctx.api(backups+'/status'),ctx.all(backups)]);
   ctx.html(heading('网盘备份',status.available ? '本工作区已绑定网盘。' : '请由管理员配置工作区网盘。') +
-    link('返回素材库','assets') + (ctx.enterprise&&ctx.manager?'<a class="smallbtn" href="/merchant#connections">管理网盘接入</a>':'') + panel('我的备份',list(copies,copy=>item(copy.name,
+    link('返回素材库','assets') + panel('我的备份',list(copies,copy=>item(copy.name,
       Math.ceil(copy.sizeBytes/1024)+' KiB · '+(copy.state==='ready' ? '已核验' : '待核验')+' · '+date(copy.createdAt),
       status.available ? action('下载备份','cloud-download',copy.id)+action('恢复到素材库','cloud-restore',copy.id) : ''),'暂无备份。')));
   ctx.click('cloud-download',async id=>{
@@ -40,7 +40,7 @@ export async function feishuPage(ctx) {
   if (!id) {
     const [status,entries]=await Promise.all([ctx.api(channel+'?limit=1'),ctx.all(channel)]);
     ctx.html(heading('飞书消息',status.available ? '工作区已绑定飞书机器人。' : '请由管理员配置飞书机器人。')+
-      link('返回客服工作台','customer')+(ctx.enterprise&&ctx.manager?'<a class="smallbtn" href="/merchant#connections">管理飞书接入</a>':'')+panel('收到的消息',list(entries,message=>item(message.content,date(message.createdAt),
+      link('返回客服工作台','customer')+panel('收到的消息',list(entries,message=>item(message.content,date(message.createdAt),
         link('查看与回复','feishu/'+message.connector+'/'+message.eventId)),'暂无收到的消息。')));
     return;
   }

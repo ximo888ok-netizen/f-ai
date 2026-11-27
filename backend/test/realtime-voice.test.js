@@ -1,9 +1,10 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import test, { after, before } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres, row } from '../src/db.js';
 import { createRealtimeBindings, isVoiceSdp } from '../src/realtime-provider.js';
 import { maintainRealtimeVoice } from '../src/realtime-voice.js';
@@ -56,8 +57,8 @@ async function api(method,url,status,headers={},payload) {
   return response.json();
 }
 async function account() {
-  const user = await api('POST','/v1/auth/register',201,{}, {type:'enterprise',workspaceName:'Voice tests',displayName:'Test member',
-    email:randomUUID()+'@example.test',password:'local-fixture-password'});
+  const user = await api('POST','/v1/auth/register',201,{}, await registrationPayload(app, {type:'enterprise',workspaceName:'Voice tests',displayName:'Test member',
+    email:randomUUID()+'@example.test',password:'local-fixture-password'}));
   const workspace = user.workspaces[0].id;
   return {user,workspace,headers:{authorization:'Bearer '+user.token,'x-workspace-id':workspace}};
 }

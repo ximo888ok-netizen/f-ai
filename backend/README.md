@@ -81,7 +81,7 @@ npm start
 
 ## 商家后台
 
-访问 `/merchant` 打开商家后台。企业所有者和管理员也可从工作台顶栏进入。后台提供成员邀请与停用、项目授权、插件开放范围、接入状态和管理操作记录。邀请链接交给指定邮箱的使用者，登录后在普通工作台接受。
+企业所有者和管理员通过独立地址 `/merchant` 登录商家后台。客户工作台仅展示客户业务入口。后台提供成员邀请与停用、项目授权、插件开放范围、接入状态和管理操作记录。邀请链接交给指定邮箱的使用者，登录后在普通工作台接受。
 
 功能策略默认使用当前部署的内置版本。部署方可通过 `FAI_FEATURE_RELEASES_JSON` 发布基于现有能力的版本清单。每项填写 `pluginId`、`version`、`notes` 和 `capabilities`。能力 ID 取自当前 OpenAPI 和插件目录。商家可选择已发布版本，向全企业开放或定向试用。受理任务保存功能版本、能力契约摘要和已有执行配置标识。部署新运行代码前，应让依赖旧契约的任务完成。
 
@@ -89,7 +89,7 @@ npm start
 
 ## 本机试用
 
-在 Windows 或其他系统的 Node.js 24 环境中，从 backend 目录运行 `npm ci` 和 `npm run studio:demo`。打开 `http://127.0.0.1:8080` 后注册测试账号，即可创建草稿和台账。试用进程使用内存数据库并自动应用迁移，关闭后本次试用数据会清空。需要保留数据时，按上面的 PostgreSQL 启动步骤配置数据库。
+在 Windows 或其他系统的 Node.js 24 环境中，从 backend 目录运行 `npm ci` 和 `npm run studio:demo`。打开 `http://127.0.0.1:8080` 可预览登录和注册。配置平台注册短信与邮件渠道并完成双重验证后，可以用自己的账号创建草稿和台账。试用进程使用内存数据库并自动应用迁移，关闭后本次试用数据会清空。需要保留数据时，按上面的 PostgreSQL 启动步骤配置数据库。
 
 已保存的图片任务结果可从任务详情用作新草稿主图。文本结果可带入新草稿描述。选用后的内容需在编辑器里显式保存。视频结果默认使用供应商的预览地址。设置 `VIDEO_ARCHIVE_ORIGINS` 可允许工作进程归档视频结果，多个来源用逗号分隔，填写精确的 HTTPS 来源。工作进程只读取已配置来源，下载上限 10 MiB，成功后新增本人素材并返回 `assetId`。来源不允许、超限或下载失败时保留原预览链接，生成任务按供应商返回的成功状态结算。
 
@@ -115,7 +115,7 @@ npm start
 
 ## 身份与工作区
 
-先调用 POST /v1/auth/register 或 POST /v1/auth/login。注册支持 personal 和 enterprise，企业需提供 workspaceName。响应返回 token、expiresAt、account 和 workspaces。调用业务接口时携带 Authorization: Bearer <token> 和 X-Workspace-Id: <workspaces[n].id>。会话有效期为 24 小时。GET /v1/auth/me、POST /v1/auth/logout 和 POST /v1/invitations/accept 只需要 Bearer Token。
+登录使用用户名或手机号、密码和一次性图形验证码。注册和旧账号补绑均需验证手机号与邮箱。企业注册需提供 workspaceName。验证码渠道的配置、接口顺序和有效期见[账号验证](./AUTH.md)。响应返回 token、expiresAt、account 和 workspaces。调用业务接口时携带 Authorization: Bearer <token> 和 X-Workspace-Id: <workspaces[n].id>。会话有效期为 24 小时。GET /v1/auth/me、POST /v1/auth/logout 和 POST /v1/invitations/accept 只需要 Bearer Token。
 
 企业管理员通过 POST /v1/invitations 为指定邮箱创建一次性邀请。被邀请人用自己的账号登录后提交 token 接受，再从 workspaces 选择加入的企业。项目成员关系和知识库授权分别配置。工作区切换后，客户端应按工作区重新加载数据。
 

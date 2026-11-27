@@ -1,9 +1,10 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, migrationFiles, postgres } from '../src/db.js';
 
 test('knowledge category changes retain authorization, rebuild indexes and support legacy uploads', async t => {
@@ -19,9 +20,9 @@ test('knowledge category changes retain authorization, rebuild indexes and suppo
     return status===204 ? undefined : response.json();
   };
   const signUp = async email => {
-    const account = await api('POST','/v1/auth/register',201,undefined,{
+    const account = await api('POST','/v1/auth/register',201,undefined,await registrationPayload(app, {
       email,password:'reference-knowledge-editor',displayName:'QA user',type:'enterprise',workspaceName:'QA knowledge',
-    });
+    }));
     return {...account,workspace:account.workspaces[0].id};
   };
   const owner = await signUp('category-editor@example.test');

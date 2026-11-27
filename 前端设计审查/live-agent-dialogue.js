@@ -1,5 +1,5 @@
 import { findImages, findProducts, recentDrafts, recentTasks, renderCover, saveDraft } from './live-agent-tools.js';
-import { interpret } from './live-agent-model.js';
+import { interpret, referencedChat } from './live-agent-model.js';
 
 const help = '我可以查商品、查最近任务、列出草稿、查询可用积分，也可以裁切商品主图、用图片建立商品草稿。试试「查商品：托特包」。';
 const clean = s => s.replace(/^[\s：:“”「」『』"']+|[\s。！？?！“”「」『』"']+$/gu, '').trim();
@@ -126,9 +126,11 @@ export async function respond(ctx, thread, raw, options = {}) {
     const {items}=await ctx.api('/v1/knowledge/search',{method:'POST',body:{query,...(thread.knowledgeBase ? {baseIds:[thread.knowledgeBase.id]} : {})}});
     return {text:items.length?'以下是你有权访问的知识库出处。':'已授权知识库中没有找到匹配的文档。',items:items.slice(0,5).map(r=>({title:r.name,detail:r.baseName+' · '+r.snippet,route:'resources/'+encodeURIComponent(r.baseId)+'/'+encodeURIComponent(r.documentId)}))};
   }
+  if (thread.references?.length) return {text:await referencedChat(ctx, thread, options.modelId, {onTask:options.onTask})};
   let plan = localIntent(input);
   if (!plan && thread.seeking) plan = { action: 'products', value: clean(input) };
   thread.seeking = false;
+  if (!plan && options.model && thread.attachment) return {text:await referencedChat(ctx, thread, options.modelId, {onTask:options.onTask})};
   if (!plan && options.model) plan = await interpret(ctx, thread.messages, options.onTask, options.modelId);
   if (!plan && thread.images) return pickImage(ctx, thread, clean(input));
   if (!plan) return { text: help };

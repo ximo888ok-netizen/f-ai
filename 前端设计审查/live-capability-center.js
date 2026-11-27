@@ -18,10 +18,9 @@ export async function capabilityCenter(ctx) {
   if (tab !== 'connections') return libraryDirectory(ctx, tab === 'skills' ? 'skills' : 'experts');
   const entries = await connectedEntries(ctx);
   if (!ctx.active()) return;
-  const manage = ctx.enterprise && ctx.manager ? '<a class="smallbtn" href="/merchant#connections">管理接入</a>' : '';
   ctx.html('<section class="studio-directory lib-directory"><h1 class="lib-sr">能力中心</h1><div class="lib-top">' +
     libraryTabs(tab) + '<div class="lib-tools"><label class="lib-search">' + studioIcon('search') +
-    '<input type="search" aria-label="搜索连接器" placeholder="搜索连接器"></label>' + manage + '</div></div>' +
+    '<input type="search" aria-label="搜索连接器" placeholder="搜索连接器"></label></div></div>' +
     '<div class="directory-grid">' + entries.map(entry => '<a class="card directory-card" href="#' + h(entry.route) +
       '"><div class="directory-card-head"><span class="directory-icon">' + studioIcon('connections') + '</span><small>' +
       h(entry.state) + '</small></div><h2>' + h(entry.name) + '</h2><div class="directory-card-detail">' +

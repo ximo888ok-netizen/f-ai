@@ -1,6 +1,6 @@
 import { field, form, h, input, notice, select } from './live-ui.js';
 import { paneTitle,blankResult } from './live-agent-integrations.js';
-import { platformNames,portalLink } from './desk-shops.js';
+import { platformNames,inboxLink } from './desk-shops.js';
 import { describeError } from './studio-errors.js';
 
 export function nativeChannelPane(shops) {
@@ -23,7 +23,7 @@ export function bindNativeChannels(ctx,shops) {
   const call=(name,body)=>ctx.api('/v1/integrations/customer-agent/'+name,{method:'POST',body});
   async function loadQueue() {
     const id=f.elements.shopId.value,seq=++queueSeq;
-    root.querySelector('[data-platform-desk]').innerHTML=portalLink(shops.find(s=>s.id===id)?.platform,'打开平台客服',true);
+    root.querySelector('[data-platform-desk]').innerHTML=inboxLink(shops.find(s=>s.id===id)?.platform,'打开平台客服');
     queue.textContent='正在读取转接记录…';
     try{
       const r=await call('handoffs',{shopId:id});
@@ -40,7 +40,7 @@ export function bindNativeChannels(ctx,shops) {
       status.textContent='最近读取 '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
       stream.innerHTML=r.items.map(m=>'<article class="chat-turn" data-sender="'+(m.role==='user'?'customer':'assistant')+'"><small>'+h(m.role==='user'?'买家':'AI 客服')+' · '+h(m.timestamp)+'</small><p>'+h(m.content)+'</p></article>').join('')||notice('此账号下没有该买家的历史消息。');
       const shop=shops.find(s=>s.id===request.shopId);
-      actions.innerHTML=(r.items.length&&shop?.allowHandoff?'<button type="button" class="primary" data-native-handoff>标记人工接管</button>':'')+portalLink(shop?.platform,'在官方客服窗口回复',true);
+      actions.innerHTML=(r.items.length&&shop?.allowHandoff?'<button type="button" class="primary" data-native-handoff>标记人工接管</button>':'')+inboxLink(shop?.platform,'在官方客服窗口回复');
     }catch(e){if(ctx.active()&&view===request&&seq===serial)status.textContent=describeError(e);}
   }
   function clear(){

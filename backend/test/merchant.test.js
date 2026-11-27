@@ -1,8 +1,9 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, row } from '../src/db.js';
 import { featureReleases } from '../src/merchant-features.js';
 import { createProviders } from '../src/providers.js';
@@ -42,7 +43,7 @@ async function fixture(t, { dedicated = false } = {}) {
 
   async function register(name, type = 'personal') {
     const result = await send('POST', '/v1/auth/register', 201, null,
-      { email: name + '@example.test', displayName: name, password: 'merchant-test-password', type, workspaceName: name });
+      await registrationPayload(app, { email: name + '@example.test', displayName: name, password: 'merchant-test-password', type, workspaceName: name }));
     return { ...result, workspace: result.workspaces[0].id };
   }
 
@@ -144,6 +145,27 @@ test('trial policies apply to the catalog, submission and scheduler while accept
   await send('PATCH', '/v1/members/' + member.account.id + '/state', 200, owner, { state: 'suspended' });
   assert(await dispatchSchedule({ db, providers, shops }));
   assert.equal((await row(db, 'SELECT error_code FROM schedules WHERE id=$1', [scheduleId])).error_code, 'MEMBER_SUSPENDED');
+});
+
+test('member model discovery follows the same merchant feature scope as task submission', async t => {
+  const {send,register,providers,invite,accept}=await fixture(t);
+  const owner=await register('catalog-owner','enterprise');
+  const other=await register('other-catalog-owner','enterprise');
+  const person=await register('catalog-member');
+  const member=await accept(owner,person,await invite(owner,person));
+  const capabilities=['model.chat','copywriting.generate'];
+  providers.set('model:writer',{info:{id:'writer',model:'writer',protocol:'chat-completions',kind:'text',streamText:false,capabilities},
+    supports:cap=>capabilities.includes(cap.id)});
+  const list=async(user,filter='')=>(await send('GET','/v1/models'+filter,200,user)).items;
+  const toggle=(id,body)=>send('PUT','/v1/merchant/features/'+id,200,owner,body);
+  const initial={mode:'all',memberIds:[],version:'builtin',revision:0};
+  const off=await toggle('models',{...initial,enabled:false});
+  assert.deepEqual(await list(member,'?capabilityId=model.chat'),[]);
+  assert.deepEqual((await list(member))[0].capabilities,['copywriting.generate']);
+  assert.deepEqual((await list(other))[0].capabilities,capabilities);
+  await toggle('models',{...initial,revision:off.revision,enabled:true,mode:'trial',memberIds:[person.account.id]});
+  assert.deepEqual(await list(owner,'?capabilityId=model.chat'),[]);
+  assert.equal((await list(member,'?capabilityId=model.chat'))[0].id,'writer');
 });
 
 test('owner checks and disconnects provisioned connections and audits survive workspace cutover', async t => {

@@ -17,6 +17,8 @@ const none = { type: 'null', description: 'No content' };
 const modelInfo = shape({ id: string, model: string, protocol: string, kind: string,
   capabilities: items(string), streamText: bool, imageQuality: bool });
 modelInfo.properties.videoLimits = shape({ minSeconds: count, frameRatioFromImage: bool });
+const videoModeOptions = shape({ ratios: items(string), resolutions: items(string), durations: items(count), audio: bool });
+modelInfo.properties.videoOptions = { type: 'object', properties: { text: videoModeOptions, frame: videoModeOptions, reference: videoModeOptions } };
 const fileAttachment = {type:'string',description:'Attachment disposition for the binary download'};
 
 export function assetDownload(description, mediaTypes, headers = {}) {
@@ -107,6 +109,7 @@ const failure = shape({ error: shape({ code: string, message: string, requestId:
 
 export const contracts = new Map([
   ['/v1/auth/register', { POST: { 201: session } }],
+  ['/v1/auth/upgrade', { POST: { 200: session } }],
   ['/v1/auth/login', { POST: { 200: session } }],
   ['/v1/auth/me', { GET: { 200: shape(identity) } }],
   ['/v1/auth/logout', { POST: { 204: none } }],

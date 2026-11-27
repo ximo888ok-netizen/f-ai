@@ -1,3 +1,4 @@
+import { registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { join } from 'node:path';
@@ -13,9 +14,9 @@ test('knowledge navigation switches authorized spaces, presents documents and at
     assert.equal(res.statusCode,expected,res.body);
     return res.body ? res.json() : null;
   }
-  const sign = (type,email, displayName,workspaceName) => call('POST','/v1/auth/register',201,{
+  const sign = async (type,email, displayName,workspaceName) => call('POST','/v1/auth/register',201,await registrationPayload(app, {
     type,email,displayName,password:'local-knowledge-fixture',...(workspaceName ? {workspaceName} : {}),
-  });
+  }));
   const owner = await sign('enterprise','team-knowledge@example.test','运营管理员','电商运营中心');
   const personal = await sign('personal','personal-knowledge@example.test','林知');
   const invite = await call('POST','/v1/invitations',201,{email:personal.account.email,role:'member'},owner);

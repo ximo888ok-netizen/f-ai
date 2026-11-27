@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import Fastify from 'fastify';
-import { registerStudio } from '../src/studio.js';
+import { registerStudio, studioPublicFiles } from '../src/studio.js';
 
 // Fetch the same URLs a browser resolves, including lazy modules and nested CSS imports.
 test('both workbench entry points serve their complete static dependency graph', async t => {
@@ -37,4 +37,15 @@ test('both workbench entry points serve their complete static dependency graph',
     assert.ok(queue.has(path), 'Entry points must reach ' + path);
   }
   t.diagnostic('Validated ' + queue.size + ' page and asset URLs');
+});
+test('customer HTML and scripts contain no merchant dashboard destinations', async t => {
+  const app = Fastify();
+  t.after(() => app.close());
+  registerStudio(app);
+  for (const file of studioPublicFiles.filter(f => f === 'ai.html' || (f.endsWith('.js') && !f.startsWith('merchant')))) {
+    const response = await app.inject({ method:'GET', url:file === 'ai.html' ? '/' : '/studio/' + file });
+    assert.equal(response.statusCode,200,file);
+    assert.ok(!/["'`]\/(?:merchant|platform-admin)(?:[#/?"'`]|$)|id="merchantLink"/.test(response.body), file + ' exposes an admin destination');
+  }
+  assert.equal((await app.inject({url:'/merchant'})).statusCode,200);
 });

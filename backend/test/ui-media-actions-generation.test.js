@@ -49,7 +49,7 @@ function fixtureProviders(providers) {
   }));
   add('media-browser-video-alt', 'video', 'runway-video', ['video.compose', 'video.from-image'], async () => ({
     type: 'video', fixture: 'alternate synthetic model result',
-  }));
+  }), { videoOptions: { frame: { ratios: ['1:1'], durations: [2, 3, 4, 5], resolutions: [], audio: false } } });
   add('video-product-storyboard', 'text', 'media-skill', ['video.skill-product-storyboard'], async () => ({
     type: 'text', text: '合成分镜：镜头从杯口移至商品全景。',
   }));
@@ -232,8 +232,7 @@ test('media video actions exercise prompt popovers and each staged video submiss
   await page.locator('#video-audio').getByRole('link', { name: '视频导出' }).waitFor();
   await page.keyboard.press('Escape');
   await act('media.video.prompt.input-popover', pop(prompt, 'input'));
-  await act('media.video.prompt.choose-reference-mode', prompt.locator('[name=inputType][value=reference]'));
-  assert.equal(await launch.isDisabled(), true);
+  assert.equal(await prompt.locator('[name=inputType][value=reference]').isDisabled(), true);
   await act('media.video.prompt.choose-first-frame-mode', prompt.locator('[name=inputType][value=frame]'));
   await page.keyboard.press('Escape');
   await act('media.video.prompt.media-popover', pop(prompt, 'media'));

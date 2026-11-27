@@ -55,17 +55,20 @@ export function imageGenerationForm(wallet, capability, mode, planning, models) 
   const status = !capability?.available ? '当前工作区未配置可用的商品主图生成服务。'
     : agent && !planning?.available ? '当前工作区未配置可用的 Agent 策划模型。'
       : advanced ? '请输入完整提示词。' : '请选择至少一张商品图。';
+  const modelOptions = models.length ? models.map(m => [m.id, m.model === m.id ? m.id : m.model + ' · ' + m.id])
+    : [['', capability?.available ? '工作区网关' : '暂无可用模型']];
 
   return '<div class="quick-image-layout"><form class="card quick-image-form" data-image-mode="' + h(mode) +
     '" aria-label="' + (agent ? 'Agent 生图' : advanced ? '高级模式' : '快速生成主图') + '">' +
     '<div class="quick-image-config">' + group('生成模式', modes) +
-    (models.length ? field('生图模型', select('modelId', models.map(m => [m.id, m.model === m.id ? m.id : m.model + ' · ' + m.id]))) : '') +
     group(advanced ? '商品图（选填）' : '商品图', quickUploadField('products')) +
     (advanced ? advancedPromptField() : quickTargets(agent)) + group('图片尺寸', quickChoices('size', sizePresets) + custom) +
     group('生图质量', quality) + group('生成数量', quickChoices('quantity', quantities)) + (advanced ? '' : quickStyles(agent)) + '</div>' +
-    '<footer class="quick-image-footer"><div class="live-row"><a href="#account" class="smallbtn" data-quick-wallet>可用 ' +
-    h(wallet.available) + ' 积分</a><span class="live-muted" data-quick-cost></span></div>' +
-    '<p class="live-muted" data-quick-status role="status">' + h(status) + '</p>' +
+    '<footer class="quick-image-footer"><div class="quick-model-row"><a href="#account" class="smallbtn" data-quick-wallet>可用 ' +
+    h(wallet.available) + ' 积分</a>' + field('生图模型', select('modelId', modelOptions, undefined,
+      models.length && capability?.available ? '' : 'disabled')) + '</div>' +
+    '<div class="quick-submit-summary"><span class="live-muted" data-quick-cost></span>' +
+    '<p class="live-muted" data-quick-status role="status">' + h(status) + '</p></div>' +
     '<button class="primary" type="submit" disabled>' + (agent ? '开始逐张策划' : advanced ? '按提示词生成' : '生成主图') + '</button></footer></form>' +
     '<section class="card quick-image-stage" aria-label="图片生成结果"><div class="quick-image-empty">' +
     '<img data-quick-source alt="商品原图" hidden><h3>成品预览</h3><p class="live-muted">' +
@@ -87,10 +90,23 @@ export function bindImageGeneration(ctx, capability, wallet, planning, models) {
   const results = stage.querySelector('.quick-image-results');
   const planner = agent ? bindImagePlanner(ctx, planBox) : null;
   const quality = form.elements.quality;
+  const modelSelect = form.elements.modelId;
+  const preferenceKey = 'fai.image.model.v1:' + ctx.account.id + ':' + ctx.workspace.id;
+  try {
+    const saved = localStorage.getItem(preferenceKey);
+    if (models.some(model => model.id === saved)) modelSelect.value = saved;
+    else if (saved) {
+      localStorage.removeItem(preferenceKey);
+      if (capability?.available) status.textContent = '上次所选模型已不可用，当前使用' + modelSelect.selectedOptions[0].text + '。';
+    }
+  } catch { /* The current selection still works if local storage is unavailable. */ }
+  modelSelect.addEventListener('change', () => {
+    try { localStorage.setItem(preferenceKey, modelSelect.value); } catch { /* Keep this form usable without storage. */ }
+  });
   let available = wallet.available;
   let remaining = null;
   let resultsCurrent = false;
-  const selectedModel = () => models.find(m => m.id === form.elements.modelId?.value);
+  const selectedModel = () => models.find(m => m.id === modelSelect.value);
   let busy = false;
   const files = bindQuickFiles(ctx, form, () => {
     const preview = stage.querySelector('[data-quick-source]');
@@ -122,6 +138,7 @@ export function bindImageGeneration(ctx, capability, wallet, planning, models) {
   });
 
   function sync() {
+    modelSelect.disabled = busy || !capability?.available || !models.length;
     const values = Object.fromEntries(new FormData(form));
     const show = (name, visible) => { form.querySelector('[data-quick-' + name + ']').hidden = !visible; };
     const custom = values.size === 'custom';
@@ -193,7 +210,7 @@ export function bindImageGeneration(ctx, capability, wallet, planning, models) {
         resultsCurrent = false;
         empty.hidden = true;
         status.textContent = 'Agent 正在逐张策划…';
-        await planner.prepare(values);
+        await planner.prepare(values, selectedModel());
         if (ctx.active()) status.textContent = '请查看右侧方案，确认后生成。';
         return;
       }

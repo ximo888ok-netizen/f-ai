@@ -4,6 +4,8 @@ import { h } from './live-ui.js';
 import { describeError } from './studio-errors.js';
 import { attachImage, respond } from './live-agent-dialogue.js';
 import { agentControls, bindAgentControls } from './live-agent-controls.js';
+import { addReference } from './live-agent-sources.js';
+import { referencedChat } from './live-agent-model.js';
 import { uploadMedia } from './live-workspace.js';
 
 const starters = [
@@ -80,7 +82,58 @@ export async function agentHome(ctx) {
   const initialPrompt = input.placeholder;
   const reset = view.querySelector('.agent-new'), status = view.querySelector('.agent-status');
   const history = view.querySelector('.agent-history');
-  const controls = bindAgentControls(view, ctx, { onUpload: upload, onPick: () => submit('选择主图') });
+  const controls = bindAgentControls(view, ctx, {
+    onUpload:upload, onText:attachText, onEnhance:enhance, onImage:selectImage, onAdd:add,
+    onRemove(index) {
+      thread.references.splice(index, 1);
+      sync(); persist(); input.focus();
+    },
+  });
+  function add(entry) {
+    try {
+      thread.references = addReference(thread.references ?? [], entry);
+      status.textContent = '';
+      sync(); persist();
+    } catch (error) { status.textContent = describeError(error); }
+  }
+  async function attachText(file) {
+    if (busy) return;
+    busy = true; sync();
+    try {
+      if (!/\.(txt|md)$/i.test(file.name) || file.size > 32000) throw new Error('请选择 32 KB 以内的 TXT 或 Markdown 文件。');
+      const content = (await file.text()).trim();
+      if (!content || content.includes('\0')) throw new Error('请选择有文字内容的 UTF-8 文件。');
+      if (ctx.active()) add({kind:'text', id:crypto.randomUUID(), name:file.name, content});
+    } catch (error) { if (ctx.active()) status.textContent = describeError(error); }
+    finally { if (ctx.active()) { busy = false; sync(); } }
+  }
+  async function selectImage(entry) {
+    if (busy) return;
+    const confirmation = await attachImage(ctx, thread, {id:entry.id, name:entry.name});
+    if (ctx.active()) {
+      if (thread.messages.length) append({role:'assistant', ...confirmation});
+      buttons(); sync(); persist();
+    }
+  }
+  async function enhance(modelId) {
+    const draft = input.value;
+    if (busy || !draft.trim() || modelId === undefined) return;
+    busy = true; sync();
+    status.textContent = '正在强化提示词…';
+    try {
+      const result = await referencedChat(ctx, thread, modelId, {draft});
+      if (!ctx.active()) return;
+      if (input.value === draft) {
+        thread.input = input.value = result;
+        status.textContent = '提示词已强化，可继续编辑。';
+        persist();
+      } else status.textContent = '已保留你刚刚修改的草稿。';
+    } catch (error) {
+      if (ctx.active()) status.textContent = '强化未完成。' + describeError(error);
+    } finally {
+      if (ctx.active()) { busy = false; sync(); input.focus(); }
+    }
+  }
   function showHistory() {
     history.replaceChildren(new Option('最近对话', ''), ...previous.map((t,i) =>
       new Option(t.messages.find(m => m.role === 'user')?.text.slice(0, 26) || '对话', String(i))));
@@ -116,6 +169,7 @@ export async function agentHome(ctx) {
     view.querySelector('.agent-starters').hidden = started;
     send.disabled = busy || !input.value.trim();
     controls.busy(busy);
+    controls.references(thread.references ?? []);
     attachment.disabled = busy;
     attachment.hidden = !thread.attachment;
     const imageId = thread.attachment?.id ?? '';
@@ -144,6 +198,8 @@ export async function agentHome(ctx) {
     append({ role:'user', text }); sync(); log.scrollTop = log.scrollHeight;
     status.textContent = '正在处理…';
     try {
+      await controls.ready;
+      if (!ctx.active()) return;
       const response = await respond(ctx, thread, text, { ...controls.selection(),
         onTask: id => {
           if (ctx.active()) append({ role:'assistant', text:'正在理解你的请求。', items:[{ title:'查看模型任务', route:'tasks/' + encodeURIComponent(id) }] });

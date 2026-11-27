@@ -1,6 +1,6 @@
 import { action, field, form, h, input, link, path, retryKey, select, textarea } from './live-ui.js';
 import { studioIcon } from './studio-icons.js';
-import { platformNames, portalLink, rememberedShop, rememberShop } from './desk-shops.js';
+import { platformNames, inboxLink, rememberedShop, rememberShop } from './desk-shops.js';
 import { describeError } from './studio-errors.js';
 
 const endpoint='/v1/customer-service/conversations';
@@ -50,7 +50,7 @@ export async function bindInbox(ctx,{shops,conversations,replies,initial,onDraft
         (ctx.manager&&ctx.enterprise&&current.state==='assistant'?action('人工接管','live-handoff'):'')+'</div>':'');
     const shop=shopFor(current?.shopId || scope.value);
     el('[data-chat-context]').innerHTML='<dl>'+[['关联店铺',shop?.name || '未关联'],['渠道',shop?platformNames[shop.platform]:'工作台'],['接待人',current?.operatorId?(current.operatorId===ctx.account.id?'我':'其他客服'):'—'],['商品编号',current?.productReference || '—'],['订单编号',current?.orderReference || '—']].map(([k,v])=>'<div><dt>'+k+'</dt><dd>'+h(v)+'</dd></div>').join('')+'</dl>'+
-      (shop?portalLink(shop.platform,'前往平台接待',true):'');
+      (shop?inboxLink(shop.platform,'前往平台接待'):'');
   }
   function messages() {
     const nearEnd=stream.scrollHeight-stream.scrollTop-stream.clientHeight<72;

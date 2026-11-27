@@ -1,3 +1,4 @@
+import { buildAuthTestApp as buildApp, deliveredCode, fixtureIdentity } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -5,7 +6,7 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 import { createCanvas } from '@napi-rs/canvas';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres } from '../src/db.js';
 import { GeneratedFile } from '../src/model-file.js';
 import { createProviders, ProviderError } from '../src/providers.js';
@@ -37,6 +38,28 @@ async function save(page, name, values) {
     await editor.locator('[name="' + field + '"]').fill(value);
   }
   await editor.locator('button[type=submit], button:not([type])').last().click();
+}
+
+async function registerFromPage(page, app, email, password, workspaceName) {
+  const editor = form(page, 'auth');
+  const identity = fixtureIdentity(email);
+  for (const [key,value] of Object.entries({...identity,email,password})) await editor.locator('[name='+key+']').fill(value);
+  if(workspaceName) {
+    await editor.locator('[name=type]').selectOption('enterprise');
+    await editor.locator('[name=workspaceName]').fill(workspaceName);
+  }
+  await editor.getByRole('button',{name:'下一步'}).click();
+  for(const [channel,target,field] of [['sms',identity.phone,'phoneCode'],['email',email,'emailCode']]) {
+    const sent=responseFor(page,'POST','/v1/auth/verification-codes');
+    await editor.locator('[data-send-code='+channel+']').click();
+    assert.equal((await sent).status(),200);
+    await editor.locator('[name='+field+']').fill(deliveredCode(app,channel,target));
+  }
+  const registered=responseFor(page,'POST','/v1/auth/register');
+  await editor.getByRole('button',{name:'注册并登录'}).click();
+  const res=await registered;
+  assert.equal(res.status(),201);
+  return res.json();
 }
 
 async function open(page, origin, route, target) {
@@ -112,11 +135,7 @@ test('the served workbench completes tasks, merchant settings, drafts, ledger, s
     page.setDefaultTimeout(15000);
     await page.goto(origin);
     await page.getByRole('button', { name: '创建账号', exact: true }).click();
-    await form(page, 'auth').locator('[name=type]').selectOption('enterprise');
-    const registered = responseFor(page, 'POST', '/v1/auth/register');
-    await save(page, 'auth', { email: randomUUID() + '@example.test', password: 'browser-fixture-password',
-      displayName: '联调人员', workspaceName: '玻璃联调企业' });
-    const session = await (await registered).json();
+    const session = await registerFromPage(page, app, randomUUID()+'@example.test','browser-fixture-password','玻璃联调企业');
     const workspace = session.workspaces[0].id;
     await provisionCredits(db, workspace, session.account.id, 100, 'studio-browser-integration');
     const headers = { authorization: 'Bearer ' + session.token, 'x-workspace-id': workspace };
@@ -134,7 +153,8 @@ test('the served workbench completes tasks, merchant settings, drafts, ledger, s
     await page.getByRole('heading', { name: '接受企业邀请' }).waitFor();
 
     const inviteEmail = randomUUID() + '@example.test';
-    await page.getByRole('link', { name: '在商家后台管理成员' }).click();
+    assert.equal(await page.locator('a[href^="/merchant"]').count(), 0);
+    await page.goto(origin + '/merchant#members');
     const invitationCreated = responseFor(page, 'POST', '/v1/invitations');
     await save(page, 'invite', { email: inviteEmail });
     await invitationCreated;
@@ -144,7 +164,7 @@ test('the served workbench completes tasks, merchant settings, drafts, ledger, s
     await watchControls(t, invitee.context());
     await invitee.goto(invitation);
     await invitee.getByRole('button', { name: '创建账号', exact: true }).click();
-    await save(invitee, 'auth', { email: inviteEmail, password: 'invitee-fixture-password', displayName: '邀请验收' });
+    await registerFromPage(invitee, app, inviteEmail, 'invitee-fixture-password');
     await form(invitee, 'accept').locator('button').click();
     await invitee.getByRole('heading', { name: '电商工作台', exact: true }).waitFor();
     await invitee.locator('#profile').click();

@@ -1,3 +1,4 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
@@ -5,7 +6,7 @@ import { createServer } from 'node:http';
 import test from 'node:test';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres, row } from '../src/db.js';
 import { installModels } from '../src/models.js';
 import { createProviders } from '../src/providers.js';
@@ -112,9 +113,9 @@ test('product image plans generate one main and three details, retry one failure
     return body;
   }
   async function account(label) {
-    const session = await json(null,'POST','/v1/auth/register',201,{
+    const session = await json(null,'POST','/v1/auth/register',201,await registrationPayload(app, {
       type:'personal',displayName:label,email:label+'-'+randomUUID()+'@example.test',password:'synthetic-series-test',
-    });
+    }));
     return {accountId:session.account.id,workspaceId:session.workspaces[0].id,headers:{
       authorization:'Bearer '+session.token,'x-workspace-id':session.workspaces[0].id,
     }};

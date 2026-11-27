@@ -1,11 +1,11 @@
-
+import { buildAuthTestApp as buildApp, loginPayload, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { installModels } from '../src/models.js';
 import test, { after, before } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres } from '../src/db.js';
 import { createProviders, ProviderError } from '../src/providers.js';
 import { dispatchSchedule } from '../src/schedules.js';
@@ -52,15 +52,15 @@ before(async () => {
   });
   app = await buildApp({ db, providers, shops, origins: ['http://localhost:5173'] });
   await app.ready();
-  enterprise = response(await api('POST', '/v1/auth/register', null, {
+  enterprise = response(await api('POST', '/v1/auth/register', null, await registrationPayload(app, {
     email: 'owner@example.test', password: 'test-password-1', displayName: 'Owner', type: 'enterprise', workspaceName: 'Store',
-  }), 201);
-  personal = response(await api('POST', '/v1/auth/register', null, {
+  })), 201);
+  personal = response(await api('POST', '/v1/auth/register', null, await registrationPayload(app, {
     email: 'member@example.test', password: 'test-password-2', displayName: 'Member', type: 'personal',
-  }), 201);
-  other = response(await api('POST', '/v1/auth/register', null, {
+  })), 201);
+  other = response(await api('POST', '/v1/auth/register', null, await registrationPayload(app, {
     email: 'other@example.test', password: 'test-password-3', displayName: 'Other', type: 'personal',
-  }), 201);
+  })), 201);
 });
 
 after(async () => {
@@ -88,14 +88,14 @@ test('health, OpenAPI, CORS, authorization and request validation', async () => 
   assert.equal(preflight.headers['access-control-allow-origin'], 'http://localhost:5173');
 });
 
-test('login normalizes email and logout revokes session', async () => {
-  const session = response(await api('POST', '/v1/auth/login', null, {
+test('verified fixture account logs in and logout revokes session', async () => {
+  const session = response(await api('POST', '/v1/auth/login', null, await loginPayload(app, {
     email: 'OWNER@example.test', password: 'test-password-1',
-  }), 200);
+  })), 200);
   assert.equal(session.account.id, enterprise.account.id);
   response(await api('POST', '/v1/auth/logout', session), 204);
   response(await api('GET', '/v1/auth/me', session), 401);
-  response(await api('POST', '/v1/auth/login', null, { email: 'owner@example.test', password: 'invalid-password' }), 401);
+  response(await api('POST', '/v1/auth/login', null, await loginPayload(app, { email: 'owner@example.test', password: 'invalid-password' })), 401);
 });
 
 test('accepted invitation limits project and knowledge access to explicit grants', async () => {

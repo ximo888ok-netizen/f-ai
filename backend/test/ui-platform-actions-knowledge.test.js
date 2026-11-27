@@ -1,3 +1,4 @@
+import { registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -23,9 +24,9 @@ test('knowledge owners edit and grant libraries, manage memories and search thro
   });
   page.on('dialog', dialog => dialog.accept());
   const email = randomUUID() + '@example.test';
-  const registration = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: {
+  const registration = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: await registrationPayload(app, {
     email, password: 'knowledge-member-fixture', displayName: '知识库验收成员', type: 'personal',
-  } });
+  }) });
   assert.equal(registration.statusCode, 201, registration.body);
   const member = registration.json();
   const invite = await api('POST', '/v1/invitations', { email, role: 'member' });

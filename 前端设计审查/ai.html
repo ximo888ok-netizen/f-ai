@@ -2491,7 +2491,7 @@
 .find-entry kbd { font: 11px monospace; }
 .sidebar.desktop-hidden { display: none; }
 #appSidebar[hidden],.app-shell [hidden], #material-overlay[hidden] { display: none !important; }
-body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
+body:has(.business-root .studio-entry) .main-stage { margin-inline: clamp(0px, 2vw - 6px, 16px); }
 .native-directory .plugin-card { position: relative; }
 .native-directory .plugin-foot a::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
 .native-directory .apple-switch { position: relative; z-index: 3; }
@@ -2672,7 +2672,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
   gap: 6px;
   min-block-size: 168px;
   align-content: stretch;
-  grid-template-rows: minmax(64px, 1fr) auto auto;
+  grid-template-rows: minmax(64px, 1fr) auto;
   background:
     radial-gradient(240px circle at var(--mx) var(--my), var(--sheen-peak) 0%, transparent 70%),
     var(--glass-fill);
@@ -2685,7 +2685,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
 }
 .agent-home.in-chat .glass-glow-item > .glow-body {
   min-block-size: 0;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto;
 }
 /* Layer 3: 精准 mask-composite 光学切边（1.5px 高清切边：沿边橙蓝色散 + 锐利白金高光核） */
 .glass-glow-item > .glow-rim {
@@ -2947,7 +2947,6 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
         <section class="studio-popover account-menu" id="account-menu" popover aria-label="账户快捷操作">
           <div class="popover-heading"><strong data-account-name></strong><span data-account-scope></span></div>
           <div id="crumb"></div>
-          <a href="/merchant" id="merchantLink" hidden>商家后台</a>
           <a href="#tasks" id="queueLink" hidden>任务记录</a>
           <span id="connection" class="localState" role="status">正在连接</span>
           <a href="#account">AI 加油站</a>

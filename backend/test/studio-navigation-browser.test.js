@@ -1,9 +1,10 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres } from '../src/db.js';
 import { createProviders } from '../src/providers.js';
 import { watchControls } from '../test-support/ui-control-report.js';
@@ -34,10 +35,10 @@ test('Chrome renders all registered business routes and key categories against t
     await migrate(db);
     app = await buildApp({ db, providers: createProviders(), shops: new Map() });
     const origin = await app.listen({ host: '127.0.0.1', port: 0 });
-    const registration = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: {
+    const registration = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: await registrationPayload(app, {
       email: randomUUID() + '@example.test', password: 'navigation-test-only',
       type: 'enterprise', workspaceName: '导航验收', displayName: '导航验收',
-    } });
+    }) });
     assert.equal(registration.statusCode, 201, registration.body);
     const { token, workspaces } = registration.json();
     const workspace = workspaces[0].id;

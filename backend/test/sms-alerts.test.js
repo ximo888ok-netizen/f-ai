@@ -1,3 +1,4 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash,createHmac,randomUUID } from 'node:crypto';
@@ -11,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate,postgres,row } from '../src/db.js';
 import { createProviders } from '../src/providers.js';
 import { dispatchSms } from '../src/sms-channel.js';
@@ -74,7 +75,7 @@ async function smsFixture(t) {
   };
   const register=async ()=>{
     const email=randomUUID()+'@example.test';
-    const account=await api({},'POST','/v1/auth/register',{email,password:'sms-notification-fixture',displayName:'SMS QA',type:'enterprise',workspaceName:'Fixture'},201);
+    const account=await api({},'POST','/v1/auth/register',await registrationPayload(app, {email,password:'sms-notification-fixture',displayName:'SMS QA',type:'enterprise',workspaceName:'Fixture'}),201);
     return {workspace:account.workspaces[0].id,email,id:account.account.id,headers:{'x-workspace-id':account.workspaces[0].id,authorization:'Bearer '+account.token}};
   };
   const owner=await register();

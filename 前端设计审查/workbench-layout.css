@@ -61,7 +61,7 @@
   .agent-home:not(.in-chat) .agent-composer:not(.glass-glow-item) {
     min-block-size: 176px;
     align-content: stretch;
-    grid-template-rows: minmax(66px, 1fr) auto auto;
+    grid-template-rows: minmax(66px, 1fr) auto;
     gap: 5px;
   }
 
@@ -74,7 +74,7 @@
     font-weight: 500;
   }
 
-  .agent-composer :is(.agent-bar, .composer-scope) {
+  .agent-composer .agent-bar {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -106,26 +106,21 @@
   .agent-composer .agent-send svg { width: 22px; height: 22px; }
   .agent-composer .composer-model {
     max-inline-size: min(36vw, 230px);
-    overflow-wrap: anywhere;
-  }
-
-  .agent-composer .agent-attach { font-size: var(--text-label); }
-  .composer-scope {
-    justify-content: space-between;
-    border-block-start: 1px solid var(--line);
-    padding-block-start: 5px;
-    color: var(--sub);
-    font-size: var(--text-label);
-  }
-
-  .composer-scope > span {
-    min-inline-size: 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
-  .composer-scope > button { flex-shrink: 0; }
+  .agent-composer .agent-attach { font-size: var(--text-label); }
+  .composer-references:not([hidden]) { display: flex; flex-wrap: wrap; gap: 5px; padding-block: 4px; }
+  .composer-references button, .composer-enhance { display: inline-flex; align-items: center; gap: 5px; }
+  .composer-references button { max-width: min(100%, 230px); border-radius: 999px; }
+  .composer-references button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .composer-references button i { font-style: normal; }
+  .composer-enhance { white-space: nowrap; }
+  .composer-enhance svg, .composer-popover .studio-icon { width: 16px; height: 16px; flex: none; }
+  .composer-popover button { gap: 8px; }
+  .composer-popover button small { margin-inline-start: auto; font-size: 11px; color: var(--sub); }
 
   .studio-popover {
     position: fixed;
@@ -272,6 +267,9 @@
 
   @media (max-width: 520px) {
     .directory-grid { --directory-columns: 1; }
+    .agent-bar-end { min-width: 0; gap: 4px; }
+    .composer-enhance span { display: none; }
+    .agent-composer .composer-enhance { flex: none; justify-content: center; }
   }
 }
 
@@ -325,7 +323,6 @@
   :root[data-theme] .agent-composer::before,
   :root[data-theme] .agent-composer::after { content: none; background: none; box-shadow: none; }
 
-  :root[data-theme] .agent-composer .composer-scope { padding-block-start: 7px; }
   :root[data-theme] #main .agent-composer .agent-send {
     inline-size: 40px;
     min-inline-size: 40px;

@@ -1,7 +1,7 @@
 import { bindRecordSearch } from './live-record-tools.js';
 import { bindStudioAppearance } from './studio-appearance.js';
 import { commerceHome, productionSection } from './studio-workflows.js';
-import { studioEntry } from './studio-entry.js';
+import { mountStudioAuth } from './studio-auth.js';
 import { dashboard } from './live-home.js';
 import { agentHome } from './live-agent-home.js';
 import { workspaceNavigation } from './live-navigation.js';
@@ -11,7 +11,7 @@ import { dataCenter } from './live-data-center.js';
 import { requestStudio, sessionKey as tokenKey, workspaceKey } from './studio-session.js';
 import { describeError } from './studio-errors.js';
 export { describeError } from './studio-errors.js';
-import { action, field, form, h, heading, input, notice, select } from './live-ui.js';
+import { action, field, h, heading, notice, select } from './live-ui.js';
 export * from './live-ui.js';
 
 import { workspacePages } from './live-workspace.js';
@@ -85,7 +85,6 @@ let identity = null;
 let workspace = null;
 let currentRender;
 const connectAppearance = bindStudioAppearance(error => toast(describeError(error)));
-let authMode = 'login';
 
 export function toast(message) {
   const control = document.querySelector('#live');
@@ -151,8 +150,6 @@ function updateHeader(route, ctx) {
   }
   updateAccount(ctx, roleNames[workspace?.role]);
   document.querySelector('#queueLink').hidden = !identity;
-  const merchantLink = document.querySelector('#merchantLink');
-  merchantLink.hidden = workspace?.kind !== 'enterprise' || !['owner', 'admin'].includes(workspace.role);
   document.querySelector('#crumb').innerHTML = workspace ? field('工作区', select('workspace',
     identity.workspaces.map(entry => [entry.id, entry.name]), workspace.id, 'id="workspace-selector"')) : '账号访问';
   document.querySelector('#workspace-selector')?.addEventListener('change', async event => {
@@ -221,30 +218,7 @@ function viewContext(controller, routeArgs, section) {
 }
 
 function authPage(ctx) {
-  const signUp = authMode === 'register';
-  ctx.html(studioEntry({
-    title: signUp ? '创建账号' : '登录工作台',
-    description: signUp ? '创建个人或企业工作区，开始制作商品内容。' : '使用你的工作区账号继续。',
-    fields: form('auth', field('邮箱', input('email', 'type="email" placeholder="输入邮箱" autocapitalize="none" spellcheck="false" required autocomplete="username" maxlength="254"')) +
-      field('密码', input('password', 'type="password" required maxlength="128" ' + (signUp ? 'minlength="10" autocomplete="new-password"' : 'autocomplete="current-password"') + ' placeholder="' + (signUp ? '至少 10 个字符' : '输入密码') + '"')) +
-      (signUp ? field('显示名', input('displayName', 'required maxlength="100"')) +
-        field('账号类型', select('type', [['personal','个人'], ['enterprise','企业']], 'personal')) +
-        '<div id="enterprise-name" hidden>' + field('企业工作区名称', input('workspaceName', 'maxlength="100"')) + '</div>' : ''),
-    signUp ? '注册并登录' : '登录'),
-    alternate: '<div class="entry-alternate">' + (signUp ? '已有账号？' : '还没有账号？') +
-      action(signUp ? '返回登录' : '创建账号', 'auth-mode') + '</div>',
-  }));
-  ctx.click('auth-mode', () => { authMode = signUp ? 'login' : 'register'; ctx.reload(); });
-  ctx.on('[name=type]', 'change', node => {
-    const container = document.querySelector('#enterprise-name');
-    container.hidden = node.value !== 'enterprise';
-    container.querySelector('input').required = !container.hidden;
-  });
-  ctx.submit('auth', async data => {
-    const body = Object.fromEntries(data);
-    if (body.type !== 'enterprise') delete body.workspaceName;
-    const session = await ctx.api('/v1/auth/' + authMode, { method: 'POST', auth: false, body });
-    if (!ctx.active()) return;
+  mountStudioAuth(ctx, main, false, session => {
     setIdentity(session);
     ctx.reload();
   });

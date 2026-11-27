@@ -39,4 +39,5 @@ export function bindPopover(trigger, panel, { end = false, signal } = {}) {
   document.addEventListener('scroll', event => {
     if (event.target !== panel) queuePosition();
   }, { capture: true, passive: true, signal });
+  return position;
 }

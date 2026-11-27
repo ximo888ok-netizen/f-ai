@@ -1,5 +1,5 @@
 import { shopGrantExpired, connectionEnabled, modelProviders, requireConnection } from './merchant-connections.js';
-import { featureAllowed, requireFeature, updateFeature } from './merchant-features.js';
+import { featureAllowed, memberFeatureSettings, requireFeature, updateFeature } from './merchant-features.js';
 
 import { randomUUID } from 'node:crypto';
 import { digest } from './auth.js';
@@ -179,12 +179,9 @@ export function registerTasks(app, db, providers, shops, retryProductImageTask) 
   registerTaskEvents(app, db, readTask);
   registerTaskStream(app,findTask);
   route(app, 'GET', '/v1/plugins', { tags: ['Plugins'], summary: 'List business plugins, capabilities and input contracts' }, async request => {
-    const { workspaceId, accountId } = request.context;
-    const rowsForWorkspace = await rows(db, `SELECT plugin_id,enabled,release_mode AS mode,release_capabilities AS capabilities,
-      EXISTS (SELECT 1 FROM merchant_plugin_members m WHERE m.workspace_id=s.workspace_id AND m.plugin_id=s.plugin_id
-        AND m.account_id=$2) AS included FROM plugin_settings s WHERE workspace_id=$1`, [workspaceId, accountId]);
-    const availableProviders = await modelProviders(db, workspaceId, providers);
-    const settings = new Map(rowsForWorkspace.map(setting => [setting.plugin_id, setting]));
+    const [settings, availableProviders] = await Promise.all([
+      memberFeatureSettings(db, request.context), modelProviders(db, request.context.workspaceId, providers),
+    ]);
     const describe = plugin => ({
       ...plugin, enabled: featureAllowed(settings.get(plugin.id)),
       capabilities: [...catalog.values()].filter(capability => capability.pluginId === plugin.id).map(capability => {

@@ -55,6 +55,14 @@ async function send(request,auth,body,recipient,context) {
   }
 }
 
+export function createTencentTemplateSender({secretId,secretKey,region,appId,signName,templateId},request=fetch) {
+  return async (id,{recipient,values}) => {
+    const body=JSON.stringify({SmsSdkAppId:appId,SignName:signName,TemplateId:templateId,
+      PhoneNumberSet:[recipient],TemplateParamSet:values,SessionContext:id});
+    return send(request,headers(secretId,secretKey,region,body),body,recipient,id);
+  };
+}
+
 export function createSmsBindings(env=process.env,request=fetch) {
   const config=JSON.parse(env.SMS_BINDINGS_JSON || '[]');
   if (!Array.isArray(config)) throw new Error('SMS_BINDINGS_JSON must be an array');
@@ -76,11 +84,7 @@ export function createSmsBindings(env=process.env,request=fetch) {
           !Number.isInteger(entry.params) || entry.params<0 || entry.params>12) throw new Error('Invalid SMS template');
       templates.set(entry.alias,{
         params:entry.params,fingerprint:sha(JSON.stringify([workspace,item.appId,item.signName,region,entry.id,entry.params])),
-        async send(id,{recipient,values}) {
-          const body=JSON.stringify({SmsSdkAppId:item.appId,SignName:item.signName,TemplateId:entry.id,
-            PhoneNumberSet:[recipient],TemplateParamSet:values,SessionContext:id});
-          return send(request,headers(secretId,secretKey,region,body),body,recipient,id);
-        },
+        send:createTencentTemplateSender({secretId,secretKey,region,appId:item.appId,signName:item.signName,templateId:entry.id},request),
       });
     }
     result.set(workspace,templates);

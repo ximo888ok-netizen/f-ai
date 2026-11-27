@@ -1,7 +1,8 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate } from '../src/db.js';
 import { readShopToken } from '../src/shop-authorization.js';
 import { activeHandoffs, pauseNativeReplies } from '../src/customer-agent-store.js';
@@ -27,7 +28,7 @@ test('shared shop directory, scoped chats and one-use merchant authorization',as
     const res=await app.inject({method,url,headers,payload});
     assert.equal(res.statusCode,status,res.body);return res.json();
   }
-  const register=email=>api(201,'POST','/v1/auth/register',null,{email,password:'tenant-test-pass',displayName:'test',type:'enterprise',workspaceName:'test'});
+  const register=async email=>api(201,'POST','/v1/auth/register',null,await registrationPayload(app, {email,password:'tenant-test-pass',displayName:'test',type:'enterprise',workspaceName:'test'}));
   const a=await register('a@shops.invalid'),b=await register('b@shops.invalid'),base='/v1/desk-shops';
   const s=await api(201,'POST',base,a,{name:'测试门店',platform:'taobao'});
   assert.equal((await api(200,'GET',base,a)).items[0].commerce,false);

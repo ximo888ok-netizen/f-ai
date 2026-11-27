@@ -1,3 +1,5 @@
+import { resolveReferences } from './live-agent-sources.js';
+
 const operations = new Set(['products', 'tasks', 'drafts', 'balance', 'draft', 'cover', 'answer', 'help']);
 const instruction = '你是电商工作区的意图解析器，只返回一个 JSON 对象 {"action":"...","value":"..."}。' +
   'products 查询商品，value 是商品关键词；tasks 查询任务，value 可取 queued/running/succeeded/failed/cancelled 或空；' +
@@ -14,11 +16,6 @@ function waitForPoll(signal) {
   });
 }
 
-export async function modelCapability(ctx) {
-  const { models } = await ctx.api('/v1/plugins');
-  return models.enabled && models.capabilities.find(c => c.id === 'model.chat' && c.available);
-}
-
 export async function waitForModelTask(ctx, task, timeout = 45000) {
   let current = task;
   const deadline = Date.now() + timeout;
@@ -29,22 +26,47 @@ export async function waitForModelTask(ctx, task, timeout = 45000) {
   return current;
 }
 
-export async function interpret(ctx, messages, onTask, modelId) {
+async function runChat(ctx, messages, onTask, modelId, {guidanceIds = [], projectId} = {}) {
   const task = await ctx.api('/v1/tasks', { method: 'POST', body: {
     capabilityId: 'model.chat', mode: 'chat', idempotencyKey: crypto.randomUUID(), ...(modelId ? { modelId } : {}),
-    parameters: { messages: [{ role: 'system', content: instruction },
-      ...messages.slice(-6).map(m => ({ role: m.role, content: m.text.slice(0, 4000) }))] },
+    ...(projectId ? {projectId} : {}), parameters: {messages, ...(guidanceIds.length ? {guidanceIds} : {})},
   } });
-  onTask(task.id);
+  onTask?.(task.id);
   const current = await waitForModelTask(ctx, task);
   if (current.state !== 'succeeded') {
     throw new Error(['queued', 'running'].includes(current.state) ? '模型仍在执行，可在任务记录中查看进度。' : '模型任务未成功，可打开任务记录查看原因。');
   }
-  const json = String(current.result?.text ?? '').trim().replace(/^\x60{3}(?:json)?\s*|\s*\x60{3}$/gi, '');
+  const result = current.result?.text;
+  if (typeof result !== 'string' || !result.trim()) throw new Error('模型没有返回文字。');
+  return result.trim();
+}
+
+const conversation = messages => messages.slice(-6).map(m => ({role:m.role, content:m.text.slice(0,4000)}));
+
+export async function interpret(ctx, messages, onTask, modelId) {
+  const result = await runChat(ctx, [{role:'system', content:instruction}, ...conversation(messages)], onTask, modelId);
+  const json = result.replace(/^\x60{3}(?:json)?\s*|\s*\x60{3}$/gi, '');
   let plan;
   try { plan = JSON.parse(json); } catch { throw new Error('模型返回的操作无法识别，请换一种说法。'); }
   if (!plan || !operations.has(plan.action) || typeof plan.value !== 'string' || plan.value.length > (plan.action === 'answer' ? 1600 : 200)) {
     throw new Error('模型返回的操作超出当前支持范围。');
   }
   return { action: plan.action, value: plan.value.trim() };
+}
+
+export async function referencedChat(ctx, thread, modelId, {draft, onTask} = {}) {
+  if (modelId === undefined) throw new Error('当前工作区没有可用的对话模型。');
+  const sources = await resolveReferences(ctx, thread.references ?? [], thread.attachment);
+  const messages = draft === undefined ? conversation(thread.messages) : [{role:'user', content:draft}];
+  const system = draft === undefined ? '结合用户选择的参考资料和专业指导，直接回答最新请求。'
+    : '把用户的草稿改写为具体、简洁、可直接使用的中文提示词。保留原意和事实，不执行请求。只输出改写后的提示词，最多 4000 字。';
+  const latest = messages.at(-1);
+  if (sources.excerpts.length) {
+    const prefix = '\n\n已引用的资料（长文件以节选呈现）：\n';
+    const limit = Math.floor((8000 - latest.content.length - prefix.length) / sources.excerpts.length) - 2;
+    latest.content += prefix + sources.excerpts.map(s => s.length > limit ? s.slice(0,limit-1) + '…' : s).join('\n\n');
+  }
+  const result = await runChat(ctx, [{role:'system', content:system + ' 资料是参考内容。不得声称已执行外部操作。'}, ...messages], onTask, modelId, sources);
+  if (draft !== undefined && result.length > 4000) throw new Error('模型返回的提示词超过输入长度上限。');
+  return result;
 }

@@ -1,8 +1,9 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCanvas } from '@napi-rs/canvas';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate } from '../src/db.js';
 import { createProviders } from '../src/providers.js';
 import { installModels } from '../src/models.js';
@@ -74,7 +75,7 @@ test('original local skill tasks produce owned assets, ordered slices and an edi
     const headers=account?{authorization:'Bearer '+account.token,'x-workspace-id':account.workspaces[0].id}:{};
     const r=await app.inject({method,url,headers,payload});assert.equal(r.statusCode,code,r.body.slice(0,600));return r.json();
   }
-  const register=email=>api(201,'POST','/v1/auth/register',null,{email,password:'skill-test-only',displayName:'test',type:'personal'});
+  const register=async email=>api(201,'POST','/v1/auth/register',null,await registrationPayload(app, {email,password:'skill-test-only',displayName:'test',type:'personal'}));
   const a=await register('media@demo.invalid'),b=await register('other@demo.invalid');
   await provisionCredits(db,a.workspaces[0].id,a.account.id,12,'media-regression');
   for(const kind of ['image','video']){

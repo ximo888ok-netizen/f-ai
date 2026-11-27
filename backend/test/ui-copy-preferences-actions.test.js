@@ -1,3 +1,4 @@
+import { registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -32,9 +33,9 @@ test('catalog favorites cover each capability; personal workspace plugin switche
   await act('重新读取先前缺失的草稿',page.locator('[data-retry]'),{method:'GET',path:url});
   await page.getByRole('heading',{name:'恢复后的合成草稿'}).waitFor();
 
-  const member=await app.inject({method:'POST',url:'/v1/auth/register',payload:{
+  const member=await app.inject({method:'POST',url:'/v1/auth/register',payload:await registrationPayload(app, {
     email:randomUUID()+'@example.test',password:'catalog-personal-fixture',displayName:'个人目录验收',type:'personal',
-  }});
+  })});
   assert.equal(member.statusCode,201,member.body);
   const {token,workspaces}=member.json();
   await page.evaluate(({token,workspace})=>{

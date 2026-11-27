@@ -1,3 +1,4 @@
+import { registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -177,8 +178,8 @@ test('shop directory, all ledger modules, report filters, imports and downloads 
   const shop = await (await submit('shop-add', { platform: 'pinduoduo', name: '台账验收店铺' },
     { method: 'POST', path: desk, status: 201 })).json();
   await visible('台账验收店铺');
-  const login = page.getByRole('link', { name: '登录商家后台', exact: true }).first();
-  assert.equal(new URL(await login.getAttribute('href')).hostname, 'mms.pinduoduo.com');
+  assert.equal(await page.getByRole('link', {name:'登录商家后台',exact:true}).count(),0);
+  assert.equal(await page.locator('a[href="https://mms.pinduoduo.com/"], a[href^="/merchant"]').count(),0);
   await act('显示店铺编辑表单', page.getByText('管理店铺', { exact: true }));
   await submit('shop-edit-' + shop.id, { name: '验收店铺停用', enabled: 'no' }, { method: 'PATCH', path: desk + '/' + shop.id });
   await visible('验收店铺停用');
@@ -349,9 +350,9 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
   const knowledge = await (await submit('new-base', { name: '客服合成知识库' }, { method: 'POST', path: bases, status: 201 })).json();
   const knowledgeUrl = bases + '/' + knowledge.id;
   const email = randomUUID() + '@example.test';
-  const registration = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: {
+  const registration = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: await registrationPayload(app, {
     email, password: 'synthetic-business-member', displayName: '合成客服成员', type: 'personal',
-  } });
+  }) });
   assert.equal(registration.statusCode, 201);
   const member = registration.json();
   const invite = await api('POST', '/v1/invitations', { email, role: 'member' });

@@ -1,19 +1,38 @@
 
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
+import { canonicalEmail, canonicalPhone, canonicalUsername } from './auth-identifiers.js';
+import { consumeCaptcha, registerAuthVerification, verifyContactCodes } from './auth-verification.js';
 import { row, rows } from './db.js';
-import { ApiError, choice, invalid, notFound, object, route, text } from './http.js';
+import { ApiError, choice, invalid, notFound, object, route, text, uuid } from './http.js';
 
 const derive = promisify(scrypt);
 const emailSchema = { ...text(254, 3), format: 'email' };
 const passwordSchema = text(128, 10);
+const codeSchema = { type: 'string', pattern: '^[0-9]{6}$' };
+const contactFields = {
+  username: text(128), phone: text(32), email: emailSchema, password: passwordSchema,
+  flowId: uuid, phoneCode: codeSchema, emailCode: codeSchema,
+};
 const tags = ['Identity'];
 const authLimit = { rateLimit: { max: 15, timeWindow: '1 minute' } };
 
 export const digest = value => createHash('sha256').update(value).digest('hex');
 const secret = () => randomBytes(32).toString('base64url');
-const normalizeEmail = value => value.trim().toLowerCase();
-const invalidCredentials = () => new ApiError(401, 'UNAUTHENTICATED', 'Invalid email or password');
+const invalidCredentials = () => new ApiError(401, 'UNAUTHENTICATED', 'Invalid account credentials');
+
+function validatedIdentity(body) {
+  return { ...body, username: canonicalUsername(body.username), email: canonicalEmail(body.email), phone: canonicalPhone(body.phone) };
+}
+
+function identityConflict(error) {
+  if (error.code === '23505') {
+    if (error.constraint === 'accounts_username_key') throw new ApiError(409, 'USERNAME_IN_USE', 'Username is already registered');
+    if (error.constraint === 'accounts_phone_key') throw new ApiError(409, 'PHONE_IN_USE', 'Phone is already registered');
+    if (error.constraint === 'accounts_email_key') throw new ApiError(409, 'EMAIL_IN_USE', 'Email is already registered');
+  }
+  throw error;
+}
 
 async function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
@@ -44,8 +63,11 @@ async function createSession(db, account) {
   };
 }
 
-async function insertWorkspaceAccount(connection, { email, passwordHash, displayName, type, workspaceName }) {
-  const account = await row(connection, 'INSERT INTO accounts (id, email, password_hash, display_name, account_type) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, display_name, account_type', [randomUUID(), email, passwordHash, displayName, type]);
+async function insertWorkspaceAccount(connection, { username, phone, email, password, displayName, type, workspaceName }) {
+  const account = await row(connection, `INSERT INTO accounts
+    (id,username,phone,email,password_hash,display_name,account_type,phone_verified_at,email_verified_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,now(),now()) RETURNING id,email,display_name,account_type`,
+  [randomUUID(), username, phone, email, await hashPassword(password), displayName, type]);
   const workspaceId = randomUUID();
   await connection.query('INSERT INTO workspaces (id, kind, name) VALUES ($1, $2, $3)', [workspaceId, type, workspaceName]);
   await connection.query("INSERT INTO memberships (workspace_id, account_id, role) VALUES ($1, $2, 'owner')", [workspaceId, account.id]);
@@ -53,7 +75,8 @@ async function insertWorkspaceAccount(connection, { email, passwordHash, display
   return account;
 }
 
-export function registerAuth(app, db) {
+export function registerAuth(app, db, verification) {
+  registerAuthVerification(app, db, verification);
   app.decorateRequest('account', null);
   app.decorateRequest('sessionHash', null);
   app.decorateRequest('context', null);
@@ -78,40 +101,48 @@ export function registerAuth(app, db) {
 
   route(app, 'POST', '/v1/auth/register', {
     auth: false, tags, config: authLimit, summary: 'Register an account and create its initial workspace',
-    body: object({
-      email: emailSchema, password: passwordSchema, displayName: text(100),
-      type: choice('personal', 'enterprise','agent'), workspaceName: text(100),
-    }, ['email', 'password', 'displayName', 'type']),
+    body: object({ ...contactFields, type: choice('personal', 'enterprise', 'agent'), displayName: text(100), workspaceName: text(100) },
+      [...Object.keys(contactFields), 'type']),
   }, async (request, reply) => {
-    const { displayName, type, password, workspaceName } = request.body;
-    if (type === 'enterprise' && !workspaceName?.trim()) throw invalid('workspaceName is required for enterprise registration');
-    const display = displayName.trim();
-    if (!display) throw invalid('displayName cannot be blank');
-    const email = normalizeEmail(request.body.email);
-    const passwordHash = await hashPassword(password);
-    try {
-      const result = await db.transaction(async connection => {
-        const account = await insertWorkspaceAccount(connection, {
-          email, passwordHash, displayName: display, type, workspaceName: workspaceName?.trim() || display,
-        });
-        return createSession(connection, account);
-      });
-      reply.code(201);
-      return result;
-    } catch (error) {
-      if (error.code === '23505') throw new ApiError(409, 'EMAIL_IN_USE', 'Email is already registered');
-      throw error;
-    }
+    const identity = validatedIdentity(request.body);
+    const displayName = identity.displayName?.trim() ?? identity.username;
+    if (!displayName) throw invalid('displayName cannot be blank');
+    const workspaceName = identity.workspaceName?.trim();
+    if (identity.type === 'enterprise' && !workspaceName) throw invalid('workspaceName is required for enterprise registration');
+    const session = await verifyContactCodes(db, identity, async tx => {
+      const account = await insertWorkspaceAccount(tx, { ...identity, displayName, workspaceName: workspaceName || displayName });
+      return createSession(tx, account);
+    }).catch(identityConflict);
+    return reply.code(201).send(session);
   });
 
-  const standardLogin = object({ email: emailSchema, password: passwordSchema });
+  route(app, 'POST', '/v1/auth/upgrade', {
+    auth: false, tags, config: authLimit, summary: 'Add verified login identifiers to a legacy account',
+    body: object(contactFields),
+  }, async request => {
+    const identity = validatedIdentity(request.body);
+    return verifyContactCodes(db, identity, async tx => {
+      const account = await row(tx, `SELECT id,email,display_name,account_type,password_hash FROM accounts
+        WHERE email=$1 AND username IS NULL AND phone IS NULL FOR UPDATE`, [identity.email]);
+      if (!(await checkPassword(identity.password, account?.password_hash)) || !account) throw invalidCredentials();
+      await tx.query(`UPDATE accounts SET username=$2,phone=$3,email_verified_at=now(),phone_verified_at=now()
+        WHERE id=$1`, [account.id, identity.username, identity.phone]);
+      return createSession(tx, account);
+    }).catch(identityConflict);
+  });
+
   route(app, 'POST', '/v1/auth/login', {
     auth: false, tags, config: authLimit, summary: 'Create a session',
-    body: standardLogin,
+    body: object({ identifier: text(128), password: passwordSchema, captchaId: uuid, captchaAnswer: text(16) }),
   }, async request => {
-    const email = normalizeEmail(request.body.email);
-    const account = await row(db, 'SELECT * FROM accounts WHERE email = $1', [email]);
-    if (!(await checkPassword(request.body.password, account?.password_hash)) || !account) throw invalidCredentials();
+    const { identifier, password, captchaId, captchaAnswer } = request.body;
+    await consumeCaptcha(db, captchaId, captchaAnswer);
+    const input = identifier.trim();
+    const isPhone = /^\+|^[0-9]+$/.test(input);
+    const value = isPhone ? canonicalPhone(input) : canonicalUsername(input);
+    const account = await row(db, `SELECT id,email,display_name,account_type,password_hash FROM accounts
+      WHERE ${isPhone ? 'phone' : 'username'}=$1`, [value]);
+    if (!(await checkPassword(password, account?.password_hash)) || !account) throw invalidCredentials();
     return createSession(db, account);
   });
 

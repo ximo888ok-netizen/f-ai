@@ -1,8 +1,9 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test, { after, before } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { catalog } from '../src/catalog.js';
 import { migrate, postgres } from '../src/db.js';
 import { createProviders } from '../src/providers.js';
@@ -55,10 +56,10 @@ before(async () => {
   app = await buildApp({db,providers,shops,webSearch});
   await app.ready();
   async function signup(email, type) {
-    const account = await request('POST','/v1/auth/register',201,undefined,{
+    const account = await request('POST','/v1/auth/register',201,undefined,await registrationPayload(app, {
       email,password:'test-workspace-tools-42',displayName:email,type,
       ...(type === 'enterprise' ? {workspaceName:'Workspace tools QA'} : {}),
-    });
+    }));
     return {...account,workspace:account.workspaces[0].id};
   }
   owner = await signup('workspace-tools-owner@example.test','enterprise');
@@ -286,9 +287,9 @@ test('queue diagnostics separate runnable, delayed and expired work and require 
   const endpoint='/v1/diagnostics/queue';
   await request('GET',endpoint,401,{workspace:owner.workspace});
   await request('GET',endpoint,403,member);
-  const user=await request('POST','/v1/auth/register',201,undefined,{
+  const user=await request('POST','/v1/auth/register',201,undefined,await registrationPayload(app, {
     email:'queue-health-owner@example.test',password:'test-workspace-tools-42',displayName:'Queue QA',type:'personal',
-  });
+  }));
   const account={...user,workspace:user.workspaces[0].id};
   const empty={queued:0,runnable:0,running:0,expiredLeases:0,dueSchedules:0,oldestRunnableSeconds:null};
   assert.deepEqual(await request('GET',endpoint,200,account),empty);

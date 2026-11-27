@@ -1,3 +1,4 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -7,7 +8,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PGlite } from '@electric-sql/pglite';
 import { migrate } from '../src/db.js';
-import { buildApp } from '../src/app.js';
+
 import { createProviders } from '../src/providers.js';
 import { provisionCredits } from '../src/wallet.js';
 import { workOnce } from '../src/worker.js';
@@ -35,7 +36,7 @@ test('plugin tasks settle only complete generations and shop reads obey workspac
     assert.equal(response.statusCode,status,response.body);
     return response.json();
   }
-  const register=email=>request(201,'POST','/v1/auth/register',null,{email,password:'integration-test',type:'enterprise',workspaceName:'测试',displayName:'测试'});
+  const register=async email=>request(201,'POST','/v1/auth/register',null,await registrationPayload(app, {email,password:'integration-test',type:'enterprise',workspaceName:'测试',displayName:'测试'}));
   const a=await register('first@example.invalid'), b=await register('second@example.invalid'), workspace=a.workspaces[0].id;
   const bound={id:'readonly',workspaceId:workspace,name:'测试店铺',platform:'taobao',credentials:{access_token:'unit-only'}};
   integrations.commerce.shops.set(workspace+'/readonly',bound);

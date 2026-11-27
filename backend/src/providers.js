@@ -3,6 +3,7 @@ import { detectTerms } from './catalog.js';
 import { voiceTurnProvider } from './voice-turn.js';
 import { mediaUrl, ProviderError, requestUpstream } from './model-http.js';
 import { GeneratedFile } from './model-file.js';
+import { validateVideoOptions, videoInputModes } from './video-options.js';
 
 export { ProviderError };
 
@@ -20,6 +21,9 @@ export function createProviders({ url, token, capabilities = [] } = {}) {
   const enabled = new Set(capabilities);
   providers.set('gateway', {
     supports: capability => enabled.has(capability.id),
+    validate(capability, parameters) {
+      if (Object.hasOwn(videoInputModes, capability.id)) validateVideoOptions(undefined, parameters);
+    },
     async run(task, payload) {
       const data = await requestUpstream(endpoint, { headers: { authorization: 'Bearer ' + token, 'idempotency-key': task.id }, body: payload, repeatable: true });
       const result = data?.result;

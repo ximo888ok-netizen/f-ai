@@ -59,7 +59,7 @@ export function bindImagePlanner(ctx, container) {
       container.hidden = true;
       container.replaceChildren();
     },
-    async prepare(values) {
+    async prepare(values, model) {
       if (values.quantity === 'suite') throw new Error('请选择 1–4 张图片。');
       const base = quickRecipes(values, false);
       current ??= { idempotencyKey: uid() };
@@ -68,7 +68,8 @@ export function bindImagePlanner(ctx, container) {
         capabilityId: agentImagePlannerId, mode: 'workflow', idempotencyKey: attempt.idempotencyKey,
         parameters: { messages: [
           { role: 'system', content: instructions },
-          { role: 'user', content: '请给出 ' + base.length + ' 张图片的一一对应方案。要求如下：\n' + base[0].parameters.prompt },
+          { role: 'user', content: (model ? '后续生图模型为 ' + model.model + '（' + model.id + '）。\n' : '') +
+            '请给出 ' + base.length + ' 张图片的一一对应方案。要求如下：\n' + base[0].parameters.prompt },
         ] },
       } });
       if (!ctx.active()) return;

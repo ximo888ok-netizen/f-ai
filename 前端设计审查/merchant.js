@@ -1,9 +1,9 @@
-import { studioEntry } from './studio-entry.js';
+import { mountStudioAuth } from './studio-auth.js';
 import { studioIcon } from './studio-icons.js';
 import { bindNavigationSearch, findNavigation } from './live-nav-search.js';
 import { bindStudioAppearance } from './studio-appearance.js';
 import { requestStudio, sessionKey, workspaceKey } from './studio-session.js';
-import { field, form, h, input, select } from './live-ui.js';
+import { h, select } from './live-ui.js';
 import { membersPage } from './merchant-team.js';
 import { projectsPage } from './merchant-projects.js';
 import { auditPage, connectionsPage, featuresPage } from './merchant-settings.js';
@@ -48,13 +48,11 @@ function flash(text) {
   messageTimer = setTimeout(() => { message.classList.remove('show'); message.textContent = ''; }, 4000);
 }
 
-async function request(url, { workspace, ...rest } = {}) {
-  const login = url === '/v1/auth/login';
+async function request(url, { workspace, auth = true, ...rest } = {}) {
   try {
-    return await requestStudio(url, { ...rest, token: login ? null : session, workspaceId: workspace });
+    return await requestStudio(url, { ...rest, token: auth ? session : null, workspaceId: workspace });
   } catch (error) {
-    if (login && error.status === 401) error.message = '账号或密码错误。';
-    else error.message = errors[error.code] ?? error.message;
+    if (auth) error.message = errors[error.code] ?? error.message;
     throw error;
   }
 }
@@ -106,7 +104,7 @@ function makeContext(controller, workspace, args) {
     });
   }
   return {
-    active, api, workspace, args, state, reload, go, notify: flash,
+    active, api, signal, workspace, args, state, reload, go, notify: flash,
     async all(endpoint) {
       const items = [];
       const divider = endpoint.includes('?') ? '&' : '?';
@@ -129,13 +127,9 @@ function makeContext(controller, workspace, args) {
 
 function login(ctx) {
   menu.hidden = true;
-  ctx.html(studioEntry({ title: '登录商家后台', description: '使用拥有企业管理权限的账号登录。', merchant: true,
-    fields: form('login',
-      field('邮箱', input('email', 'type="email" required autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="输入邮箱"')) +
-      field('密码', input('password', 'type="password" required maxlength="128" autocomplete="current-password"')), '登录') }));
-  ctx.form('login', async data => {
-    const result = await ctx.api('/v1/auth/login', { method: 'POST', body: Object.fromEntries(data) });
-    if (ctx.active()) { remember(result.token); ctx.reload(); }
+  mountStudioAuth(ctx, main, true, session => {
+    remember(session.token);
+    ctx.reload();
   });
 }
 
@@ -143,6 +137,7 @@ function updateMenu(workspaces, workspace, page) {
   const temporary = document.createElement('div');
   temporary.innerHTML = select('workspace', workspaces.map(item => [item.id, item.name]), workspace.id);
   workspaceSelect.replaceChildren(...temporary.firstElementChild.children);
+  workspaceSelect.value = workspace.id;
   document.querySelector('#merchantRole').textContent = roleNames[workspace.role];
   nav.innerHTML = Object.entries(pages).map(([id, [label]]) =>
     '<a class="navitem' + (id === page ? ' active' : '') + '" href="#' + id + '"' +

@@ -15,7 +15,24 @@
 
 例如只接千问标准版和万相标准版，可设置 `FAI_MEDIA_MODELS=qwen-image-3.0,wan3.0-video`。使用其他区域或方舟推理接入点时，可在 `MODEL_PROVIDERS_FILE` 中填写账号对应的 `baseUrl` 和 `model`。两种配置可并用，已有条目排在前面，别名需唯一。预置别名将上游 ID 转为小写，并将点号换成连字符。
 
-图片支持文生图和带参考图生成。千问 3.0 接受至多三张参考图，输出 PNG。生成的图片写回当前用户的素材库。视频支持文生视频和单张首帧图生视频，提交后由任务中心轮询同一供应商任务。MiniMax H3 和可灵的首帧模式沿用输入画幅。工作台现有时长选择上限为 10 秒，MiniMax H3 视频预置使用 768P。本地配置通过后，可从图片高级模式选模型出一张图，再把它作为首帧测试视频。核对任务详情的模型、成品和积分流水。供应商模型权限、额度和视频归档来源由部署方配置。
+图片支持文生图和带参考图生成。千问 3.0 接受至多三张参考图，输出 PNG。生成的图片写回当前用户的素材库。视频提交后由任务中心轮询同一供应商任务。工作台按所选模型和输入方式读取画幅、清晰度、可用秒数和音轨开关。MiniMax H3、Seedance 2.5 和可灵的首帧沿用输入画幅。供应商模型权限、额度和视频归档来源由部署方配置。
+
+工作台从 `GET /v1/models` 的 `videoOptions` 读取模型支持的参数。每个模式对应一个任务能力，`text` 对应 `video.compose`，`frame` 对应 `video.from-image`，`reference` 对应 `video.reference`。参考模式使用素材库中有有效授权的 MP4，执行模型须配置接收该素材。只有网关或目录缺少参数时，工作台可按服务默认设置提交。
+
+自定义 `json-http` 视频模型可在 `MODEL_PROVIDERS_FILE` 的模型条目加入以下字段，并在 `capabilities` 中启用对应能力。此例声明一个支持三种离散时长的参考视频端点。请将值换成部署所用端点的实际规格。
+
+```json
+"videoOptions": {
+  "reference": {
+    "ratios": ["16:9", "9:16"],
+    "resolutions": ["720p", "1080p"],
+    "durations": [5, 10, 15],
+    "audio": true
+  }
+}
+```
+
+数组中只填可选择的值。空数组表示使用上游默认值。`audio: true` 表示端点接受显式有声、无声两种选择。`mapping.body` 必须传递声明的参数（`parameters.ratio`、`parameters.options.resolution`、`parameters.options.durationSeconds`、`parameters.options.generateAudio`），也可映射整个 `parameters` 对象。使用参考视频的映射应向端点传入 `assets`。设置与映射不匹配时，服务会在启动时报告错误。用户切换模型或输入方式后，表单会清除超出新模型范围的选择。
 
 协议依据见[千问图像 API](https://help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference)、[万相视频 API](https://help.aliyun.com/zh/model-studio/wan3-video-generation-api-reference)、[Seedream 5.5](https://docs.volcengine.com/docs/ark/seedream-5-5)、[Seedance 2.5](https://console.volcengine.com/ark/region%3Acn-beijing/docs/seedance-2-5)、[MiniMax 图片](https://platform.minimax.io/docs/guides/image-generation)、[MiniMax 视频](https://platform.minimax.io/docs/guides/video-generation)和[可灵 4.0](https://kling.ai/document-api/api/usage-guide/kling-4-0)。
 

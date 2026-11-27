@@ -1,3 +1,4 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
@@ -6,18 +7,18 @@ import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { manifest, overview } from '../sdk/examples/asset-inbox.mjs';
 import { bindPluginV1, createWorkspaceHttpRequest, workspaceV1, WorkspaceHttpError } from '../sdk/workspace-v1.mjs';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres } from '../src/db.js';
 import { provisionCredits } from '../src/wallet.js';
 
-async function register(origin, email, type) {
+async function register(app, origin, email, type) {
   const response = await fetch(origin + '/v1/auth/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
+    body: JSON.stringify(await registrationPayload(app, {
       email, password: 'sdk-host-contract-fixture-42', displayName: email, type,
       ...(type === 'enterprise' ? { workspaceName: 'SDK host contract' } : {}),
-    }),
+    })),
   });
   assert.equal(response.status, 201);
   return response.json();
@@ -51,8 +52,8 @@ test('trusted host facade interoperates with the authenticated workspace API ove
   app.addHook('onRequest', async () => { calls++; });
   const origin = await app.listen({ host: '127.0.0.1', port: 0 });
   const runId = randomUUID();
-  const owner = await register(origin, 'sdk-host-owner+' + runId + '@example.test', 'enterprise');
-  const member = await register(origin, 'sdk-host-member+' + runId + '@example.test', 'personal');
+  const owner = await register(app, origin, 'sdk-host-owner+' + runId + '@example.test', 'enterprise');
+  const member = await register(app, origin, 'sdk-host-member+' + runId + '@example.test', 'personal');
   const team = owner.workspaces[0].id;
   const personal = member.workspaces[0].id;
   const requestFor = (session, workspaceId) => createWorkspaceHttpRequest({

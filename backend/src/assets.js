@@ -38,6 +38,10 @@ export async function taskAssets(db, context, identifiers, capability) {
   if (capability.requiresConsent && assets.some(asset => !asset.consent_reference || !asset.consent_expires_at || new Date(asset.consent_expires_at).getTime() <= Date.now())) {
     throw new ApiError(422, 'CONSENT_REQUIRED', 'A valid asset authorization and expiry are required');
   }
+  if (capability.id === 'video.reference' && !assets.some(asset => asset.media_type === 'video/mp4')) throw invalid('请选择已授权的参考视频');
+  if (capability.id === 'video.from-image' && (identifiers.length !== 1 || !['image/png', 'image/jpeg'].includes(assets[0].media_type))) {
+    throw invalid('请选择一张 PNG 或 JPEG 首帧图片');
+  }
   if (['video.try-on','video.replace-product'].includes(capability.id)) {
     const clip=ids.map(id=>assets.find(asset=>asset.id===id)).find(asset=>asset?.media_type==='video/mp4');
     if (clip?.video_eligible!=='true') throw new ApiError(422,'VIDEO_PREFLIGHT_REQUIRED','Complete the source MP4 review before submitting this task');

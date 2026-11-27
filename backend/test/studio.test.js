@@ -1,9 +1,9 @@
-
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test, { after, before } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres } from '../src/db.js';
 import { createProviders } from '../src/providers.js';
 import { provisionCredits } from '../src/wallet.js';
@@ -25,9 +25,9 @@ before(async () => {
   await migrate(db);
   app = await buildApp({ db, providers, shops });
   await app.ready();
-  const register = async email => data(await send('POST', '/v1/auth/register', null, {
+  const register = async email => data(await send('POST', '/v1/auth/register', null, await registrationPayload(app, {
     email, password: 'studio-test-password', type: 'enterprise', workspaceName: 'Studio QA', displayName: email,
-  }), 201);
+  })), 201);
   owner = await register('studio-owner@example.test');
   other = await register('studio-other@example.test');
 });

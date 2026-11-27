@@ -1,3 +1,4 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
@@ -6,7 +7,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres } from '../src/db.js';
 
 const playwrightPath = process.env.FAI_TEST_PLAYWRIGHT_PATH;
@@ -61,10 +62,10 @@ test('the browser SDK exchanges assets with an allowed host and blocks an unlist
     const registration = await fetch(origin + '/v1/auth/register', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
+      body: JSON.stringify(await registrationPayload(app, {
         email: randomUUID() + '@example.test', password: 'sdk-browser-fixture-42',
         displayName: 'SDK browser fixture', type: 'personal',
-      }),
+      })),
     });
     assert.equal(registration.status, 201);
     const session = await registration.json();

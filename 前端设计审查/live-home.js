@@ -38,15 +38,14 @@ function recentDrafts(drafts) {
       others.map(d => item(d.title, date(d.updatedAt), link('继续编辑', 'drafts/' + path(d.id)))).join('') + '</details>' : ''));
 }
 
-function videoDesk(ctx, plugin, wallet, tools, render, planning, tasks) {
+function videoDesk(ctx, plugin, wallet, render, planning, tasks) {
   const [mode, route] = videoModes.find(([id]) => id === ctx.args[1]) ?? videoModes[0];
   const tabs = generationModeTabs('视频生成模式', videoModes, mode);
+  const showWorkflow = mode !== 'skills' && !(mode === 'director' && ctx.args[2]);
   const embedded = { ...ctx, html: body => {
-    render('<div class="live-video-generation">' + tabs + (mode === 'director' && ctx.args[2] ? '' : dualModePanel('video')) +
-      '<div class="live-video-workflow">' + body + '</div></div>' +
-      '<details class="live-fold"><summary>更多视频工具</summary><div class="live-row">' +
-      link('视频导出', 'media/video') + '</div>' + tools + '</details>');
-    bindDualModePanel(document.querySelector('#main'), 'video');
+    render('<div class="live-video-generation">' + tabs + (showWorkflow ? dualModePanel('video') : '') +
+      '<div class="live-video-workflow">' + body + '</div></div>');
+    if (showWorkflow) bindDualModePanel(document.querySelector('#main'), 'video');
   } };
   if(mode==='skills')return import('./media-skill-desk.js').then(m=>m.mediaSkillDesk(embedded,plugin,wallet,ctx.args[2]));
   if (mode === 'director') {
@@ -63,40 +62,23 @@ export async function dashboard(ctx) {
   const current = Object.hasOwn(deskSections, ctx.args[0]) ? ctx.args[0] : 'image';
   const section = deskSections[current];
   const operations = current === 'operations';
+  const generation = current === 'image' || current === 'video';
   const [wallet, catalog, tasks, messages, drafts, settings, imageDirectory] = await Promise.all([
-    ctx.api('/v1/credits/wallet'), ctx.api('/v1/plugins'), ctx.api('/v1/tasks?limit=30'),
-    ctx.api('/v1/notifications?limit=1'),
+    ctx.api('/v1/credits/wallet'), ctx.api('/v1/plugins'), current === 'image' ? null : ctx.api('/v1/tasks?limit=30'),
+    generation ? null : ctx.api('/v1/notifications?limit=1'),
     operations ? ctx.api('/v1/studio/pinduoduo-drafts?limit=3') : null,
     operations ? ctx.api('/v1/settings') : null,
     current === 'image' && ctx.args[1] !== 'skills' ? ctx.api('/v1/models?capabilityId=' + mainImageCapabilityId) : null,
   ]);
   if (!ctx.active()) return;
-  const capabilityNames = new Map([...catalog.items, catalog.models].flatMap(plugin =>
-    plugin.capabilities.map(c => [c.id, cardTitle(c)])));
   const plugin = catalog.items.find(entry => entry.id === current);
-  const recent = tasks.items.filter(task => task.pluginId === current).slice(0, 5);
-  const links = (section.links ?? []).map(([label, route]) => link(label, route)).join('');
+  const planning = catalog.models.capabilities.find(entry => entry.id === agentImagePlannerId);
+  const stage = content => '<div class="live-desk-stage">' + content + '</div>';
+  const render = content => ctx.html(stage(heading(section.label) + content));
+  if (current === 'video') return videoDesk(ctx, plugin, wallet, render, planning, tasks.items);
   const tools = plugin?.capabilities.length ? '<div class="live-catalog-grid">' + capabilityLinks(plugin, ctx).join('') + '</div>'
     : notice('当前分类暂无已登记的能力。');
-  const imageGeneration = current === 'image';
-  const mainImage = plugin?.capabilities.find(entry => entry.id === mainImageCapabilityId);
-  const mode = ['advanced', 'agent'].includes(ctx.args[1]) ? ctx.args[1] : 'quick';
-  const planning = catalog.models.capabilities.find(entry => entry.id === agentImagePlannerId);
-  const render = (content, embedded = false) => ctx.html('<div class="live-desk-stage">' +
-    (embedded ? content : heading(section.label) + content) + '</div>' +
-    '<div class="live-desk-lower">' +
-    '<div>' + (operations ? recentDrafts(drafts.items) : '') +
-    panel('近期' + section.label + '任务', list(recent, t => '<div class="live-task-line"><div><strong>' +
-      h(capabilityNames.get(t.capabilityId) ?? t.capabilityId) + '</strong>' +
-      '<p class="live-muted"><span class="task-state-dot" data-state="' + h(t.state) + '">' +
-      h(taskStates[t.state] ?? t.state) + '</span> · ' + h(date(t.createdAt)) + '</p></div>' +
-      link('查看任务', 'tasks/' + path(t.id)) + '</div>', tasks.items.length === 30
-        ? '最近 30 个工作区任务中没有此插件的记录。' : '此插件暂无任务。')) + '</div>' +
-    '<div class="live-desk-tools"><div class="live-account-strip">' + link('可用 ' + wallet.available + ' 积分 · 预占 ' + wallet.reserved, 'account') +
-    link('消息 · ' + messages.unread + ' 条未读', 'inbox') + '</div>' +
-    (operations ? onboarding(settings.preferences) : '') + '</div></div>');
-  if (current === 'video') return videoDesk(ctx, plugin, wallet, tools, render, planning, tasks.items);
-  if (imageGeneration) {
+  if (current === 'image') {
     if(ctx.args[1]==='skills'){
       const nav = imageGenerationTabs('skills');
       const {mediaSkillDesk}=await import('./media-skill-desk.js');
@@ -105,6 +87,8 @@ export async function dashboard(ctx) {
         bindDualModePanel(document.querySelector('#main'), 'image');
       }},plugin,wallet,ctx.args[2]);
     }
+    const mainImage = plugin?.capabilities.find(entry => entry.id === mainImageCapabilityId);
+    const mode = ['advanced', 'agent'].includes(ctx.args[1]) ? ctx.args[1] : 'quick';
     render(dualModePanel('image') + imageGenerationForm(wallet, mainImage, mode, planning, imageDirectory.items) +
       '<details class="live-fold"><summary>更多图片工具</summary><div class="live-row">' +
       link('图片处理', 'media/images') + link('PSD 分层设计', 'psd') + '</div>' + tools + '</details>');
@@ -113,9 +97,23 @@ export async function dashboard(ctx) {
     return;
   }
   const scene = { 'customer-service': customerPage, operations: operationsPage, copywriting: copyReviewPage }[current];
+  const capabilityNames = new Map([...catalog.items, catalog.models].flatMap(entry =>
+    entry.capabilities.map(c => [c.id, cardTitle(c)])));
+  const recent = tasks.items.filter(task => task.pluginId === current).slice(0, 5);
+  const links = (section.links ?? []).map(([label, route]) => link(label, route)).join('');
   const extra = '<details class="live-fold desk-extra"><summary>更多' + h(section.label) + '工具</summary>' +
     '<div class="live-row">' + links + '</div>' + tools + '</details>';
-  await scene({ ...ctx, args: ctx.args.slice(1), html: body => render(body + extra, true) });
+  const lower = '<div class="live-desk-lower"><div>' + (operations ? recentDrafts(drafts.items) : '') +
+    panel('近期' + section.label + '任务', list(recent, t => '<div class="live-task-line"><div><strong>' +
+      h(capabilityNames.get(t.capabilityId) ?? t.capabilityId) + '</strong>' +
+      '<p class="live-muted"><span class="task-state-dot" data-state="' + h(t.state) + '">' +
+      h(taskStates[t.state] ?? t.state) + '</span> · ' + h(date(t.createdAt)) + '</p></div>' +
+      link('查看任务', 'tasks/' + path(t.id)) + '</div>', tasks.items.length === 30
+        ? '最近 30 个工作区任务中没有此插件的记录。' : '此插件暂无任务。')) + '</div>' +
+    '<div class="live-desk-tools"><div class="live-account-strip">' + link('可用 ' + wallet.available + ' 积分 · 预占 ' + wallet.reserved, 'account') +
+    link('消息 · ' + messages.unread + ' 条未读', 'inbox') + '</div>' +
+    (operations ? onboarding(settings.preferences) : '') + '</div></div>';
+  await scene({ ...ctx, args: ctx.args.slice(1), html: body => ctx.html(stage(body + extra) + lower) });
   if (!ctx.active()) return;
   if (!operations) return;
   bindOnboarding(ctx);

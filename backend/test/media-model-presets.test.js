@@ -107,7 +107,8 @@ for (const c of cases) {
         assert.deepEqual(body.input.media, assets.length ? [{ type: 'first_frame', url: dataUrl }] : undefined);
       } else if (c.model === 'kling-4.0') {
         assert.equal(body.settings.duration, 5);
-        assert.deepEqual(body.contents[1], assets.length ? { type: 'first_frame', id: 'start', url: png } : undefined);
+        if (assets.length) assert.deepEqual(body.contents[1], { type: 'first_frame', id: 'start', url: png });
+        else assert.equal(body.prompt, prompt);
       } else {
         assert.deepEqual(body.content[1], assets.length ? { type: 'image_url', role: 'first_frame', image_url: { url: dataUrl } } : undefined);
         if (c.model === 'MiniMax-H3') assert.equal(body.ratio, assets.length ? 'adaptive' : '16:9');

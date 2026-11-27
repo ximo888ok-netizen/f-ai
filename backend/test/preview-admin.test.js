@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-test('local startup ignores legacy seed credentials and creates no preview owner or opening balance', {timeout:60000}, async t => {
+test('local startup rejects legacy seed credentials and unverified registration', {timeout:60000}, async t => {
   const child = spawn(process.execPath,[fileURLToPath(new URL('../src/local-studio.js',import.meta.url))], {
     windowsHide:true, stdio:['ignore','pipe','pipe'],
     env:{...process.env,FAI_LOCAL_STUDIO_PORT:'0',FAI_DESKTOP_STATE_DIR:'',
@@ -22,12 +22,9 @@ test('local startup ignores legacy seed credentials and creates no preview owner
   assert.ok(origin,'local server is ready');
   const post=(path,body)=>fetch(origin+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
   assert.equal((await post('/v1/auth/login',{email:'admin',password:'unused-password'})).status,400);
-  assert.equal((await post('/v1/auth/login',{email:'admin@preview.invalid',password:'unused-password'})).status,401);
-  const created=await post('/v1/auth/register',{email:'owner@example.test',password:'registered-password',displayName:'Owner',type:'enterprise',workspaceName:'Workspace'});
-  assert.equal(created.status,201);
-  const session=await created.json();
-  const headers={authorization:'Bearer '+session.token,'x-workspace-id':session.workspaces[0].id};
-  const wallet=await fetch(origin+'/v1/credits/wallet',{headers});
-  assert.equal(wallet.status,200);
-  assert.equal((await wallet.json()).available,0);
+  assert.equal((await post('/v1/auth/login',{email:'admin@preview.invalid',password:'unused-password'})).status,400);
+  const challenge=await (await fetch(origin+'/v1/auth/captcha')).json();
+  assert.match(challenge.image,/^data:image\/png;base64,/);
+  const unverified=await post('/v1/auth/register',{email:'owner@example.test',password:'registered-password',displayName:'Owner',type:'enterprise',workspaceName:'Workspace'});
+  assert.equal(unverified.status,400);
 });

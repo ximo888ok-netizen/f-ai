@@ -1,10 +1,11 @@
+import { buildAuthTestApp as buildApp, loginPayload, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import test from 'node:test';
 import { createCanvas } from '@napi-rs/canvas';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { createCustomerAnswer } from '../src/customer-answer.js';
 import { migrate, postgres } from '../src/db.js';
 import { installModels } from '../src/models.js';
@@ -26,10 +27,10 @@ async function call(app,member,method,url,status,payload) {
 }
 
 async function member(app,email,enterprise=false) {
-  const session=await call(app,null,'POST','/v1/auth/register',201,{
+  const session=await call(app,null,'POST','/v1/auth/register',201,await registrationPayload(app, {
     email:email+'@example.test',password:'synthetic-workflow-fixture',displayName:email,
     type:enterprise?'enterprise':'personal',...(enterprise?{workspaceName:'Fixture company'}:{}),
-  });
+  }));
   return {...session,workspace:session.workspaces[0].id};
 }
 
@@ -303,10 +304,10 @@ test('enterprise agency book applies historic rates, exact partial reversals, tw
   const {app,db}=await fixture(t);
   const owner=await member(app,'agency-ledger-owner',true);
   const parent=await join(app,owner,await member(app,'agency-parent'));
-  const agentSession=await call(app,null,'POST','/v1/auth/register',201,{
-    type:'agent',email:'agency-direct@example.test',displayName:'Direct QA agent',password:'synthetic-agency-password'});
+  const agentSession=await call(app,null,'POST','/v1/auth/register',201,await registrationPayload(app, {
+    type:'agent',email:'agency-direct@example.test',displayName:'Direct QA agent',password:'synthetic-agency-password'}));
   const personal={...agentSession,workspace:agentSession.workspaces[0].id};
-  const login=await call(app,null,'POST','/v1/auth/login',200,{email:agentSession.account.email,password:'synthetic-agency-password'});
+  const login=await call(app,null,'POST','/v1/auth/login',200,await loginPayload(app, {email:agentSession.account.email,password:'synthetic-agency-password'}));
   assert.equal(login.account.type,'agent');
   const agent=await join(app,owner,personal);
   const third=await join(app,owner,await member(app,'agency-third'));

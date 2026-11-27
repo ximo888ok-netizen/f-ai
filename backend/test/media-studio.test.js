@@ -1,3 +1,4 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -9,7 +10,7 @@ import { promisify } from 'node:util';
 import { createCanvas,loadImage } from '@napi-rs/canvas';
 import { PGlite } from '@electric-sql/pglite';
 import { imageSize } from 'image-size';
-import { buildApp } from '../src/app.js';
+
 import { migrate,postgres } from '../src/db.js';
 import { createVideoDelivery } from '../src/video-delivery.js';
 import { createProviders } from '../src/providers.js';
@@ -42,9 +43,9 @@ async function fixture(t,render,providers) {
   t.after(async()=>{await app.close();await db.close();});
   await migrate(db);
   async function user(handle) {
-    const response=await app.inject({method:'POST',url:'/v1/auth/register',payload:{
+    const response=await app.inject({method:'POST',url:'/v1/auth/register',payload:await registrationPayload(app, {
       email:handle+'@example.test',password:'media-integration-fixture',displayName:handle,type:'personal',
-    }});
+    })});
     assert.equal(response.statusCode,201,response.body);
     const {token,account,workspaces}=response.json();
     const workspace=workspaces[0].id;

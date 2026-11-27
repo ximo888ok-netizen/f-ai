@@ -83,8 +83,7 @@ export async function library(ctx) {
 
 export async function manager(ctx) {
   const plugins = await getCatalog(ctx);
-  const merchant = ctx.enterprise && ctx.manager ? '<p><a class="smallbtn" href="/merchant#features">在商家后台设置</a></p>' : '';
-  ctx.html(heading('插件能力', '查看当前工作区可用的功能。') + merchant + grid(...plugins.map(plugin => panel(plugin.name,
+  ctx.html(heading('插件能力', '查看当前工作区可用的功能。') + grid(...plugins.map(plugin => panel(plugin.name,
     item(plugin.enabled ? '已启用' : '已停用', plugin.capabilities.filter(cap => cap.available).length + ' 项已配置能力',
       ctx.manager && !ctx.enterprise ? action(plugin.enabled ? '停用' : '启用', 'plugin-state', plugin.id) : '') +
     link('查看能力', 'create/' + plugin.id)))));

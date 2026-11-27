@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { respond } from '../../前端设计审查/live-agent-dialogue.js';
-import { interpret } from '../../前端设计审查/live-agent-model.js';
+import { interpret, referencedChat } from '../../前端设计审查/live-agent-model.js';
 
 test('draft conversations reuse the selected product and keep a stable write ID across retries', async () => {
   const writes = [], thread = { messages: [] };
@@ -47,4 +47,14 @@ test('the model can propose a known operation but cannot introduce an endpoint',
     return {id:'model-task',state:'succeeded',result:{text:'{"action":"products","value":"夏季"}'}};
   };
   assert.deepEqual(await interpret(ctx, [{role:'user',text:'瞧瞧夏季的货品'}], () => {}, 'selected-model'), {action:'products',value:'夏季'});
+});
+
+test('gateway enhancement sends a real chat task without a named provider override', async () => {
+  const ctx = {api:async (url,{body}) => {
+    assert.equal(url,'/v1/tasks');
+    assert.equal(Object.hasOwn(body,'modelId'),false);
+    assert.equal(body.parameters.messages.at(-1).content,'写主图说明');
+    return {id:'gateway-task',state:'succeeded',result:{text:'写一段突出材质的主图说明。'}};
+  }};
+  assert.equal(await referencedChat(ctx, {}, null, {draft:'写主图说明'}),'写一段突出材质的主图说明。');
 });

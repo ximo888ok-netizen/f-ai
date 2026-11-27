@@ -1,3 +1,4 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -5,7 +6,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { initializeCanvas, readPsd } from 'ag-psd';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { imageSize } from 'image-size';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres, row } from '../src/db.js';
 import { createProviders } from '../src/providers.js';
 import { config } from '../src/config.js';
@@ -24,9 +25,9 @@ const openControl = () => cutoverControlUrl && dedicatedUrl ? postgres(cutoverCo
 const openDedicated = () => cutoverControlUrl && dedicatedUrl ? postgres(dedicatedUrl) : new PGlite();
 
 async function register(app, email, type = 'enterprise') {
-  const response = await app.inject({method:'POST',url:'/v1/auth/register',payload:{
+  const response = await app.inject({method:'POST',url:'/v1/auth/register',payload:await registrationPayload(app, {
     email,password:'demo-testing-password',displayName:'Studio QA',type,...(type==='enterprise' && {workspaceName:'QA Business'}),
-  }});
+  })});
   assert.equal(response.statusCode,201,response.body);
   const result=response.json();
   return {...result,workspace:result.workspaces[0].id};

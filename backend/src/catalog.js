@@ -22,6 +22,11 @@ const mediaParameters = object({
     keepAudio: { type: 'boolean' }, editInstructions: text(2000),
   }, []),
 }, []);
+const videoGenerationParameters = object({
+  ...mediaParameters.properties, ratio: { type: 'string', pattern: '^\\d{1,3}:\\d{1,3}$' },
+  options: object({ ...mediaParameters.properties.options.properties, durationSeconds: { type: 'integer', minimum: 1 },
+    resolution: text(20), generateAudio: { type: 'boolean' } }, []),
+}, []);
 const copyParameters = object({
   product: text(4000), platform: platforms, language: choice('zh', 'en'),
   format: choice('main-image', 'detail-page', 'sku'), instructions: text(2000),
@@ -100,7 +105,9 @@ for (const [pluginId, execution, parameters, entries] of definitions) {
   for (const [slug, name, minAssets = 0, requiresConsent = false] of entries) {
     const id = pluginId + '.' + slug;
     catalog.set(id, {
-      id, name, pluginId, execution, parameters, minAssets, requiresConsent,
+      id, name, pluginId, execution,
+      parameters: ['video.compose', 'video.from-image', 'video.reference'].includes(id) ? videoGenerationParameters : parameters,
+      minAssets, requiresConsent,
       requiresConfirmation: confirmations.has(id),
       modes: ['chat', 'workflow'],
       cost: execution === 'endpoint' ? 0 : execution === 'local' ? 1 : ({ video: 5, image: 3 }[pluginId] ?? 2),

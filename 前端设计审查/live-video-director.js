@@ -2,10 +2,11 @@ import { waitForModelTask } from './live-agent-model.js';
 import { describeError } from './studio-errors.js';
 import { uid } from './live-ui.js';
 import { videoLimits, videoTaskInput } from './live-video-prompt-options.js';
+import { readVideoSettings, updateVideoSettings } from './live-video-settings.js';
 import { bindVideoQuickMedia } from './live-video-quick-media.js';
 import { directorDirections, directorFacts, directorPlanInput } from './live-video-director-plan.js';
 import { directorStage, directorSteps, videoDirectorView } from './live-video-director-view.js';
-import { bindVideoResult, frameVideoCapabilityId, loadFrameVideo, updateFrameVideoSettings, updateVideoProgress,
+import { bindVideoResult, frameVideoCapabilityId, loadFrameVideo, updateVideoProgress,
   videoTaskLink, videoTaskPending } from './live-video-workflow.js';
 
 const requestLabels = { insights: '挖掘商品信息', directions: '生成创作方向', script: '生成脚本', video: '确认脚本并生成' };
@@ -58,7 +59,7 @@ export async function videoDirectorPage(ctx, plugin, wallet, planner, tasks, sto
   }
 
   function sync() {
-    if (phase === 'setup') updateFrameVideoSettings(root, fields, bounds());
+    if (phase === 'setup') updateVideoSettings(root, fields, bounds());
     const kind = nextRequest(phase, run);
     const waiting = videoTaskPending(run?.attempts[kind]?.task);
     const cost = waiting || run?.completed ? 0 : kind === 'video' ? videoCost : planCost;
@@ -72,6 +73,7 @@ export async function videoDirectorPage(ctx, plugin, wallet, planner, tasks, sto
       run?.reviseScript ? '重试生成视频' : requestLabels[kind];
     reset.disabled = busy;
     if (!busy) report(issue);
+    form.dispatchEvent(new Event('video-settings-change'));
   }
 
   function render(focus = false) {
@@ -124,7 +126,7 @@ export async function videoDirectorPage(ctx, plugin, wallet, planner, tasks, sto
     if (busy || issue || run?.completed || !ctx.active()) return;
     if (!run) {
       run = { frame: media.frame(), input: { notes: fields.notes.value.trim(), modelId: fields.modelId.value,
-        ratio: fields.ratio.value, duration: Number(fields.duration.value) }, selectedFacts: new Set(), attempts: {}, taskLinks: {} };
+        ...readVideoSettings(fields) }, selectedFacts: new Set(), attempts: {}, taskLinks: {} };
       leftNotice('请在右侧继续确认。');
     }
     const kind = nextRequest(phase, run);

@@ -1,4 +1,5 @@
 import { modelProviders } from './merchant-connections.js';
+import { featureAllowed, memberFeatureSettings } from './merchant-features.js';
 import { createHash } from 'node:crypto';
 import { catalog, modelAlias } from './catalog.js';
 import { invalid, object, route as httpRoute, text } from './http.js';
@@ -9,6 +10,7 @@ import { pollMapped, runMapped, validateMappedMedia, validateMapping } from './m
 import { generateText, textCapabilities, textPrompt, textRequest } from './model-text.js';
 import { utilityCapabilities, runUtility } from './model-utilities.js';
 import { pollVideo, startVideo, videoInputLimits } from './model-video.js';
+import { configuredVideoOptions, validateVideoOptions, videoInputModes } from './video-options.js';
 
 const protocols = {
   'openai-embeddings': 'embedding', 'cohere-rerank': 'rerank', 'openai-transcription': 'transcription', 'openai-speech': 'speech',
@@ -31,6 +33,8 @@ function validateParameters(config, capability, params) {
     }
   }
   if (config.kind === 'text' || utilityCapabilities[config.kind]) return;
+  const videoMode = capability.id === 'video.compose' && params.assetIds?.length ? 'frame' : videoInputModes[capability.id];
+  if (videoMode) validateVideoOptions(config.videoOptions?.[videoMode], params);
   if (config.protocol === 'json-http') return validateMappedMedia(config.mapping, params);
   if (!params.prompt?.trim()) throw invalid('This model requires a prompt');
   const count = params.assetIds?.length ?? 0;
@@ -50,13 +54,13 @@ function validateParameters(config, capability, params) {
   if (config.kind === 'video' && count > 1) throw invalid('This model route accepts at most one first-frame image');
   if (capability.id === 'video.from-image' && count !== 1) throw invalid('Select one first-frame image');
   if (params.templateId) throw invalid('Template execution requires a workflow provider');
-  const supportedOptions = config.kind === 'video' ? ['durationSeconds'] : [];
+  const supportedOptions = config.kind === 'video' ? ['durationSeconds', 'resolution', 'generateAudio'] : [];
   if (Object.keys(params.options ?? {}).some(key => !supportedOptions.includes(key))) throw invalid('Unsupported model option');
   if (params.format && !(config.kind === 'image' ? ['png', 'jpg'] : ['mp4']).includes(params.format)) throw invalid('Unsupported model output format');
   if (config.protocol === 'openai-images' && params.ratio && params.ratio !== '1:1') throw invalid('This route supports explicit square images only');
   if (config.protocol === 'runway-video') {
     const ratios = count ? ['16:9', '9:16', '1:1'] : ['16:9', '9:16'];
-    if ((params.ratio && !ratios.includes(params.ratio)) || params.prompt.length > 1000 || params.options?.durationSeconds < 2) throw invalid('Unsupported Runway ratio, duration or prompt length');
+    if ((params.ratio && !(config.videoOptions?.[videoMode]?.ratios ?? ratios).includes(params.ratio)) || params.prompt.length > 1000 || params.options?.durationSeconds < 2) throw invalid('Unsupported Runway ratio, duration or prompt length');
   }
   if (config.protocol === 'minimax-video' && params.ratio) throw invalid('This video route does not accept an aspect ratio');
 }
@@ -106,6 +110,8 @@ export function installModels(providers, definitions, env = process.env) {
     const capabilities = entry.capabilities ?? supported;
     if (!Array.isArray(capabilities) || !capabilities.length || capabilities.some(id => !supported.includes(id))) throw new Error('Invalid capabilities for model ' + entry.id);
     const config = { id: entry.id, model: entry.model, protocol: entry.protocol, kind, mapping: entry.mapping, apiKeyHeader: entry.apiKeyHeader };
+    const videoOptions = configuredVideoOptions(config, entry.videoOptions, capabilities);
+    if (Object.keys(videoOptions).length) config.videoOptions = videoOptions;
     const headers = headersFor(config, key);
     if (entry.streamText!==undefined && typeof entry.streamText!=='boolean') throw new Error('streamText must be a boolean');
     const streaming=entry.streamText===true;
@@ -114,8 +120,10 @@ export function installModels(providers, definitions, env = process.env) {
     }
     const videoLimits = videoInputLimits(config);
     const info = { id: config.id, model: config.model, protocol: config.protocol, kind, capabilities: [...new Set(capabilities)],
-      ...(videoLimits ? { videoLimits } : {}), streamText: streaming, imageQuality: supportsImageQuality(config) };
-    const signature = createHash('sha256').update(JSON.stringify([base.href,config,entry.keyEnv,...(streaming?[true]:[])])).digest('hex');
+      ...(videoLimits ? { videoLimits } : {}), ...(config.videoOptions ? { videoOptions } : {}),
+      streamText: streaming, imageQuality: supportsImageQuality(config) };
+    const signatureConfig = { ...config, videoOptions: entry.videoOptions };
+    const signature = createHash('sha256').update(JSON.stringify([base.href,signatureConfig,entry.keyEnv,...(streaming?[true]:[])])).digest('hex');
     const call = (path,body,extra,binary=false,timeout) => requestUpstream(new URL(path,base), {
       body, headers: { ...headers, ...extra }, repeatable: body === undefined,
       maxBytes: binary ? 10 * 1024 * 1024 : ['image', 'embedding'].includes(kind) ? 15 * 1024 * 1024 : 512 * 1024,
@@ -155,9 +163,21 @@ export function registerModels(app, providers, db) {
   httpRoute(app, 'GET', '/v1/models', {
     tags: ['Models'], summary: 'List configured upstream model aliases for task submission',
     querystring: object({ capabilityId: { type: 'string', enum: [...catalog.keys()] } }, []),
-  }, async request => ({
-    items: [...(await modelProviders(db, request.context.workspaceId, providers)).values()].map(provider => provider.info)
-      .filter(info => info && (!request.query.capabilityId || info.capabilities.includes(request.query.capabilityId)))
-      .map(info => ({ ...info, imageQuality: info.imageQuality === true })),
-  }));
+  }, async request => {
+    const [available, settings] = await Promise.all([
+      modelProviders(db, request.context.workspaceId, providers), memberFeatureSettings(db, request.context),
+    ]);
+    const items = [];
+    for (const {info} of available.values()) {
+      if (!info) continue;
+      const capabilities = info.capabilities.filter(id => {
+        const capability = catalog.get(id);
+        return capability && featureAllowed(settings.get(capability.pluginId), id);
+      });
+      if (capabilities.length && (!request.query.capabilityId || capabilities.includes(request.query.capabilityId))) {
+        items.push({ ...info, capabilities, imageQuality: info.imageQuality === true });
+      }
+    }
+    return {items};
+  });
 }

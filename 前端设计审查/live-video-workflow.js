@@ -13,16 +13,6 @@ export async function loadFrameVideo(ctx, plugin, tasks) {
   return { capability, available: plugin?.enabled && capability?.available, assets, models: directory.items, recentIds };
 }
 
-export function updateFrameVideoSettings(root, fields, bounds) {
-  fields.duration.min = bounds.min;
-  fields.duration.max = bounds.max;
-  for (const option of fields.ratio) option.disabled = Boolean(option.value && !bounds.ratios.includes(option.value));
-  if (!bounds.ratios.includes(fields.ratio.value)) fields.ratio.value = '';
-  for (const [key, value] of [['min', bounds.min], ['max', bounds.max], ['seconds', fields.duration.value]]) {
-    root.querySelector('[data-video-quick-' + key + ']').textContent = value + ' 秒';
-  }
-}
-
 export function updateVideoProgress(root, phase) {
   for (const [index, step] of [...root.querySelectorAll('.video-quick-progress li')].entries()) {
     if (index === phase) step.setAttribute('aria-current', 'step');

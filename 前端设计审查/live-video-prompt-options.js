@@ -15,37 +15,38 @@ export const videoTemplates = [
   ['口播短片', '开场问题 → 卖点 → 收尾', '用一句与商品用途相关的问题开场，以画面说明已提供的卖点，最后用简短口播收尾。'],
 ];
 
-export const videoRatios = [['', '模型默认'], ['16:9', '16:9'], ['9:16', '9:16'], ['1:1', '1:1'], ['4:3', '4:3'], ['3:4', '3:4']];
-
 export function videoLimits(model, type, capability) {
-  const schema = capability?.parameters?.properties;
-  const ratios = schema?.ratio?.enum ?? [];
-  const duration = schema?.options?.properties?.durationSeconds;
-  const runway = model?.protocol === 'runway-video';
-  const limits = model?.videoLimits;
-  const inputRatio = type === 'frame' && limits?.frameRatioFromImage;
-  const accepted = runway ? (type === 'frame' ? ['16:9', '9:16', '1:1'] : ['16:9', '9:16']) : ratios;
-  return {
-    ratios: model?.protocol === 'minimax-video' || inputRatio ? [] : ratios.filter(ratio => accepted.includes(ratio)),
-    min: Math.max(duration?.minimum ?? 1, limits?.minSeconds ?? (runway ? 2 : 1)), max: duration?.maximum ?? 10,
-    promptMax: runway ? 1000 : schema?.prompt?.maxLength ?? 4000,
-  };
+  const spec = model?.videoOptions?.[type];
+  const durations = spec?.durations ?? [];
+  return { ratios: spec?.ratios ?? [], resolutions: spec?.resolutions ?? [], durations, audio: spec?.audio === true,
+    min: durations[0], max: durations.at(-1),
+    promptMax: model?.protocol === 'runway-video' ? 1000 : capability?.parameters?.properties?.prompt?.maxLength ?? 4000 };
 }
 
-export function videoTaskInput({ capabilityId, modelId, prompt, asset, ratio, duration }) {
+export function videoTaskInput({ capabilityId, modelId, prompt, asset, ratio, duration, resolution, audio }) {
   const parameters = { prompt };
   if (asset) parameters.assetIds = [asset.id];
   if (ratio) parameters.ratio = ratio;
-  if (duration) parameters.options = { durationSeconds: duration };
+  const options = {};
+  if (duration) options.durationSeconds = duration;
+  if (resolution) options.resolution = resolution;
+  if (typeof audio === 'boolean') options.generateAudio = audio;
+  if (Object.keys(options).length) parameters.options = options;
   return { capabilityId, mode: 'workflow', ...(modelId ? { modelId } : {}), parameters };
 }
 
-export function videoPlanInput({ prompt, skill, asset, ratio, duration }, limit) {
+export function videoPlanSettings({ ratio, duration, resolution, audio }) {
+  return [ratio && '画幅 ' + ratio, duration && '时长 ' + duration + ' 秒', resolution && '清晰度 ' + resolution,
+    typeof audio === 'boolean' && (audio ? '有声成片' : '无声成片')].filter(Boolean).join('，');
+}
+
+export function videoPlanInput(input, limit) {
+  const { prompt, skill, asset } = input;
   const direction = videoSkills.find(([id]) => id === skill)?.[3] ?? videoSkills[0][3];
   return { capabilityId: 'model.chat', mode: 'workflow', parameters: { messages: [
     { role: 'system', content: '你是电商短视频编导。返回可直接发给视频模型的一段完整提示词，描述画面、镜头、动作、运镜和节奏。' +
       '使用用户的语言，只返回提示词，最多 ' + limit + ' 字。只知道用户给出的文字与素材类型，不可声称看过素材，不添加未经提供的商品事实。' },
-    { role: 'user', content: [direction, ratio && '画幅 ' + ratio, duration && '时长 ' + duration + ' 秒',
+    { role: 'user', content: [direction, videoPlanSettings(input),
       asset && '成片时会提供' + (asset.mediaType === 'video/mp4' ? '参考视频' : '首帧图片'), '创作要求：' + prompt].filter(Boolean).join('\n') },
   ] } };
 }

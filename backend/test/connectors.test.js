@@ -1,8 +1,9 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres } from '../src/db.js';
 import { createWebdavBindings } from '../src/webdav.js';
 import { createFeishuBindings } from '../src/feishu.js';
@@ -62,9 +63,9 @@ test('WeChat official account and WeCom application verify callbacks, deduplicat
 });
 
 async function register(app,email) {
-  const result=await app.inject({method:'POST',url:'/v1/auth/register',payload:{
+  const result=await app.inject({method:'POST',url:'/v1/auth/register',payload:await registrationPayload(app, {
     email,password:'connector-fixture-password',displayName:'Connector QA',type:'enterprise',workspaceName:'Connector QA',
-  }});
+  })});
   assert.equal(result.statusCode,201,result.body);
   const account=result.json();
   return {...account,workspaceId:account.workspaces[0].id};

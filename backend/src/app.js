@@ -13,6 +13,7 @@ import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import { registerAssets } from './assets.js';
 import { registerAuth } from './auth.js';
+import { createAuthDelivery } from './auth-delivery.js';
 import { registerAgency } from './agency.js';
 import { contracts, errorContracts } from './contracts.js';
 import { registerCustomerService } from './customer.js';
@@ -57,7 +58,7 @@ import { registerCopywritingDrafts } from './copywriting-drafts.js';
 
 export async function buildApp({
   integrations = {}, integrationRunner, mediaRuntime, shopAuth = taobaoSettings(), shopTokenExchange,
-  db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null,
+  db, authVerification = createAuthDelivery(), providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null,
   dedicatedDatabases = new Map(), packagedStudio = false,
   cloudAssets = new Map(), feishu = new Map(), wechat = new Map(), sms = new Map(), realtimeVoice = new Map(),
   videoDelivery = null, customerAnswer = null, loopbackOnly = false,
@@ -73,7 +74,7 @@ export async function buildApp({
   await app.register(cors, {
     origin: origins,
     allowedHeaders: ['authorization', 'content-type', 'x-workspace-id'],
-    exposedHeaders: ['content-disposition', 'x-content-sha256', 'x-request-id'],
+    exposedHeaders: ['content-disposition', 'x-content-sha256', 'x-request-id', 'retry-after'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
   await app.register(rateLimit, {
@@ -154,7 +155,7 @@ export async function buildApp({
 
   registerStudio(app, packagedStudio);
   registerVersionHelp(app);
-  registerAuth(app, db);
+  registerAuth(app, db, authVerification);
   app.decorate('verifyFeature', (context, plugin) => {
     const capability = catalog.get(plugin);
     return requireFeature(workspaceDb, context, capability?.pluginId ?? plugin, capability?.id);

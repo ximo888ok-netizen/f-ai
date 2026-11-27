@@ -1,3 +1,4 @@
+import { fixtureCaptchaAnswer, fixtureIdentity, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -31,9 +32,9 @@ test('platform owner manages members, access, credits, features, connections and
   cloudAssets.set(session.workspaces[0].id, { check: async () => { checks++; } });
   page.on('dialog', dialog => dialog.accept());
   const memberEmail = randomUUID() + '@example.test';
-  const registration = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: {
+  const registration = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: await registrationPayload(app, {
     email: memberEmail, password: 'platform-member-fixture', displayName: '平台验收成员', type: 'personal',
-  } });
+  }) });
   assert.equal(registration.statusCode, 201, registration.body);
   const member = registration.json();
   const memberId = member.account.id;
@@ -252,7 +253,8 @@ test('platform owner manages members, access, credits, features, connections and
   await memberPage.goto(origin + '/#account');
   await memberAction('从个人工作台退出登录', memberPage.locator('#main [data-logout]'), 'POST', '/v1/auth/logout', 204);
   const personalLogin = form(memberPage, 'auth');
-  await type(personalLogin, { email: memberEmail, password: 'platform-member-fixture' });
+  await personalLogin.locator('[data-captcha-image]').waitFor();
+  await type(personalLogin, { identifier: fixtureIdentity(memberEmail).username, password: 'platform-member-fixture', captchaAnswer: fixtureCaptchaAnswer });
   const personalSession = await memberAction('重新登录工作台个人账号', submit(personalLogin), 'POST', '/v1/auth/login', 200);
   assert.equal((await personalSession.json()).account.id, memberId);
   await memberPage.locator('#profile').click();

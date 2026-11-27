@@ -10,6 +10,7 @@ import { ApiError } from './http.js';
 import { ProviderError, taskProvider } from './providers.js';
 import { dispatchSchedule } from './schedules.js';
 import { capabilitySignature, finishTask, shopFingerprint } from './tasks.js';
+import { matchesTaskContract } from './video-options.js';
 import { modelProviders, requireConnection, shopGrantExpired } from './merchant-connections.js';
 import { requireFeature } from './merchant-features.js';
 import { accessibleProject } from './merchant-projects.js';
@@ -117,7 +118,7 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
   let failure;
   try {
     if (!capability || !provider?.supports(capability)) throw new ProviderError('CAPABILITY_UNAVAILABLE');
-    if (task.input.capabilitySignature && task.input.capabilitySignature !== capabilitySignature(capability)) {
+    if (task.input.capabilitySignature && !matchesTaskContract(capability.id, task.input.capabilitySignature, capabilitySignature(capability))) {
       throw new ProviderError('CAPABILITY_CONFIGURATION_CHANGED');
     }
     if (provider.signature && task.input.modelSignature !== provider.signature) throw new ProviderError('MODEL_CONFIGURATION_CHANGED');

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { createStudioFixture } from '../test-support/ui-actions.js';
 
-test('the merchant and workbench links preserve the signed-in workspace in the same Chrome tab',
+test('customer pages offer no merchant entry while direct merchant navigation preserves the signed-in workspace',
   { skip: !process.env.FAI_TEST_PLAYWRIGHT_PATH, timeout: 120000 }, async t => {
     const { page, origin, workspace, open } = await createStudioFixture(t);
     const recentResponses = [];
@@ -18,14 +18,14 @@ test('the merchant and workbench links preserve the signed-in workspace in the s
     await open('/merchant#members', page.getByRole('heading', { name: '成员与邀请', exact: true }));
     await page.bringToFront();
 
-    async function crossDocument(label, link, destination, api, heading) {
+    async function crossDocument(label, navigate, destination, api, heading) {
       try {
         const [response] = await Promise.all([page.waitForResponse(result => {
           const url = new URL(result.url());
           return url.origin === origin && url.pathname === api && result.request().method() === 'GET';
         }, { timeout: 30000 }), page.waitForURL(url => url.origin === origin && url.pathname === destination,
           { waitUntil: 'commit', timeout: 30000 }),
-        link.click({ noWaitAfter: true })]);
+        navigate()]);
         assert.equal(response.status(), 200);
         assert.equal((await response.request().allHeaders())['x-workspace-id'], workspace);
         assert.ok((await response.json()).items.length > 0);
@@ -49,9 +49,22 @@ test('the merchant and workbench links preserve the signed-in workspace in the s
       }
     }
 
-    await crossDocument('从商家后台返回同一标签页的工作台', page.getByRole('link', { name: '返回工作台', exact: true }),
+    await crossDocument('从商家后台返回同一标签页的工作台', () => page.getByRole('link', { name: '返回工作台', exact: true }).click({noWaitAfter:true}),
       '/', '/v1/plugins', page.locator('#commerce-directory').getByRole('heading', { name: '电商工作台' }));
     await page.locator('#profile').click();
-    await crossDocument('从工作台打开同一标签页的商家后台', page.locator('#merchantLink'),
+    const adminLinks = page.locator('a[href^="/merchant"], #merchantLink');
+    assert.equal(await adminLinks.count(),0);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+k');
+    const search = page.getByRole('dialog',{name:'查找功能'});
+    await search.getByRole('searchbox').fill('商家后台');
+    await search.getByText('没有匹配功能。',{exact:true}).waitFor();
+    await page.keyboard.press('Escape');
+    for (const hash of ['chat','projects','team','manager','capabilities/connections','cloud-assets','feishu','shops']) {
+      await open(hash);
+      assert.equal(await adminLinks.count(),0,hash);
+      assert.equal(await page.locator('#main [data-retry],#main .live-error').count(),0,hash);
+    }
+    await crossDocument('直接访问已知商家后台地址', () => page.goto(origin + '/merchant#members',{waitUntil:'commit'}),
       '/merchant', '/v1/members', page.getByRole('heading', { name: '成员与邀请', exact: true }));
   });

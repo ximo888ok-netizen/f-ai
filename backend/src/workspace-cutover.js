@@ -23,7 +23,7 @@ const segments = [
   ['sms_messages'],
 ].map(([table, filter = byWorkspace]) => ({table,filter}));
 const identityTables = ['migrations','workspaces','accounts','memberships','sessions','invitations',
-  'workspace_database_routes','workspace_identity_events','dedicated_database_identity'];
+  'workspace_database_routes','workspace_identity_events','dedicated_database_identity','auth_captchas','auth_contact_codes'];
 const expectedTables = [...segments.map(({table})=>table),...identityTables].sort();
 const sequences = ['ledger','task_events','notifications','service_messages'];
 

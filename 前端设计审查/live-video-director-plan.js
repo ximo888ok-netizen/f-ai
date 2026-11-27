@@ -1,3 +1,5 @@
+import { videoPlanSettings } from './live-video-prompt-options.js';
+
 export const factGroups = [
   ['selling', '卖点'], ['pain', '痛点'], ['scene', '使用场景'], ['audience', '适用人群'], ['expression', '表达方式'],
 ];
@@ -34,7 +36,7 @@ export function directorDirections(text) {
 }
 
 export function directorPlanInput(step, run, limit) {
-  const settings = ['时长 ' + run.input.duration + ' 秒', run.input.ratio && '比例 ' + run.input.ratio].filter(Boolean).join('，');
+  const settings = videoPlanSettings(run.input);
   const checked = run.facts?.filter((_, index) => run.selectedFacts.has(index)).map(({ label, value }) => label + '：' + value).join('\n');
   const grounding = '你只收到用户提供的文字。不要声称识别过商品图，不添加未经提供的规格、价格、认证或功效。';
   const directions = run.directions?.[run.selectedDirection];

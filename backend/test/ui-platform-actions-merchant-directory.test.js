@@ -1,3 +1,4 @@
+import { fixtureCaptchaAnswer, fixtureIdentity, registrationPayload } from '../test-support/identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -9,9 +10,9 @@ test('merchant directory controls page records, switch enterprises and handle pe
     const secondWorkspace = randomUUID();
     const personalEmail = randomUUID() + '@example.test';
     const password = 'merchant-personal-qa-only';
-    const registered = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: {
+    const registered = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: await registrationPayload(app, {
       email: personalEmail, password, type: 'personal', displayName: '商家权限测试个人账号',
-    } });
+    }) });
     assert.equal(registered.statusCode, 201, registered.body);
     const personal = registered.json();
 
@@ -105,7 +106,9 @@ test('merchant directory controls page records, switch enterprises and handle pe
     const logout = page.locator('#merchantLogout');
     const logoutRoute = { method: 'POST', path: '/v1/auth/logout', status: 204 };
     async function signIn(label, email, secret, accountId) {
-      await login.locator('[name=email]').fill(email);
+      await login.locator('[data-captcha-image]').waitFor();
+      await login.locator('[name=identifier]').fill(fixtureIdentity(email).username);
+      await login.locator('[name=captchaAnswer]').fill(fixtureCaptchaAnswer);
       await login.locator('[name=password]').fill(secret);
       const response = await act(label, login.getByRole('button', { name: '登录', exact: true }), { method: 'POST', path: '/v1/auth/login' });
       assert.equal((await response.json()).account.id, accountId);

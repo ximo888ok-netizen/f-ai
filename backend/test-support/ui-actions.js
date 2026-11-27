@@ -1,8 +1,9 @@
+import { buildAuthTestApp as buildApp, registrationPayload } from './identity-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { PGlite } from '@electric-sql/pglite';
-import { buildApp } from '../src/app.js';
+
 import { migrate, postgres } from '../src/db.js';
 import { createProviders } from '../src/providers.js';
 import { createVideoDelivery } from '../src/video-delivery.js';
@@ -34,10 +35,10 @@ export async function createStudioFixture(t, { configureProviders, credits = 500
   app = await buildApp({ db, providers, shops, videoDelivery, ...appOptions });
   const origin = await app.listen({ host: '127.0.0.1', port: 0 });
   stop = startWorker({ db, providers, shops }, app.log);
-  const registration = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: {
+  const registration = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: await registrationPayload(app, {
     email: randomUUID() + '@example.test', password: 'synthetic-action-fixture',
     type: 'enterprise', workspaceName: '按钮验收企业', displayName: '按钮验收人员',
-  } });
+  }) });
   assert.equal(registration.statusCode, 201, registration.body);
   const session = registration.json();
   const workspace = session.workspaces[0].id;

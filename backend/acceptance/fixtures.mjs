@@ -1,8 +1,42 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { crc32, deflateSync } from 'node:zlib';
 import { setTimeout as delay } from 'node:timers/promises';
 import { catalog as releaseCatalog } from '../src/catalog.js';
+
+export function identityPayload(node, application, databaseEnv, action, details) {
+  // The candidate's native CAPTCHA renderer must unload before cleanup on Windows.
+  const result = spawnSync(node, [fileURLToPath(import.meta.url), action], {
+    cwd: application, env: databaseEnv, input: JSON.stringify(details), encoding: 'utf8', windowsHide: true, timeout: 30000,
+  });
+  if (result.error) throw result.error;
+  assert.equal(result.status, 0, 'Identity fixture failed: ' + result.stderr.slice(-1200));
+  return JSON.parse(result.stdout);
+}
+
+if (import.meta.main) {
+  const action = process.argv[2];
+  assert.ok(['register', 'login'].includes(action));
+  const details = JSON.parse(readFileSync(0, 'utf8'));
+  const { buildAuthTestApp, registrationPayload, loginPayload } = await import('../test-support/identity-fixture.js');
+  const candidateModule = name => import(pathToFileURL(join(process.cwd(), 'src', name)));
+  const [{ buildApp }, { postgres }] = await Promise.all([candidateModule('app.js'), candidateModule('db.js')]);
+  const db = postgres(process.env.DATABASE_URL);
+  let app;
+  try {
+    app = await buildAuthTestApp({ db }, buildApp);
+    const version = await app.inject({ method: 'GET', url: '/version' });
+    assert.deepEqual(version.json(), { revision: process.env.FAI_RELEASE_REVISION });
+    const prepare = action === 'register' ? registrationPayload : loginPayload;
+    process.stdout.write(JSON.stringify(await prepare(app, details)));
+  } finally {
+    try { await app?.close(); } finally { await db.close(); }
+  }
+}
 
 export function client(origin, session, workspace = session?.workspaces[0].id) {
   return async (method, path, expected, body) => {
@@ -43,15 +77,15 @@ function boundaryPng() {
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
-export async function exerciseWorkspace(origin, owner) {
+export async function exerciseWorkspace(origin, owner, proofs) {
   const api = client(origin, owner);
   for (const enabled of [false, true]) {
     await api('PATCH', '/v1/settings', 200, { rightsNotifications: enabled });
     assert.equal((await api('GET', '/v1/settings', 200)).preferences.rightsNotifications, enabled);
   }
-  const other = await client(origin)('POST', '/v1/auth/register', 201, {
+  const other = await client(origin)('POST', '/v1/auth/register', 201, proofs('register', {
     type: 'personal', displayName: 'QA member', email: 'member@example.test', password: randomUUID(),
-  });
+  }));
   const invitation = await api('POST', '/v1/invitations', 201, { email: other.account.email, role: 'member' });
   await client(origin, other)('POST', '/v1/invitations/accept', 200, { token: invitation.token });
   const member = client(origin, other, owner.workspaces[0].id);

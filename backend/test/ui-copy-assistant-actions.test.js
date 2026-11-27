@@ -16,14 +16,16 @@ test('assistant starter buttons, attachment picker, crop and explicit draft conf
   await act('助手：最近任务',prompt('查看最近任务'),{method:'GET',path:'/v1/tasks'});
   await page.locator('.agent-log').getByText(/没有符合条件的任务/).waitFor();
   await fresh();
-  await page.getByRole('button',{name:'访问范围',exact:true}).click();
-  await page.locator('#composer-access:popover-open').getByText(/当前角色/).waitFor();
-  await page.keyboard.press('Escape');
+  assert.equal(await page.getByRole('button',{name:'访问范围',exact:true}).count(),0);
   await page.locator('.composer-model').click();
-  await page.locator('[data-model-choice=local]').click();
+  await page.locator('#composer-models').getByText('当前工作区尚未启用对话模型。').waitFor();
+  await page.keyboard.press('Escape');
   await page.locator('.composer-add').click();
+  await page.getByRole('button',{name:'@引用文件',exact:true}).click();
   await act('助手：从空素材库选择',page.locator('[data-context-pick]'),{method:'GET',path:'/v1/assets'});
-  await page.locator('[data-upload-main]').waitFor();
+  await page.locator('#composer-context').getByText('暂无可用条目。').waitFor();
+  await page.keyboard.press('Escape');
+  await prompt('做方形主图').click();
   await act('助手：重新选择素材',prompt('选择主图'),{method:'GET',path:'/v1/assets'});
   const png=createCanvas(60,60).toBuffer('image/png');
   const upload=async button=>{
@@ -36,6 +38,7 @@ test('assistant starter buttons, attachment picker, crop and explicit draft conf
   await upload(page.locator('[data-upload-main]'));
   await page.locator('.agent-attach').click();
   await page.locator('.composer-add').click();
+  await page.getByRole('button',{name:'@引用文件',exact:true}).click();
   await upload(page.locator('[data-context-upload]'));
   await fresh();
   await act('助手：方形主图',prompt('做方形主图'),{method:'GET',path:'/v1/assets'});
