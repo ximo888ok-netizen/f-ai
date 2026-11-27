@@ -42,7 +42,7 @@ function videoDesk(ctx, plugin, wallet, tools, render, planning, tasks) {
   const [mode, route] = videoModes.find(([id]) => id === ctx.args[1]) ?? videoModes[0];
   const tabs = generationModeTabs('视频生成模式', videoModes, mode);
   const embedded = { ...ctx, html: body => {
-    render('<div class="live-video-generation">' + tabs + dualModePanel('video') +
+    render('<div class="live-video-generation">' + tabs + (mode === 'director' && ctx.args[2] ? '' : dualModePanel('video')) +
       '<div class="live-video-workflow">' + body + '</div></div>' +
       '<details class="live-fold"><summary>更多视频工具</summary><div class="live-row">' +
       link('视频导出', 'media/video') + '</div>' + tools + '</details>');

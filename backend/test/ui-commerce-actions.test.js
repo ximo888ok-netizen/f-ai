@@ -201,14 +201,31 @@ test('shop directory, all ledger modules, report filters, imports and downloads 
     const committed = (await read(recordPath + '/lookup?reference=' + reference));
     assert.equal(committed.details[editable], changed);
     assert.equal(committed.revision, 2);
-    const filter = kind === 'traffic' ? { from: '2026-11-12', to: '2026-11-12' } : { q: reference };
+    const filter = kind === 'traffic' ? {} : { q: reference };
+    if (model.fields.status) filter.status = details.status;
+    if (model.fields.day) Object.assign(filter, { from: details.day, to: details.day });
+    if (kind === 'inventory') filter.low = 'true';
     const query = await submit('filter-records', filter, { method: 'GET', path: recordPath });
     for (const [key, value] of Object.entries(filter)) assert.equal(new URL(query.url()).searchParams.get(key), value);
     const exported = JSON.parse(await download('导出' + model.label, button('导出本页 JSON')));
     assert.equal(exported.items[0].reference, reference);
     const csv = await download('模板 ' + model.label, button('下载 CSV 表头'));
     assert.match(csv.toString(), new RegExp(model.keyLabel));
+    if (kind === 'orders') {
+      const csvRow = ['PAST-ORDER', '已逾期订单', '2000-01-01', '待发货', '1', '', '2000-01-02'];
+      const csvFile = { name: 'legacy-orders.csv', mimeType: 'text/csv',
+        buffer: Buffer.concat([csv, Buffer.from(csvRow.join(',') + '\r\n')]) };
+      const importedCsv = await (await submit('operation-import', { file: csvFile },
+        { method: 'POST', path: recordPath + '/import' })).json();
+      assert.equal(importedCsv.inserted, 1);
+      assert.equal((await read(recordPath + '/lookup?reference=PAST-ORDER')).details.shipBy, '2000-01-02');
+    }
     const copy = { reference: reference + '-import', details: { ...committed.details } };
+    if (kind === 'performance') {
+      await submit('operation-import', { file: file(kind + '-duplicate.json', { kind, items: [copy] }) },
+        { method: 'POST', path: recordPath + '/import', status: 409 });
+      copy.details.sku = 'BROWSER-SKU-IMPORT';
+    }
     if (kind === 'traffic') copy.details.channel = '推荐';
     const imported = await (await submit('operation-import', { file: file(kind + '.json', { kind, items: [copy] }) },
       { method: 'POST', path: recordPath + '/import' })).json();
@@ -333,7 +350,10 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
     return response.json().items;
   };
   assert.ok(!(await memberBases()).some(base => base.id === knowledge.id));
-  await open('resources/' + knowledge.id, form('grant'));
+  const roster = await read('/v1/members?state=active');
+  assert.ok(roster.items.some(entry => entry.id === member.account.id && entry.role === 'member'));
+  await open('resources', link('打开知识库'));
+  await act('打开已加载成员名单的知识库', link('打开知识库'), { method: 'GET', path: knowledgeUrl + '/grants' });
   const grantPath = knowledgeUrl + '/grants/' + member.account.id;
   await submit('grant', { memberId: member.account.id }, { method: 'PUT', path: grantPath, status: 204 });
   assert.ok((await memberBases()).some(base => base.id === knowledge.id));
@@ -518,7 +538,7 @@ test('commerce query and file report use configured shop bindings and explicit s
   await submit('commerce-report-file', { source: file('report.json', source) }, { method: 'POST', path: integration + '/report' });
   await visible('2026-11-12 · 2 家店铺 · 覆盖不完整');
   await page.locator('[name=reportShop]').selectOption('0');
-  await visible('合成日报门店甲');
+  await page.locator('[data-import-report] .shop-breakdown').getByText('合成日报门店甲', { exact: true }).waitFor();
   await act('展开文件日报原始内容', page.locator('[data-import-report] summary'));
   await page.locator('[data-import-report] pre').waitFor();
   assert.match(await page.locator('[data-import-report] pre').innerText(), /"gmv": 600/);

@@ -24,11 +24,17 @@ test('workspace shell, text and voice tasks, schedules, settings and notificatio
     ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440', '-t', '0.25', '-c:a', 'libmp3lame', '-f', 'mp3', '-'],
     { windowsHide: true, timeout: 10000 }) : Buffer.from('49443304000000000000', 'hex');
   const modelCalls = [];
+  const workerOccupied = Promise.withResolvers();
+  const releaseWorker = Promise.withResolvers();
   const { page, read, open, act, api } = await createStudioFixture(t, { configureProviders(providers) {
     provider(providers, { id: 'platform-chat', capability: 'model.chat', kind: 'text', protocol: 'chat-completions',
       run: async (_task, payload) => {
         const messages = payload.parameters.messages;
         modelCalls.push(messages);
+        if (messages.at(-1).content === '占用本机测试执行器') {
+          workerOccupied.resolve();
+          await releaseWorker.promise;
+        }
         const text = messages[0].content.includes('意图解析器') ? JSON.stringify({ action: 'answer', value: textReply }) : textReply;
         return { type: 'text', text };
       } });
@@ -74,8 +80,11 @@ test('workspace shell, text and voice tasks, schedules, settings and notificatio
 
   const settings = form(page, 'settings');
   await field(settings, 'rememberConversations').uncheck();
+  const prefsReloaded = page.waitForResponse(response => new URL(response.url()).pathname === '/v1/settings' &&
+    response.request().method() === 'GET' && response.ok());
   const prefs = await act('保存个人偏好', submit(settings), request('PATCH', '/v1/settings'));
   assert.equal((await prefs.json()).preferences.rememberConversations, false);
+  await prefsReloaded;
   await page.getByText('意见反馈', { exact: true }).click();
   const feedback = form(page, 'feedback');
   await field(feedback, 'category').selectOption('suggestion');
@@ -92,13 +101,17 @@ test('workspace shell, text and voice tasks, schedules, settings and notificatio
   await act('从设置打开功能查找', page.locator('#main [data-find-navigation]'));
   const search = page.getByRole('dialog', { name: '查找功能' });
   await search.getByRole('searchbox').fill('模型对话');
-  await act('通过搜索进入模型对话', search.getByRole('link', { name: '模型对话', exact: true }), request('GET', '/v1/models'));
+  await act('通过搜索进入模型对话', search.locator('a[href="#models"]'), request('GET', '/v1/models'));
 
   await model.selectOption('platform-chat');
+  await field(taskForm, 'mode').selectOption('workflow');
   await message.fill('任务初次问题');
-  const task = await submitTask('提交文字模型任务');
+  await act('核对分步工作流参数', taskForm.getByText('核对参数', { exact: true }));
+  await taskForm.getByText('任务初次问题', { exact: true }).waitFor();
+  const task = await submitTask('提交文字模型分步工作流');
   const taskPath = '/v1/tasks/' + task.id;
   assert.equal((await read(taskPath)).result.text, textReply);
+  assert.equal((await read(taskPath + '/inputs')).mode, 'workflow');
   await page.getByText('查询执行日志', { exact: true }).click();
   const journal = form(page, 'journal');
   await field(journal, 'level').selectOption('info');
@@ -122,7 +135,11 @@ test('workspace shell, text and voice tasks, schedules, settings and notificatio
   const follow = await submitTask('提交续聊任务');
   assert.equal((await read('/v1/tasks/' + follow.id)).parentId, task.id);
   assert.ok(modelCalls.at(-1).some(entry => entry.role === 'assistant' && entry.content === textReply));
-  const regenerated = await act('重新生成已经完成的对话', page.locator('[data-regenerate-task]'), request('POST', '/v1/tasks/' + follow.id + '/regenerate'));
+  const followPath = '/v1/tasks/' + follow.id;
+  await act('重新打开任务参数并验证回填', page.getByRole('link', { name: '修改参数再提交' }), request('GET', followPath + '/inputs'));
+  assert.equal(await message.inputValue(), '追问内容');
+  await act('查看原对话任务', page.getByRole('link', { name: '查看原任务' }), request('GET', followPath));
+  const regenerated = await act('重新生成已经完成的对话', page.locator('[data-regenerate-task]'), request('POST', followPath + '/regenerate'));
   const regeneratedTask = await regenerated.json();
   await page.waitForURL('**/#tasks/' + regeneratedTask.id);
   await status.getByText('成功', { exact: true }).waitFor({ timeout: 20000 });
@@ -142,6 +159,10 @@ test('workspace shell, text and voice tasks, schedules, settings and notificatio
 
   const voice = form(page, 'voice-question');
   await open('models/voice', voice);
+  await act('使用浏览器虚拟麦克风开始录音', voice.locator('[data-start-recording]'));
+  await page.getByText('正在录音…', { exact: true }).waitFor();
+  await act('停止录音', voice.locator('[data-stop-recording]'));
+  await page.locator('#voice-status').filter({ hasText: /麦克风录音.*待上传/ }).waitFor();
   await field(voice, 'audioFile').setInputFiles({ name: 'synthetic.mp3', mimeType: 'audio/mpeg', buffer: audio });
   await field(voice, 'transcriptionModelId').selectOption('platform-transcription');
   await field(voice, 'chatModelId').selectOption('platform-chat');
@@ -155,10 +176,34 @@ test('workspace shell, text and voice tasks, schedules, settings and notificatio
   await page.getByText('合成录音已转写。', { exact: true }).waitFor({ timeout: 20000 });
   await page.getByText(textReply, { exact: true }).waitFor();
   const spoken = await read('/v1/tasks/' + voiceTask.id);
+  if (process.env.FAI_TEST_FFMPEG_PATH) {
+    const playback = page.locator('#media-result audio');
+    await playback.waitFor();
+    await playback.click({ position: { x: 23, y: 26 } });
+    await page.waitForFunction(() => document.querySelector('#media-result audio')?.currentTime > 0);
+    t.diagnostic('UI action: 播放已合成的语音回答并验证播放进度');
+  }
   const audioDownload = page.waitForEvent('download');
   await act('下载语音问答成品', page.getByRole('button', { name: '下载结果', exact: true }),
     request('GET', '/v1/assets/' + spoken.result.assetId + '/content'));
   assert.deepEqual(await readFile(await (await audioDownload).path()), audio);
+
+  await api('POST', '/v1/tasks', { capabilityId: 'model.chat', mode: 'chat', modelId: 'platform-chat',
+    idempotencyKey: 'hold-worker-for-cancel', parameters: { messages: [{ role: 'user', content: '占用本机测试执行器' }] } });
+  try {
+    await workerOccupied.promise;
+    await open('models', taskForm);
+    await model.selectOption('platform-chat');
+    await message.fill('取消尚未执行的任务');
+    const queuedResponse = await act('提交待取消文字任务', submit(taskForm), request('POST', '/v1/tasks'));
+    const queued = await queuedResponse.json();
+    const queuedPath = '/v1/tasks/' + queued.id;
+    const cancelled = await act('取消从未开始的排队任务', page.locator('[data-cancel-task]'), request('POST', queuedPath + '/cancel'));
+    assert.equal((await cancelled.json()).state, 'cancelled');
+    await status.getByText('已取消', { exact: true }).waitFor();
+  } finally {
+    releaseWorker.resolve();
+  }
 
   await open('inbox', '[data-read-all]');
   const notices = await read('/v1/notifications');
@@ -172,4 +217,65 @@ test('workspace shell, text and voice tasks, schedules, settings and notificatio
   await open('account', '[data-logout]');
   await act('从账号页退出登录', page.locator('#main [data-logout]'), request('POST', '/v1/auth/logout'));
   await form(page, 'auth').waitFor();
+});
+
+test('a disconnected streaming reply can resume from the last displayed chunk in Chrome', options, async t => {
+  const finished = Promise.withResolvers();
+  const first = '第一段已到达。';
+  const second = '第二段续接成功。';
+  const { page, open, act, read } = await createStudioFixture(t, { configureProviders(providers) {
+    providers.set('model:platform-stream', {
+      info: { id: 'platform-stream', model: 'Platform stream fixture', protocol: 'chat-completions', kind: 'text',
+        capabilities: ['model.chat'], streamText: true },
+      signature: 'platform-stream-fixture',
+      supports: entry => entry.id === 'model.chat',
+      run: async () => ({ type: 'text', text: first + second }),
+      async streamText(_payload, send) {
+        await send(1, first);
+        await finished.promise;
+        await send(2, second);
+        return { type: 'text', text: first + second };
+      },
+    });
+  } });
+  let disconnected = false;
+  await page.addInitScript(() => {
+    const fetch = window.fetch;
+    const drop = new AbortController();
+    window.disconnectFixtureStream = () => drop.abort();
+    let firstStream = true;
+    window.fetch = (input, init) => {
+      if (firstStream && new URL(input, location.origin).pathname.endsWith('/stream')) {
+        firstStream = false;
+        return fetch(input, { ...init, signal: AbortSignal.any([init.signal, drop.signal]) });
+      }
+      return fetch(input, init);
+    };
+  });
+  await page.route(/\/v1\/tasks\/[^/]+\/stream\?/, route => disconnected ? route.abort() : route.fallback());
+  try {
+    const editor = form(page, 'task');
+    await open('models', editor);
+    await field(editor, 'modelId').selectOption('platform-stream');
+    await field(editor, 'stream').check();
+    await field(editor, 'conversation.user').fill('检查分段接续。');
+    const response = await act('提交流式文字任务', submit(editor), request('POST', '/v1/tasks'));
+    const { id } = await response.json();
+    const endpoint = '/v1/tasks/' + id;
+    await page.locator('#reply-text').filter({ hasText: first }).waitFor({ timeout: 20000 });
+    disconnected = true;
+    await page.evaluate(() => window.disconnectFixtureStream());
+    const resume = page.locator('[data-resume-reply]');
+    await resume.waitFor({ timeout: 25000 });
+    disconnected = false;
+    const resumed = await act('从上次分段继续接收', resume, request('GET', endpoint + '/stream'));
+    assert.equal(new URL(resumed.url()).searchParams.get('after'), '1');
+    finished.resolve();
+    await page.locator('pre.live-result:not(#reply-text)').filter({ hasText: first + second }).waitFor({ timeout: 20000 });
+    const completed = await read(endpoint);
+    assert.equal(completed.state, 'succeeded');
+    assert.equal(completed.result.text, first + second);
+  } finally {
+    finished.resolve();
+  }
 });

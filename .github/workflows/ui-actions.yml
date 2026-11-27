@@ -9,7 +9,7 @@ permissions:
   contents: read
 concurrency:
   group: ui-actions-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   buttons:
@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        area: [media, platform, commerce, copy, navigation]
+        area: [media, platform, commerce, copy, catalog, navigation]
     defaults:
       run:
         shell: bash
@@ -63,4 +63,25 @@ jobs:
             ${{ runner.temp }}/ui-controls/*.json
             ${{ runner.temp }}/actions.tap
           retention-days: 14
+
+  report:
+    if: ${{ always() && !cancelled() }}
+    needs: buttons
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: controls-*
+          path: ${{ runner.temp }}/button-traces
+      - name: Summarize observed controls
+        run: node backend/test-support/summarize-ui-controls.mjs "$RUNNER_TEMP/button-traces" "$RUNNER_TEMP/report" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: workbench-button-report
+          path: ${{ runner.temp }}/report
+          if-no-files-found: error
+          retention-days: 30
 

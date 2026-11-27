@@ -51,7 +51,7 @@ export async function psdPage(ctx) {
   ctx.html(heading(doc.title ?? '新建分层设计') + link('返回分层设计','psd') + link('上传图片素材','assets') +
     grid(panel('图层编辑',images.length ? form('psd-save',editorFields(doc,images),'保存设计') : notice('请先在素材库上传 PNG 或 JPEG 图片。')),
       panel('已保存的效果',doc.revision ? action('加载预览','psd-preview') + action('下载分层 PSD','psd-download') +
-        '<div data-psd-preview aria-live="polite"></div>' + action('删除设计','psd-delete') : notice('保存设计后可以预览和下载。'))));
+        '<div data-psd-output aria-live="polite"></div>' + action('删除设计','psd-delete') : notice('保存设计后可以预览和下载。'))));
   ctx.submit('psd-save',async data=>{
     const saved=await ctx.api(target,{method:'PUT',body:readEditor(data,doc.revision)});
     toast('设计已保存');
@@ -69,7 +69,7 @@ export async function psdPage(ctx) {
     image.className='live-media';
     image.alt='分层设计合成预览';
     image.src=previewUrl;
-    document.querySelector('[data-psd-preview]').replaceChildren(image);
+    document.querySelector('[data-psd-output]').replaceChildren(image);
   });
   ctx.click('psd-download',async ()=>{
     const response=await ctx.api(target+'/export',{raw:true});

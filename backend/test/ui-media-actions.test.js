@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 import { createCanvas } from '@napi-rs/canvas';
 import { createStudioFixture } from '../test-support/ui-actions.js';
+import { GeneratedFile } from '../src/model-file.js';
 
 const options = { skip: !process.env.FAI_TEST_PLAYWRIGHT_PATH, timeout: 240000 };
 const { FAI_TEST_FFMPEG_PATH: ffmpeg, FAI_TEST_FFPROBE_PATH: ffprobe } = process.env;
@@ -104,13 +105,23 @@ test('media actions publish and apply image export specifications, process sourc
   await control(stack, 'size').selectOption('custom');
   await control(stack, 'width').fill('128');
   await control(stack, 'height').fill('256');
+  await act('media.image.batch.add-mask', batch.locator('[data-row-command=add]'));
+  const masked = rows.nth(2);
+  await control(masked, 'source').selectOption(source.id);
+  await control(masked, 'key').fill('蒙版放大');
+  await control(masked, 'size').selectOption('scale');
+  await control(masked, 'scale').fill('2');
+  await act('media.image.batch.mask-options', masked.locator('summary'));
+  await control(masked, 'edit').selectOption('cutout');
+  await control(masked, 'maskAssetId').selectOption(second.id);
   const savedResponse = await act('media.image.batch.submit', submit(batch), post(batchPath, 201));
   const saved = await savedResponse.json();
   const [platform, stacked] = saved.items;
   assert.deepEqual(savedResponse.request().postDataJSON().items[0].platformTemplate, { platform: 'pinduoduo', revision: 1 });
   assert.deepEqual(savedResponse.request().postDataJSON().items[1].assetIds, [second.id, source.id]);
+  assert.deepEqual(savedResponse.request().postDataJSON().items[2].edit, { method: 'cutout', maskAssetId: second.id });
   assert.deepEqual(saved.items.map(({ state, width, height, mediaType }) => [state, width, height, mediaType]), [
-    ['succeeded', 400, 480, 'image/jpeg'], ['succeeded', 128, 256, 'image/png'],
+    ['succeeded', 400, 480, 'image/jpeg'], ['succeeded', 128, 256, 'image/png'], ['succeeded', 128, 128, 'image/png'],
   ]);
   assert.deepEqual(await read(batchPath + '/' + saved.id), saved);
   const contentPath = id => '/v1/assets/' + id + '/content';
@@ -198,15 +209,22 @@ test('media actions edit and reorder storyboard shots, open the prompt view and 
 test('media video export switches format controls, rejects out-of-range frames and returns local MP4, PNG, JPG and MP3', {
   ...options, skip: options.skip || !ffmpeg || !ffprobe,
 }, async t => {
-  const { page, api, read, open, act } = await createStudioFixture(t);
   const dir = await mkdtemp(join(tmpdir(), 'ui-media-export-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const sample = join(dir, 'sample.mp4');
   await promisify(execFile)(ffmpeg, ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=720x720:r=12',
     '-f', 'lavfi', '-i', 'sine=frequency=500:sample_rate=44100', '-t', '1.3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', sample], { windowsHide: true, timeout: 15000 });
+  const sampleBytes = await readFile(sample);
+  const { page, api, read, open, act } = await createStudioFixture(t, { configureProviders(providers) {
+    const id = 'media-browser-local-video';
+    providers.set('model:' + id, {
+      info: { id, model: id, kind: 'video', protocol: 'ark-video', capabilities: ['video.compose'], streamText: false },
+      supports: capability => capability.id === 'video.compose', run: async () => new GeneratedFile(sampleBytes, 'video/mp4'),
+    });
+  } });
   const source = await api('POST', '/v1/assets', {
-    name: '合成视频.mp4', source: 'ffmpeg 合成', purpose: '导出按钮测试', mediaType: 'video/mp4', dataBase64: (await readFile(sample)).toString('base64'),
+    name: '合成视频.mp4', source: 'ffmpeg 合成', purpose: '导出按钮测试', mediaType: 'video/mp4', dataBase64: sampleBytes.toString('base64'),
   });
   const preflight = form(page, 'source-review');
   const review = media + '/videos/' + source.id + '/preflight';
@@ -242,6 +260,20 @@ test('media video export switches format controls, rejects out-of-range frames a
   assert.equal(await control(editor, 'frameSeconds').isDisabled(), true);
   assert.equal((await exported('media.video.export.mp3')).subarray(0, 3).toString(), 'ID3');
   assert.deepEqual(response.request().postDataJSON(), { format: 'mp3', aiGenerated: true });
+
+  const task = await api('POST', '/v1/tasks', { capabilityId: 'video.compose', mode: 'workflow', parameters: { prompt: '生成本地合成视频结果' },
+    modelId: 'media-browser-local-video', idempotencyKey: 'media-generated-video-output' });
+  await open('tasks/' + task.id, '#media-result video');
+  await page.waitForFunction(() => document.querySelector('#media-result video').videoWidth === 720);
+  const finished = await read('/v1/tasks/' + task.id);
+  const content = '/v1/assets/' + finished.result.assetId;
+  const downloaded = await download(page, () => act('media.video.export.task-original', page.locator('[data-asset-download]'), get(content + '/content', 200)));
+  assert.deepEqual(downloaded, sampleBytes);
+  const labeled = await download(page, () => act('media.video.export.task-marked', page.locator('[data-delivery-download]'), get(content + '/delivery', 200)));
+  assert.equal(labeled.subarray(4, 8).toString(), 'ftyp');
+  assert.notDeepEqual(labeled, sampleBytes);
+  await act('media.video.export.task-adjust', page.getByRole('link', { name: '调整画幅或导出音轨', exact: true }), get('/v1/video-export/status', 200));
+  assert.equal(await control(editor, 'assetId').inputValue(), finished.result.assetId);
 });
 
 test('media PSD actions persist layer geometry, preview, download and confirm deletion', options, async t => {
@@ -263,7 +295,8 @@ test('media PSD actions persist layer geometry, preview, download and confirm de
   assert.equal(stored.backgroundAssetId, background.id);
   assert.deepEqual(stored.layout.placement, { x: 16, y: 96, width: 224, height: 132 });
   await act('media.psd.preview', page.locator('[data-psd-preview]:is(button)'), get(record + '/preview', 200));
-  await page.getByRole('img', { name: '分层设计合成预览' }).waitFor();
+  await page.locator('[data-psd-output]').getByRole('img', { name: '分层设计合成预览' }).waitFor();
+  assert.equal(await page.locator('button[data-psd-preview]').innerText(), '加载预览');
   const exported = await download(page, () => act('media.psd.export', page.locator('[data-psd-download]'), get(record + '/export', 200)));
   assert.equal(exported.subarray(0, 4).toString(), '8BPS');
   await act('media.psd.back', page.getByRole('link', { name: '返回分层设计' }), get(root, 200));

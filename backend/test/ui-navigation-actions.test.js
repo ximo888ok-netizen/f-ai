@@ -45,9 +45,14 @@ test('follow every distinct local navigation destination and switch each scene t
         if (checked.has(key)) continue;
         await mount(view, tab);
         const anchor = area.locator('a[href="'+href+'"]:visible').first();
-        const before = page.url();
-        await anchor.click();
-        if (dest.href !== before) await page.waitForURL(url=>url.href !== before || url.href === dest.href);
+        const visits = [page.url()];
+        const record = frame => { if (frame === page.mainFrame()) visits.push(frame.url()); };
+        page.on('framenavigated',record);
+        try {
+          await anchor.click();
+          await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+        } finally { page.off('framenavigated',record); }
+        assert.ok(visits.includes(dest.href) || page.url()===dest.href,'Wrong link destination '+view+' → '+href+' ('+visits.join(', ')+')');
         await page.waitForFunction(ready);
         assert.equal(new URL(page.url()).origin,origin);
         assert.equal(await page.locator('.live-error:visible,[data-retry]:visible,[data-form=auth]:visible').count(),0,'Broken link '+view+' → '+key);

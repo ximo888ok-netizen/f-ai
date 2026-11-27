@@ -14,7 +14,17 @@ async function write(scope, values) {
 }
 
 test('custom skills, experts and teams can be edited and applied in Chrome', options, async t => {
-  const { page, open, act, read } = await createStudioFixture(t);
+  const { page, open, act, read } = await createStudioFixture(t, { configureProviders(providers) {
+    providers.set('model:library-qa-model', {
+      info: { id: 'library-qa-model', model: 'Library QA text model', protocol: 'chat-completions', kind: 'text',
+        capabilities: ['model.chat'], streamText: false },
+      supports: entry => entry.id === 'model.chat',
+      run: async (_task, payload) => {
+        assert.equal(payload.parameters.messages.at(-1).content, '执行合成模型技能');
+        return { type: 'text', text: '自定义模型技能执行成功。' };
+      },
+    });
+  } });
   page.on('dialog', dialog => dialog.accept());
   await open('skills', page.getByRole('link', { name: '新增技能' }));
   await act('打开自定义技能编辑器', page.getByRole('link', { name: '新增技能' }));
@@ -37,6 +47,14 @@ test('custom skills, experts and teams can be edited and applied in Chrome', opt
     await act(label, page.getByRole('button', { name: label, exact: true }), route('PUT', skillPath + '/state'));
     assert.equal((await read(skillPath)).enabled, enabled);
   }
+  await field(update, 'skillAction').selectOption('model-chat');
+  await act('把技能切换为模型执行', submit(update), route('PUT', skillPath));
+  await field(run, 'modelId').selectOption('library-qa-model');
+  await write(run, { content: '执行合成模型技能' });
+  const modelRun = await act('提交并运行自定义模型技能', submit(run), route('POST', skillPath + '/runs'));
+  const { task } = await modelRun.json();
+  await page.locator('pre.live-result').filter({ hasText: '自定义模型技能执行成功。' }).waitFor({ timeout: 20000 });
+  assert.equal((await read('/v1/tasks/' + task.id)).state, 'succeeded');
 
   await open('library/experts', page.getByRole('link', { name: '新建专家' }));
   await act('进入新建专家', page.getByRole('link', { name: '新建专家' }), route('GET', library));

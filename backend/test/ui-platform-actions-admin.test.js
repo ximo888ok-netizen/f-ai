@@ -17,7 +17,7 @@ async function type(scope, fields) {
 test('platform owner manages members, access, credits, features, connections and audits in Chrome', options, async t => {
   const cloudAssets = new Map();
   let checks = 0;
-  const { page, origin, app, session, read, open, act } = await createStudioFixture(t, {
+  const { page, origin, app, db, session, read, open, act } = await createStudioFixture(t, {
     cloudAssets,
     configureProviders(providers) {
       providers.set('model:platform-connection', {
@@ -48,21 +48,24 @@ test('platform owner manages members, access, credits, features, connections and
   assert.notEqual(replacementToken, invitation.token);
   await page.waitForFunction(token => document.querySelector('[data-ticket]')?.value.includes(token), replacementToken);
   await act('复制当前邀请链接', page.locator('[data-copy-invite]'));
+  await page.locator('#merchantNotice').filter({ hasText: /邀请链接已复制|链接已选中/ }).waitFor();
   const memberPage = await page.context().newPage();
   memberPage.setDefaultTimeout(10000);
   await memberPage.goto(origin + '/#team');
+  const acceptance = form(memberPage, 'accept');
+  await acceptance.waitFor();
   const personal = member.workspaces[0].id;
   await memberPage.evaluate(({ token, personal }) => {
     sessionStorage.setItem('fai.live.session', token);
     sessionStorage.setItem('fai.live.workspace', personal);
   }, { token: member.token, personal });
   await memberPage.reload();
-  const acceptance = form(memberPage, 'accept');
+  await memberPage.locator('#profile .account-sub').filter({ hasText: '平台验收成员' }).waitFor();
   await type(acceptance, { token: replacementToken });
   const [accepted] = await Promise.all([memberPage.waitForResponse(response =>
     new URL(response.url()).pathname === '/v1/invitations/accept' && response.request().method() === 'POST'),
   submit(acceptance).click()]);
-  assert.equal(accepted.status(), 200);
+  assert.equal(accepted.status(), 200, await accepted.text());
   const company = session.workspaces[0].id;
   await memberPage.waitForFunction(id => document.querySelector('#workspace-selector')?.value === id, company);
   t.diagnostic('UI action: 接受企业邀请 → POST /v1/invitations/accept 200');
@@ -170,14 +173,59 @@ test('platform owner manages members, access, credits, features, connections and
 
   const workspaceControl = memberPage.locator('#workspace-selector');
   await memberPage.locator('#profile').click();
-  for (const workspaceId of [personal, company]) {
+  for (const workspaceId of [personal, company, personal]) {
     const [response] = await Promise.all([memberPage.waitForResponse(response =>
       new URL(response.url()).pathname === '/v1/plugins' &&
       response.request().headers()['x-workspace-id'] === workspaceId), workspaceControl.selectOption(workspaceId)]);
     assert.equal(response.status(), 200);
     await memberPage.waitForFunction(id => document.querySelector('#workspace-selector')?.value === id, workspaceId);
     t.diagnostic('UI action: 切换并读取工作区目录 → GET /v1/plugins 200');
-    if (workspaceId === personal) await memberPage.locator('#profile').click();
+    await memberPage.locator('#profile').click();
   }
+  await memberPage.goto(origin + '/#account');
+  const [personalLogout] = await Promise.all([memberPage.waitForResponse(response =>
+    new URL(response.url()).pathname === '/v1/auth/logout' && response.request().method() === 'POST'),
+  memberPage.locator('#main [data-logout]').click()]);
+  assert.equal(personalLogout.status(), 204);
+  await form(memberPage, 'auth').waitFor();
+  t.diagnostic('UI action: 从个人工作台退出登录 → POST /v1/auth/logout 204');
   await memberPage.close();
+
+  const pageMembers = Array.from({ length: 25 }, () => randomUUID());
+  await db.transaction(async tx => {
+    await tx.query(`INSERT INTO accounts(id,email,password_hash,display_name,account_type)
+      SELECT id,id::text || '@example.test','pagination-fixture-only','分页成员 ' || position,'personal'
+      FROM unnest($1::uuid[]) WITH ORDINALITY AS entries(id,position)`, [pageMembers]);
+    await tx.query(`INSERT INTO memberships(workspace_id,account_id,role)
+      SELECT $1,id,'member' FROM unnest($2::uuid[]) AS entries(id)`, [company, pageMembers]);
+    const eventIds = Array.from({ length: 31 }, () => randomUUID());
+    await tx.query(`INSERT INTO merchant_events(id,workspace_id,actor_id,scope,action,target_id,detail,request_id)
+      SELECT id,$1,$2,'workspace','test.pagination',$3,'{}'::jsonb,'pagination-fixture'
+      FROM unnest($4::uuid[]) AS entries(id)`, [company, session.account.id, project.id, eventIds]);
+  });
+  await open('/merchant#members', form(page, 'filters'));
+  await type(memberFilter, { q: '' });
+  await act('清除筛选显示完整成员清单', submit(memberFilter), route('GET', '/v1/members'));
+  const nextMembers = await act('翻到下一页成员', page.locator('[data-page="25"]'), route('GET', '/v1/members'));
+  assert.equal(new URL(nextMembers.url()).searchParams.get('offset'), '25');
+  assert.ok((await nextMembers.json()).items.length > 0);
+  const previousMembers = await act('返回上一页成员', page.locator('[data-page="0"]'), route('GET', '/v1/members'));
+  assert.equal(new URL(previousMembers.url()).searchParams.get('offset'), '0');
+
+  await page.locator('#nav a[href="#audit"]').click();
+  await type(audit, { action: 'test.pagination', targetId: project.id });
+  const firstAuditPage = await act('读取可分页审计记录', submit(audit), route('GET', '/v1/merchant/audit-events'));
+  assert.equal((await firstAuditPage.json()).hasMore, true);
+  const nextAudit = await act('按游标翻到下一页审计', page.locator('[data-audit-next]'), route('GET', '/v1/merchant/audit-events'));
+  assert.ok(new URL(nextAudit.url()).searchParams.has('beforeId'));
+  assert.equal((await nextAudit.json()).items.length, 1);
+  const backToLatest = await act('返回最近的审计记录', page.locator('[data-audit-reset]'), route('GET', '/v1/merchant/audit-events'));
+  assert.ok(!new URL(backToLatest.url()).searchParams.has('beforeId'));
+
+  await act('从商家后台退出登录', page.locator('#merchantLogout'), route('POST', '/v1/auth/logout'));
+  const login = form(page, 'login');
+  await type(login, { email: session.account.email, password: 'synthetic-action-fixture' });
+  const signedIn = await act('从商家后台重新登录', submit(login), route('POST', '/v1/auth/login'));
+  assert.equal((await signedIn.json()).account.id, session.account.id);
+  await page.getByRole('heading', { name: '管理操作记录', exact: true }).waitFor();
 });

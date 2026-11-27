@@ -260,7 +260,7 @@ export function bindDualModePanel(scope, kind) {
   let currentStep = 1;
 
   function findTargetField() {
-    return scope.querySelector('.quick-image-form textarea[name="prompt"], .quick-image-form textarea[name="notes"], .video-composer textarea[name="prompt"], .video-quick-form textarea[name="notes"]');
+    return scope.querySelector('.quick-image-form textarea[name="prompt"], .quick-image-form textarea[name="notes"], .video-composer textarea[name="prompt"], .video-quick-form textarea[name="notes"], [data-skill-run] textarea[name="prompt"]');
   }
 
   function syncToForm(notify = false) {
@@ -271,7 +271,7 @@ export function bindDualModePanel(scope, kind) {
       target.dispatchEvent(new Event('input', { bubbles: true }));
       if (notify) statusEl.textContent = '已同步至创作表单';
     } else if (notify) {
-      statusEl.textContent = val ? '已记录当前要求' : '请先输入创作要求或点击快捷标签';
+      statusEl.textContent = val ? '当前工具无需填写创作要求。' : '请先输入创作要求或点击快捷标签';
     }
   }
 
@@ -311,7 +311,7 @@ export function bindDualModePanel(scope, kind) {
       setStep(currentStep + 1);
       return;
     }
-    const submitBtn = scope.querySelector('.quick-image-form button[type="submit"], .video-composer button[type="submit"], .video-quick-form button[type="submit"]');
+    const submitBtn = scope.querySelector('.quick-image-form button[type="submit"], .video-composer button[type="submit"], .video-quick-form button[type="submit"], [data-skill-run] button[type="submit"]');
     if (submitBtn) {
       submitBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
       if (!submitBtn.disabled) submitBtn.focus();

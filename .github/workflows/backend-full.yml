@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: backend-full-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/heads/ci/backend-ui-') }}
+
 jobs:
   regression:
     name: Full suite (${{ matrix.database }})
