@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { createCanvas } from '@napi-rs/canvas';
 import { createStudioFixture } from '../test-support/ui-actions.js';
@@ -82,6 +85,7 @@ test('product categories, catalog transfers, ROI and asset controls persist and 
     { method: 'POST', path: products, status: 201 })).json();
   assert.equal(copy.name, '验收陶瓷杯更新');
   assert.equal(copy.categoryId, category.id);
+  await page.waitForURL(url => url.hash === '#products/edit/' + copy.id);
   await confirmed('删除商品副本', button('删除商品档案'), { method: 'DELETE', path: products + '/' + copy.id, status: 204 });
   await visible('验收陶瓷杯更新');
   assert.ok(!(await read(products)).items.some(({ id }) => id === copy.id));
@@ -96,6 +100,12 @@ test('product categories, catalog transfers, ROI and asset controls persist and 
   await visible('导出 1 项');
   await act('清单入口', link('商品清单'), { method: 'GET', path: products });
   const selected = page.locator('.live-item').filter({ hasText: '验收陶瓷杯更新' });
+  const search = page.locator('[data-record-query]');
+  await search.fill('NOT-A-CATALOG-SKU');
+  await visible('没有匹配记录。');
+  assert.equal(await selected.isVisible(), false);
+  await search.fill(sku);
+  await selected.waitFor();
   await act('打开商品详情', selected.getByRole('link', { name: '详情', exact: true }), { method: 'GET', path: products });
   await submit('edit-product', { categoryId: '' }, { method: 'PUT', path: products + '/' + product.id });
   await act('返回类目清单', link('分类管理'), { method: 'GET', path: categories });
@@ -115,6 +125,9 @@ test('product categories, catalog transfers, ROI and asset controls persist and 
     { method: 'POST', path: assets, status: 201 })).json();
   await visible(image.name);
   const assetRow = page.locator('.live-item').filter({ hasText: image.name });
+  await page.locator('[data-record-query]').fill('未登记的素材');
+  assert.equal(await assetRow.isVisible(), false);
+  await page.locator('[data-record-query]').fill(image.name);
   assert.deepEqual(await download('素材列表下载', assetRow.getByRole('button', { name: '下载', exact: true }),
     { method: 'GET', path: assets + '/' + uploaded.id + '/content' }), image.buffer);
   await act('打开素材文件详情', assetRow.getByRole('link', { name: '文件详情', exact: true }),
@@ -150,7 +163,7 @@ function ledgerSample(kind) {
 
 test('shop directory, all ledger modules, report filters, imports and downloads use the real server', options, async t => {
   const fixture = await createStudioFixture(t);
-  const { page, open, act, read } = fixture;
+  const { page, open, act, api, read } = fixture;
   const { form, link, button, visible, submit, download } = controls(fixture);
   await open('commerce', page.locator('#scene-operations-shops-tab'));
   await act('经营页切换到店铺管理', page.locator('#scene-operations-shops-tab'));
@@ -209,6 +222,19 @@ test('shop directory, all ledger modules, report filters, imports and downloads 
     await page.getByRole('heading', { name: book.name, exact: true }).waitFor();
   }
 
+  const orderPath = bookPath + '/records/orders';
+  const overdueLink = page.getByRole('link', { name: /^逾期 / }).first();
+  const overdue = await act('从总览打开逾期订单', overdueLink, { method: 'GET', path: orderPath });
+  assert.ok(new URL(overdue.url()).searchParams.has('overdueOn'));
+  await act('从逾期筛选返回总览', link('返回运营总览'), { method: 'GET', path: bookPath + '/summary' });
+  await api('POST', orderPath + '/import', { items: Array.from({ length: 25 }, (_, i) => ({
+    reference: 'PAGING-' + i, details: { title: '分页订单', day: '2026-11-11', status: '已取消', units: 1 },
+  })) });
+  await act('打开有分页的订单', link('查看订单'), { method: 'GET', path: orderPath });
+  const nextPage = await act('订单下一页', link('下一页'), { method: 'GET', path: orderPath });
+  assert.equal(new URL(nextPage.url()).searchParams.get('offset'), '25');
+  await act('订单上一页', link('上一页'), { method: 'GET', path: orderPath });
+  await act('订单页返回总览', link('返回运营总览'), { method: 'GET', path: bookPath + '/summary' });
   await act('查看订单经营日报', link('查看订单经营日报'), { method: 'GET', path: bookPath + '/analytics' });
   await submit('filter-records', { from: '2026-11-12', to: '2026-11-12' }, { method: 'GET', path: bookPath + '/analytics' });
   await act('打开日周月报表', link('日周月报表与导出'), { method: 'GET', path: bookPath + '/report' });
@@ -276,13 +302,43 @@ const replies = service + '/quick-replies';
 const rights = '/v1/rights/notices';
 
 test('knowledge, workspace support and rights forms persist changes and enforce asset restrictions', options, async t => {
-  const fixture = await createStudioFixture(t);
-  const { page, open, act, api, read, app, headers } = fixture;
+  const fixture = await createStudioFixture(t, {
+    webSearch: async (query, limit) => {
+      assert.equal(query, '合成竞品检索');
+      assert.equal(limit, 8);
+      return [{ title: '合成竞品参考', excerpt: '测试检索结果，不来自外网。', url: 'https://example.test/synthetic-reference' }];
+    },
+  });
+  const { page, open, act, api, read, app, headers, workspace } = fixture;
   const { form, link, button, visible, submit, confirmed } = controls(fixture);
   const product = await api('POST', products, { sku: 'K-1', name: '客服合成商品' });
   await open('resources', form('new-base'));
   const knowledge = await (await submit('new-base', { name: '客服合成知识库' }, { method: 'POST', path: bases, status: 201 })).json();
   const knowledgeUrl = bases + '/' + knowledge.id;
+  const email = randomUUID() + '@example.test';
+  const registration = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: {
+    email, password: 'synthetic-business-member', displayName: '合成客服成员', type: 'personal',
+  } });
+  assert.equal(registration.statusCode, 201);
+  const member = registration.json();
+  const invite = await api('POST', '/v1/invitations', { email, role: 'member' });
+  const accept = await app.inject({ method: 'POST', url: '/v1/invitations/accept',
+    headers: { authorization: 'Bearer ' + member.token }, payload: { token: invite.token } });
+  assert.equal(accept.statusCode, 200);
+  const memberBases = async () => {
+    const response = await app.inject({ url: bases, headers: {
+      authorization: 'Bearer ' + member.token, 'x-workspace-id': workspace,
+    } });
+    assert.equal(response.statusCode, 200);
+    return response.json().items;
+  };
+  assert.ok(!(await memberBases()).some(base => base.id === knowledge.id));
+  await open('resources/' + knowledge.id, form('grant'));
+  const grantPath = knowledgeUrl + '/grants/' + member.account.id;
+  await submit('grant', { memberId: member.account.id }, { method: 'PUT', path: grantPath, status: 204 });
+  assert.ok((await memberBases()).some(base => base.id === knowledge.id));
+  await confirmed('撤销成员访问知识库', button('撤销访问'), { method: 'DELETE', path: grantPath, status: 204 });
+  assert.ok(!(await memberBases()).some(base => base.id === knowledge.id));
   const documents = knowledgeUrl + '/documents';
   const categoryUrl = knowledgeUrl + '/categories';
   await submit('rename-base', { name: '客服测试知识' }, { method: 'PATCH', path: knowledgeUrl });
@@ -311,7 +367,25 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
   await act('返回知识库清单', link('返回知识库清单'), { method: 'GET', path: bases });
   await submit('search', { query: '375', baseId: knowledge.id }, { method: 'POST', path: '/v1/knowledge/search' });
   await act('打开搜索命中文档', link('查看文档'), { method: 'GET', path: documents + '/' + doc.id });
+  await open('resources', link('联网检索'));
+  await act('进入联网检索', link('联网检索'), { method: 'GET', path: '/v1/search/web' });
+  await submit('web-search', { query: '合成竞品检索' }, { method: 'POST', path: '/v1/search/web' });
+  await visible('合成竞品参考');
+  const resultLink = link('打开来源');
+  assert.equal(await resultLink.getAttribute('href'), 'https://example.test/synthetic-reference');
+  assert.equal(await resultLink.getAttribute('target'), '_blank');
+  await act('返回工作区知识库', link('返回知识库'), { method: 'GET', path: bases });
+  for (const [label, scope] of [['个人记忆', 'personal'], ['企业记忆', 'enterprise']]) {
+    await act('打开' + label, link(label), { method: 'GET', path: '/v1/memory' });
+    const memoryResult = await (await submit('memory', { content: '合成' + label }, { method: 'POST', path: '/v1/memory' })).json();
+    assert.equal(memoryResult.scope, scope);
+    await visible('合成' + label);
+    await confirmed('删除' + label, button('删除'), { method: 'DELETE', path: '/v1/memory/' + memoryResult.id, status: 204 });
+    assert.ok(!(await read('/v1/memory?scope=' + scope)).items.some(entry => entry.id === memoryResult.id));
+    await act('从' + label + '返回知识库', link('返回知识库'), { method: 'GET', path: bases });
+  }
 
+  const serviceShop = await api('POST', desk, { platform: 'pinduoduo', name: '合成客服门店' });
   await open('customer/replies', form('new-reply'));
   const reply = await (await submit('new-reply', { title: '客服验收话术', scenario: '商品容量', content: '已确认容量。' },
     { method: 'POST', path: replies, status: 201 })).json();
@@ -324,9 +398,12 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
   await act('关闭新会话表单', page.locator('[data-close-new]'));
   assert.equal(await page.locator('[data-inbox-dialog]').evaluate(dialog => dialog.open), false);
   await act('打开新建会话表单', newChat);
-  const chat = await (await submit('new-conversation', { subject: '容量验证咨询', productId: product.id, baseId: knowledge.id },
+  const chat = await (await submit('new-conversation', {
+    subject: '容量验证咨询', productId: product.id, baseId: knowledge.id, shopId: serviceShop.id,
+  },
     { method: 'POST', path: conversations, status: 201 })).json();
   assert.equal(chat.productId, product.id);
+  assert.equal(chat.shopId, serviceShop.id);
   const messages = conversations + '/' + chat.id + '/messages';
   const composer = page.locator('[data-chat-send]');
   await act('展开客服知识检索选项', composer.getByText('检索选项', { exact: true }));
@@ -342,7 +419,15 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
   assert.equal(await composer.locator('[name=content]').inputValue(), '人工核对结果为 375 毫升。');
   await act('发送人工回复', button('发送人工回复'), { method: 'POST', path: messages, status: 201 });
   assert.equal((await read(messages)).items.at(-1).sender, 'operator');
+  await act('按 AI 接待筛选会话', page.locator('[data-inbox-filter=assistant]'));
+  assert.equal(await page.locator('[data-thread]').count(), 0);
   await act('按人工接待筛选会话', page.locator('[data-inbox-filter=human]'));
+  await visible(chat.subject);
+  await act('点击会话列表重新读取消息', page.locator('[data-thread="' + chat.id + '"]'), { method: 'GET', path: messages });
+  await act('筛选全部客服会话', page.locator('[data-inbox-filter=all]'));
+  await page.locator('[name=inboxShop]').selectOption('local');
+  assert.equal(await page.locator('[data-thread]').count(), 0);
+  await page.locator('[name=inboxShop]').selectOption(serviceShop.id);
   await visible(chat.subject);
   await open('customer/replies', form('new-reply'));
   await act('再次展开话术编辑', page.getByText('查看或编辑', { exact: true }));
@@ -370,15 +455,190 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
     await page.getByText('版本 ' + outcome.revision, { exact: false }).waitFor();
     if (action === 'restrict' || action === 'restore') {
       const response = await app.inject({ url: assets + '/' + asset.id + '/content', headers });
-      assert.equal(response.statusCode, action === 'restore' ? 200 : 403);
+      assert.equal(response.statusCode, action === 'restore' ? 200 : 404);
     }
   }
   assert.deepEqual((await read(target)).events.map(event => event.action), transitions.map(([action]) => action));
   await act('返回权利通知案件清单', link('返回权利通知'), { method: 'GET', path: rights });
   await act('重新打开权利通知', link('查看案件'), { method: 'GET', path: target });
+  await act('返回案件并打开空白提交通知', link('返回权利通知'), { method: 'GET', path: rights });
+  await act('打开空白权利通知表单', link('提交权利通知'));
+  const dismissed = await (await submit('rights-submit', {
+    assetId: asset.id, statement: '合成驳回声明', evidenceReference: '合成驳回引用',
+  }, { method: 'POST', path: rights, status: 201 })).json();
+  page.once('dialog', dialog => dialog.accept());
+  const closed = await (await submit('rights-action', { action: 'dismiss', explanation: '合成驳回处理' },
+    { method: 'POST', path: rights + '/' + dismissed.id + '/actions' })).json();
+  assert.equal(closed.state, 'dismissed');
 
   await open('resources/' + knowledge.id, form('add-doc'));
   await confirmed('删除知识库文档', button('删除'), { method: 'DELETE', path: documents + '/' + doc.id, status: 204 });
   await confirmed('删除空知识库', button('删除知识库'), { method: 'DELETE', path: knowledgeUrl, status: 204 });
   assert.equal((await read(bases)).items.length, 0);
+});
+
+test('commerce query and file report use configured shop bindings and explicit synthetic adapter responses', options, async t => {
+  const shops = new Map();
+  const integration = '/v1/integrations/mcp-cn-commerce';
+  const orders = { order_id: 'SYN-ORDER-778', payment: 600 };
+  const source = { date: '2026-11-12', shops: [{ id: 'a' }, { id: 'b' }] };
+  const firstSummary = { gmv: 600, order_count: 1, refund_amount: 0, refund_count: 0 };
+  const fixture = await createStudioFixture(t, {
+    integrations: { commerce: { shops } },
+    integrationRunner: async (_configuration, engine, operation, input) => {
+      assert.equal(engine, 'commerce');
+      switch (operation) {
+        case 'probe':
+          return { taobao: ['get_order_list', 'get_order_detail'] };
+        case 'report':
+          assert.deepEqual(input, source);
+          return { date: input.date, complete: false, shops: [
+            { shop_name: '合成日报门店甲', summary: firstSummary },
+            { shop_name: '合成日报门店乙', summary: { gmv: null, order_count: null, refund_amount: null, refund_count: null } },
+          ], total_summary: { gmv: null, order_count: null, refund_amount: null, refund_count: null } };
+        case 'query':
+          assert.equal(input.platform, 'taobao');
+          assert.equal(input.credentials.access_token, 'synthetic-only-not-a-platform-token');
+          if (input.operation === 'get_order_detail') assert.equal(input.params.tid, '778');
+          else assert.deepEqual([input.params.page_no, input.params.page_size, input.params.start_created, input.params.end_created],
+            [2, 5, '2026-11-12 00:00:00', '2026-11-12 23:59:59']);
+          return { items: [orders] };
+        default:
+          throw new Error('Unexpected synthetic integration operation: ' + operation);
+      }
+    },
+  });
+  const { page, workspace, open, act } = fixture;
+  const { form, visible, submit } = controls(fixture);
+  await open('commerce', '[data-open-report]');
+  await act('接入页打开店铺管理', '[data-open-shops]');
+  await page.locator('#scene-operations-shops-tab[aria-selected=true]').waitFor();
+  await act('返回店铺查询', '#scene-operations-query-tab');
+  await act('从零店铺页面打开文件日报', '[data-open-report]');
+  await submit('commerce-report-file', { source: file('report.json', source) }, { method: 'POST', path: integration + '/report' });
+  await visible('2026-11-12 · 2 家店铺 · 覆盖不完整');
+  await page.locator('[name=reportShop]').selectOption('0');
+  await visible('合成日报门店甲');
+  await act('展开文件日报原始内容', page.locator('[data-import-report] summary'));
+  await page.locator('[data-import-report] pre').waitFor();
+  assert.match(await page.locator('[data-import-report] pre').innerText(), /"gmv": 600/);
+
+  const id = 'synthetic-commerce', unauthorized = 'synthetic-unavailable';
+  for (const [shopId, name, credentials] of [
+    [id, '合成已配置店铺', { access_token: 'synthetic-only-not-a-platform-token' }],
+    [unauthorized, '合成无授权店铺', null],
+  ]) {
+    shops.set(workspace + '/' + shopId, { id: shopId, platform: 'taobao', name, workspaceId: workspace, credentials });
+  }
+  await page.reload();
+  await act('打开已配置店铺查询', '#scene-operations-query-tab');
+  await form('commerce-query').locator('[name=shopId]').selectOption(unauthorized);
+  assert.ok(await form('commerce-query').locator('[type=submit]').isDisabled());
+  await visible('尚无有效经营授权。');
+  await form('commerce-query').locator('[name=shopId]').selectOption(id);
+  await act('查看可查询平台目录', page.getByText('平台与可查询的数据', { exact: true }));
+  await act('展开高级业务参数', page.getByText('高级业务参数', { exact: true }));
+  const listResponse = await submit('commerce-query', {
+    operation: 'get_order_list', page: 2, size: 5, since: '2026-11-12', until: '2026-11-12',
+  }, { method: 'POST', path: integration + '/query' });
+  assert.deepEqual((await listResponse.json()).data.items, [orders]);
+  await visible(orders.order_id);
+  const detailResponse = await submit('commerce-query', { operation: 'get_order_detail', reference: 778 },
+    { method: 'POST', path: integration + '/query' });
+  assert.equal((await detailResponse.json()).operation, 'get_order_detail');
+  await act('查看平台返回详情', page.locator('[data-query-result] summary'));
+  assert.match(await page.locator('[data-query-result] pre').innerText(), /SYN-ORDER-778/);
+});
+
+test('native customer history, evidence, handoff and generated draft use a synthetic shop database', options, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'studio-native-desk-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const database = join(directory, 'customer-agent.sqlite');
+  const native = new DatabaseSync(database);
+  const buyer = 'synthetic-buyer';
+  const platform = 'douyin';
+  const shopId = 'synthetic-platform-shop';
+  const accountId = 'synthetic-platform-operator';
+  const platformQuestion = '合成客户的杯子是什么颜色？';
+  const slot = 'conversation_' + createHash('sha256').update([platform, shopId, accountId, 'customer', buyer].join('|')).digest('hex');
+  native.exec(`
+    CREATE TABLE channels(id,channel_name);
+    CREATE TABLE shops(id,channel_id,shop_id);
+    CREATE TABLE handoff_markers(session_key TEXT PRIMARY KEY,expiry INTEGER);
+    CREATE TABLE agent_messages(id,session_id,role,content,timestamp);
+    CREATE TABLE customer_service_knowledge(id,shop_id,title,content,enabled,updated_at);
+    CREATE TABLE product_knowledge(id,shop_id,goods_name,goods_id,extracted_content,specifications,updated_at);
+    INSERT INTO channels VALUES (1,'douyin');
+    INSERT INTO customer_service_knowledge VALUES (1,1,'合成杯子颜色','蓝色杯身',1,'2026-11-12');
+  `);
+  native.prepare('INSERT INTO shops VALUES (1,1,?)').run(shopId);
+  native.prepare("INSERT INTO agent_messages VALUES (1,?,'user',?,'2026-11-12T12:00:00Z')").run(slot, platformQuestion);
+  native.close();
+  const shops = new Map();
+  const generated = '该合成杯子为蓝色。';
+  const fixture = await createStudioFixture(t, {
+    integrations: { customer: { shops, model: {
+      name: 'Synthetic customer fixture', key: 'synthetic-test-key', baseUrl: 'https://example.test/',
+    } } },
+    integrationRunner: async (_config, engine, operation, body) => {
+      assert.equal(engine, 'customer');
+      if (operation === 'probe') return {};
+      assert.equal(operation, 'generate');
+      assert.match(body.parameters.question, /合成/);
+      assert.match(body.parameters.facts, /蓝色杯身/);
+      return { text: generated };
+    },
+  });
+  const { page, open, act, read, workspace } = fixture;
+  const { form, link, button, submit, visible, confirmed } = controls(fixture);
+  const integration = '/v1/integrations/customer-agent';
+  await open('customer', '#scene-customer-channel-tab');
+  await act('进入无绑定平台接待', '#scene-customer-channel-tab');
+  await act('打开客服店铺管理', '[data-channel-shops]');
+  await page.locator('#scene-customer-shops-tab[aria-selected=true]').waitFor();
+
+  const bindingId = 'native-test-shop';
+  shops.set(workspace + '/' + bindingId, {
+    id: bindingId, name: '合成平台门店', workspaceId: workspace, database, historyDatabase: database,
+    shopId, accountId, platform, allowHandoff: true,
+  });
+  await page.reload();
+  await act('进入已绑定平台接待', '#scene-customer-channel-tab');
+  await submit('native-history', { query: buyer }, { method: 'POST', path: integration + '/history' });
+  await visible(platformQuestion);
+  assert.equal(new URL(await link('在官方客服窗口回复').getAttribute('href')).hostname, 'im.jinritemai.com');
+  const marked = await (await confirmed('写入原生人工接管标记', button('标记人工接管'),
+    { method: 'POST', path: integration + '/handoff' })).json();
+  assert.ok(marked.expiry * 1000 > Date.now());
+  await act('从人工接待队列读取原生买家', page.locator('[data-native-buyer="' + buyer + '"]'),
+    { method: 'POST', path: integration + '/history' });
+  await visible(platformQuestion);
+
+  await act('返回本地客服接待台', '#scene-customer-inbox-tab');
+  await act('创建合成本地咨询', button('新建工作台会话').first());
+  const chat = await (await submit('new-conversation', { subject: '合成客服原生助手验证' },
+    { method: 'POST', path: conversations, status: 201 })).json();
+  const messages = conversations + '/' + chat.id + '/messages';
+  const composer = page.locator('[data-chat-send]');
+  await composer.locator('[name=content]').fill(platformQuestion);
+  await act('录入合成客户咨询', button('发送客户消息'), { method: 'POST', path: messages, status: 201 });
+  await visible(platformQuestion);
+  await act('接管合成本地会话', button('人工接管'), { method: 'POST', path: conversations + '/' + chat.id + '/handoff' });
+  await button('发送人工回复').waitFor();
+  await act('在接管会话中打开回复助手', composer.locator('[data-compose-draft]'));
+  await form('ca-draft').waitFor();
+  assert.equal(await form('ca-draft').locator('[name=question]').inputValue(), platformQuestion);
+  await act('展开已绑定店铺知识查询', page.getByText('查询已绑定店铺的知识与会话', { exact: true }));
+  await submit('ca-lookup', { lookup: 'history', query: buyer }, { method: 'POST', path: integration + '/history' });
+  await page.locator('[data-evidence] pre').filter({ hasText: platformQuestion }).waitFor();
+  await submit('ca-lookup', { lookup: 'knowledge', query: '颜色' }, { method: 'POST', path: integration + '/knowledge' });
+  await act('选用真实合成知识作为事实', button('选用查询结果作为参考'));
+  assert.match(await form('ca-draft').locator('[name=facts]').inputValue(), /蓝色杯身/);
+  const task = await (await submit('ca-draft', {}, { method: 'POST', path: '/v1/tasks' })).json();
+  await visible(generated);
+  assert.equal((await read('/v1/tasks/' + task.id)).result.text, generated);
+  await act('将模型草稿带入人工回复', button('带入人工回复'));
+  assert.equal(await composer.locator('[name=content]').inputValue(), generated);
+  await act('提交人工审核后的客服回复', button('发送人工回复'), { method: 'POST', path: messages, status: 201 });
+  assert.equal((await read(messages)).items.at(-1).content, generated);
 });

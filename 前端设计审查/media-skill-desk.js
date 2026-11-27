@@ -69,11 +69,18 @@ export async function mediaSkillDesk(ctx,plugin,wallet,preferred){
       status.textContent=!available?(s.state==='local_ready'||s.state==='configured'?'当前工作区不能运行此技能。':sourceLabel(s)+'。仍可整理素材并导出制作单。'):
         wallet.available<s.cost?'可用积分不足。':!valid?'请填写制作要求并按顺序选择所需素材。':'';
     }
-    inputs=bindSkillAssets(ctx,f.querySelector('.skill-assets'),s,assets,sync,cached.assetIds);
+    inputs=bindSkillAssets(ctx,f.querySelector('.skill-assets'),s,assets,()=>{
+      if(inputs&&f.isConnected&&selected===s)remember();
+      sync();
+    },cached.assetIds);
     const parameters=()=>({prompt:[f.elements.prompt.value.trim(),f.elements.language?'目标语言：'+f.elements.language.value:'',f.elements.color?'目标颜色：'+f.elements.color.value.trim():''].filter(Boolean).join('\n'),platform:f.elements.platform.value,assetIds:inputs.values(),
       ...(s.slots?.length?{slots:[...f.querySelectorAll('[name=slot]:checked')].map(n=>n.value)}:{}),
       ...(s.frameMode?{frameMode:f.elements.frameMode.value}:{}),...(f.elements.ratio?{ratio:f.elements.ratio.value}:{})});
-    f.oninput=()=>{const p=parameters();drafts.set(key(),{...p,prompt:f.elements.prompt.value,channel:p.platform});sync();};
+    function remember(){
+      const p=parameters();
+      drafts.set(key(),{...p,prompt:f.elements.prompt.value,channel:p.platform});
+    }
+    f.oninput=()=>{remember();sync();};
     async function continueFrom(task,delivery){
       if(s.local!=='storyboard'||!task.result?.text)return;
       const use=document.createElement('button');use.type='button';use.textContent='编辑分镜并带入 Seedance 成片';delivery.append(use);

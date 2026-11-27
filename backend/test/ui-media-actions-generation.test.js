@@ -4,6 +4,7 @@ import test from 'node:test';
 import { createCanvas } from '@napi-rs/canvas';
 import { createStudioFixture } from '../test-support/ui-actions.js';
 import { GeneratedFile } from '../src/model-file.js';
+import { ProviderError } from '../src/providers.js';
 import { MediaOutputs } from '../src/media-skill-files.js';
 
 const options = { skip: !process.env.FAI_TEST_PLAYWRIGHT_PATH, timeout: 240000 };
@@ -26,7 +27,11 @@ function fixtureProviders(providers) {
   const add = (id, kind, protocol, capabilities, run, extra = {}) => providers.set('model:' + id, {
     info: { id, model: id, kind, protocol, capabilities, ...extra }, supports: cap => capabilities.includes(cap.id), run,
   });
-  add('media-browser-image', 'image', 'openai-images', ['image.main-image'], async () => image(), { imageQuality: true });
+  let detailAttempts = 0;
+  add('media-browser-image', 'image', 'openai-images', ['image.main-image'], async (_task, { parameters }) => {
+    if (parameters.prompt.includes('组图控件失败重试') && ++detailAttempts === 1) throw new ProviderError('INVALID_PROVIDER_IMAGE');
+    return image();
+  }, { imageQuality: true });
   add('media-browser-text', 'text', 'chat-completions', ['model.chat'], async (_task, { parameters }) => {
     const instructions = parameters.messages[0].content;
     const plans = [
@@ -232,9 +237,33 @@ test('media task actions recover trace errors, query and filter real events, re-
   await page.getByRole('link', { name: '商品组图方案', exact: true }).waitFor();
   const team = await read('/v1/media-skills/image');
   assert.ok(team.items.some(item => item.state !== 'configured'));
-  const payload = { capabilityId: 'image.skill-stitch', mode: 'workflow', modelId: 'image-stitch', idempotencyKey: 'media-action-test-multi-output',
-    parameters: { prompt: '拼接有序详情图', platform: '淘宝', assetIds: sources.map(item => item.id) } };
-  const skill = await api('POST', taskRoot, payload);
+  const desk = page.locator('.media-skill-desk');
+  await field(desk, 'onlyReady').check();
+  await field(desk, 'search').fill('没有对应的合成技能');
+  await desk.getByText('没有匹配的技能。', { exact: true }).waitFor();
+  await field(desk, 'search').fill('');
+  await act('media.skill.select', desk.locator('[data-select="image.skill-stitch"]'));
+  const skillForm = desk.locator('[data-skill-run]');
+  await act('media.skill.source-open', desk.getByText('来源与运行要求', { exact: true }));
+  await act('media.skill.upload-open', skillForm.getByText('上传到素材库', { exact: true }));
+  await act('media.skill.upload-empty', skillForm.locator('[data-upload-files]'));
+  await skillForm.getByText('请先选择文件。', { exact: true }).waitFor();
+  await field(skillForm, 'library').selectOption(sources[0].id);
+  assert.equal(await skillForm.locator('[type=submit]').isDisabled(), true);
+  await field(skillForm, 'library').selectOption(sources[1].id);
+  await act('media.skill.asset-up', skillForm.locator('[data-up="1"]'));
+  await act('media.skill.asset-remove', skillForm.locator('[data-remove="1"]'));
+  await field(skillForm, 'library').selectOption(sources[0].id);
+  await field(desk, 'onlyReady').uncheck();
+  await act('media.skill.alternate', desk.locator('[data-select="image.skill-white-check"]'));
+  await act('media.skill.return-to-draft', desk.locator('[data-select="image.skill-stitch"]'));
+  assert.deepEqual(await skillForm.locator('[data-asset-order] li span').allTextContents(), [sources[1].name, sources[0].name]);
+  const brief = JSON.parse((await download(page, () => act('media.skill.brief', skillForm.locator('[data-brief]')))).toString());
+  assert.deepEqual(brief.parameters.assetIds, [sources[1].id, sources[0].id]);
+  const submitted = await act('media.skill.run', skillForm.locator('[type=submit]'), post(taskRoot));
+  assert.deepEqual(submitted.request().postDataJSON().parameters.assetIds, brief.parameters.assetIds);
+  const skill = await submitted.json();
+  await desk.locator('[data-results]').getByText('任务已完成', { exact: true }).waitFor();
   await page.route('**/v1/tasks/' + skill.id + '/events?limit=4', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"code":"DATABASE_UNAVAILABLE"}' }), { times: 1 });
   await open('tasks/' + skill.id, '[data-trace-retry]');
   await act('media.task.trace-retry', page.locator('[data-trace-retry]'), get(taskRoot + '/' + skill.id + '/events'));
@@ -267,4 +296,49 @@ test('media task actions recover trace errors, query and filter real events, re-
   }
   await act('media.task.filter.all', page.getByRole('link', { name: '全部任务', exact: true }), get(taskRoot));
   await page.getByRole('link', { name: '查看任务', exact: true }).first().waitFor();
+});
+
+test('media plan actions verify revision guards, run a single failed-image retry from the task center and preview linked delivery', options, async t => {
+  const { page, read, api, open, act } = await createStudioFixture(t, { configureProviders: fixtureProviders });
+  const source = await api('POST', '/v1/assets', { name: '组图素材.png', source: '合成数据', purpose: '组图回归', mediaType: 'image/png', dataBase64: png().toString('base64') });
+  const planRoot = '/v1/media/images/product-plans';
+  const create = form(page, 'image-plan-create');
+  await open('desk/image', '[data-image-mode=quick]');
+  await act('media.plan.open', page.getByRole('link', { name: '商品组图方案', exact: true }), get(planRoot));
+  await field(create, 'productName').fill('浏览器合成商品');
+  await field(create, 'requirements').fill('展示杯口和侧面。');
+  await field(create, 'assetId').selectOption(source.id);
+  await field(create, 'detailCount').fill('1');
+  const created = await (await act('media.plan.create', create.locator('.primary'), post(planRoot, 201))).json();
+  const endpoint = planRoot + '/' + created.id;
+  const edit = form(page, 'image-plan-edit');
+  const confirm = form(page, 'image-plan-confirm');
+  await field(edit, 'designNotes').fill('统一色调并保留商品轮廓。');
+  await field(edit, 'imageTitle').nth(1).fill('组图控件失败重试');
+  assert.equal(await confirm.locator('.primary').isDisabled(), true);
+  await act('media.plan.edit', edit.locator('.primary'), { method: 'PUT', path: endpoint, status: 200 });
+  assert.equal((await read(endpoint)).images[1].title, '组图控件失败重试');
+  await field(confirm, 'modelId').selectOption('media-browser-image');
+  await act('media.plan.confirm', confirm.locator('.primary'), { method: 'POST', path: endpoint + '/confirm' });
+  await page.locator('[data-image-plan-retry]').waitFor();
+  const failedPlan = await read(endpoint);
+  const failed = failedPlan.images[1];
+  assert.equal(failed.state, 'failed');
+  await act('media.plan.refresh', page.locator('[data-image-plan-refresh]'), get(endpoint));
+  await act('media.plan.review-failed-task', page.locator(`a[href="#tasks/${failed.taskId}"]`), get(taskRoot + '/' + failed.taskId));
+  const restored = await (await act('media.plan.regenerate-via-task', page.locator('[data-regenerate-task]'), post(taskRoot + '/' + failed.taskId + '/regenerate'))).json();
+  assert.equal(restored.imagePlan.attempt, 2);
+  assert.equal(restored.parentId, failed.taskId);
+  await act('media.plan.back-from-task', page.getByRole('link', { name: '查看整组方案', exact: true }), get(endpoint));
+  await page.getByText('全部完成', { exact: true }).waitFor();
+  const complete = await read(endpoint);
+  const main = complete.images[0];
+  await act('media.plan.preview', page.locator('[data-image-plan-preview="0"]'), get('/v1/assets/' + main.assetId + '/content'));
+  await page.locator('[data-plan-preview] img').waitFor();
+  const delivered = await download(page, () => act('media.plan.download', page.locator('[data-image-plan-download="0"]'), get(main.deliveryUrl)));
+  assert.equal(delivered.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  await act('media.plan.draft-prefill', page.getByRole('link', { name: '创建商品草稿', exact: true }), get(endpoint));
+  const draft = form(page, 'save-draft');
+  assert.equal(await field(draft, 'image-main').inputValue(), main.assetId);
+  assert.equal(await field(draft, 'image-detail').locator('option:checked').getAttribute('value'), complete.images[1].assetId);
 });

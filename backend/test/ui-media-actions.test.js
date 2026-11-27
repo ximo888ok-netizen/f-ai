@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
 import test from 'node:test';
 import { createCanvas } from '@napi-rs/canvas';
 import { createStudioFixture } from '../test-support/ui-actions.js';
 
 const options = { skip: !process.env.FAI_TEST_PLAYWRIGHT_PATH, timeout: 240000 };
+const { FAI_TEST_FFMPEG_PATH: ffmpeg, FAI_TEST_FFPROBE_PATH: ffprobe } = process.env;
 const media = '/v1/media';
 const batchPath = media + '/images/batches';
 const templatesPath = media + '/images/platform-templates';
@@ -177,6 +182,10 @@ test('media actions edit and reorder storyboard shots, open the prompt view and 
   await control(shots.nth(1), 'prompt').fill('商品侧面新版');
   await act('media.story.update', submit(editor), put(record, 200));
   assert.equal((await read(record)).revision, 2);
+  if (ffmpeg && ffprobe) {
+    const movie = await download(page, () => act('media.story.export', page.locator('[data-storyboard-export]'), post(record + '/export', 200)));
+    assert.equal(movie.subarray(4, 8).toString(), 'ftyp');
+  }
   const deleteButton = page.locator('[data-storyboard-delete]');
   page.once('dialog', dialog => dialog.dismiss());
   await act('media.story.delete-cancel', deleteButton);
@@ -184,4 +193,87 @@ test('media actions edit and reorder storyboard shots, open the prompt view and 
   page.once('dialog', dialog => dialog.accept());
   await act('media.story.delete-confirm', deleteButton, { method: 'DELETE', path: record });
   assert.ok(!(await read(storiesPath)).items.some(item => item.id === created.id));
+});
+
+test('media video export switches format controls, rejects out-of-range frames and returns local MP4, PNG, JPG and MP3', {
+  ...options, skip: options.skip || !ffmpeg || !ffprobe,
+}, async t => {
+  const { page, api, read, open, act } = await createStudioFixture(t);
+  const dir = await mkdtemp(join(tmpdir(), 'ui-media-export-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const sample = join(dir, 'sample.mp4');
+  await promisify(execFile)(ffmpeg, ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=720x720:r=12',
+    '-f', 'lavfi', '-i', 'sine=frequency=500:sample_rate=44100', '-t', '1.3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', sample], { windowsHide: true, timeout: 15000 });
+  const source = await api('POST', '/v1/assets', {
+    name: '合成视频.mp4', source: 'ffmpeg 合成', purpose: '导出按钮测试', mediaType: 'video/mp4', dataBase64: (await readFile(sample)).toString('base64'),
+  });
+  const preflight = form(page, 'source-review');
+  const review = media + '/videos/' + source.id + '/preflight';
+  await open('assets/' + source.id, preflight);
+  await control(preflight, 'shotCount').fill('1');
+  await control(preflight, 'personCount').fill('1');
+  await control(preflight, 'maxFacingAngle').fill('40');
+  await act('media.video.export.preflight', submit(preflight), put(review, 200));
+  assert.equal((await read(review)).eligible, true);
+  const editor = form(page, 'video-export');
+  await open('media/video/' + source.id, editor);
+  const endpoint = media + '/videos/' + source.id + '/export';
+  assert.equal(await control(editor, 'assetId').inputValue(), source.id);
+  await control(editor, 'ratio').selectOption('9:16');
+  await control(editor, 'keepAudio').selectOption('false');
+  await control(editor, 'aiGenerated').check();
+  let response;
+  const exported = async label => download(page, async () => { response = await act(label, submit(editor), post(endpoint, 200)); });
+  assert.equal((await exported('media.video.export.mp4')).subarray(4, 8).toString(), 'ftyp');
+  assert.deepEqual(response.request().postDataJSON(), { format: 'mp4', ratio: '9:16', keepAudio: false, aiGenerated: true });
+  await control(editor, 'format').selectOption('png');
+  assert.equal(await control(editor, 'keepAudio').isDisabled(), true);
+  await control(editor, 'frameSeconds').fill('5');
+  const badFrame = await act('media.video.export.invalid-frame', submit(editor), post(endpoint, 422));
+  assert.equal((await badFrame.json()).error.code, 'VIDEO_FRAME_OUT_OF_RANGE');
+  await control(editor, 'frameSeconds').fill('0.5');
+  assertPng(await exported('media.video.export.png'));
+  assert.equal(response.request().postDataJSON().frameMs, 500);
+  await control(editor, 'format').selectOption('jpg');
+  assert.equal((await exported('media.video.export.jpg')).subarray(0, 2).toString('hex'), 'ffd8');
+  await control(editor, 'format').selectOption('mp3');
+  assert.equal(await control(editor, 'ratio').isDisabled(), true);
+  assert.equal(await control(editor, 'frameSeconds').isDisabled(), true);
+  assert.equal((await exported('media.video.export.mp3')).subarray(0, 3).toString(), 'ID3');
+  assert.deepEqual(response.request().postDataJSON(), { format: 'mp3', aiGenerated: true });
+});
+
+test('media PSD actions persist layer geometry, preview, download and confirm deletion', options, async t => {
+  const { page, api, read, open, act } = await createStudioFixture(t);
+  const [subject, background] = await Promise.all([seedImage(api, 'PSD 主件.png'), seedImage(api, 'PSD 背景.png', '#c9993b')]);
+  const root = '/v1/studio/psd-documents';
+  await open('psd', page.getByRole('link', { name: '新建设计' }));
+  await act('media.psd.new', page.getByRole('link', { name: '新建设计' }));
+  const editor = form(page, 'psd-save');
+  const values = { title: '合成分层设计', width: '256', height: '256', subjectX: '16', subjectY: '96', subjectWidth: '224', subjectHeight: '132',
+    caption: 'Local preview', textX: '20', textY: '70', size: '18', textColor: '#173451', backgroundColor: '#dbd3c5' };
+  for (const [name, value] of Object.entries(values)) await control(editor, name).fill(value);
+  await control(editor, 'subjectAssetId').selectOption(subject.id);
+  await control(editor, 'backgroundAssetId').selectOption(background.id);
+  await control(editor, 'font').selectOption('sans');
+  const saved = await (await act('media.psd.save', submit(editor), put(newRecord(root), 200))).json();
+  const record = root + '/' + saved.id;
+  const stored = await read(record);
+  assert.equal(stored.backgroundAssetId, background.id);
+  assert.deepEqual(stored.layout.placement, { x: 16, y: 96, width: 224, height: 132 });
+  await act('media.psd.preview', page.locator('[data-psd-preview]:is(button)'), get(record + '/preview', 200));
+  await page.getByRole('img', { name: '分层设计合成预览' }).waitFor();
+  const exported = await download(page, () => act('media.psd.export', page.locator('[data-psd-download]'), get(record + '/export', 200)));
+  assert.equal(exported.subarray(0, 4).toString(), '8BPS');
+  await act('media.psd.back', page.getByRole('link', { name: '返回分层设计' }), get(root, 200));
+  await act('media.psd.edit', page.getByRole('link', { name: '编辑设计' }), get(record, 200));
+  assert.equal(await control(editor, 'caption').inputValue(), 'Local preview');
+  const remove = page.locator('[data-psd-delete]');
+  page.once('dialog', dialog => dialog.dismiss());
+  await act('media.psd.delete-cancel', remove);
+  assert.equal((await read(record)).revision, 1);
+  page.once('dialog', dialog => dialog.accept());
+  await act('media.psd.delete-confirm', remove, { method: 'DELETE', path: record });
+  assert.deepEqual((await read(root)).items, []);
 });

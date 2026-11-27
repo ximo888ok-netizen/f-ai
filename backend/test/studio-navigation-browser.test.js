@@ -9,21 +9,7 @@ import { createProviders } from '../src/providers.js';
 import { watchControls } from '../test-support/ui-control-report.js';
 
 const playwrightPath = process.env.FAI_TEST_PLAYWRIGHT_PATH;
-const studioRoutes = [
-  'home', 'chat', 'capabilities', 'data', 'desk', 'create', 'library', 'skills', 'copy-review',
-  'copy-drafts', 'models', 'media', 'rights', 'assets', 'psd', 'image-plans', 'cloud-assets', 'feishu',
-  'tasks', 'commerce', 'drafts', 'products', 'roi', 'schedules', 'projects', 'team', 'resources',
-  'customer', 'shops', 'manager', 'inbox', 'account', 'settings',
-];
-const merchantRoutes = ['members', 'projects', 'features', 'connections', 'audit'];
-const categories = [
-  'chat/new', 'capabilities/skills', 'capabilities/connections', 'data/files',
-  'desk/image/advanced', 'desk/image/agent', 'desk/image/skills', 'desk/video', 'desk/video/quick',
-  'desk/video/director', 'desk/video/skills', 'commerce/shops', 'customer/shops', 'customer/replies',
-  'create/image', 'create/video', 'create/copywriting', 'create/operations', 'models/voice',
-  'media/video', 'media/storyboards', 'drafts/quality', 'drafts/new', 'copy-drafts/new',
-  'products/categories', 'products/transfers', 'resources/memory/personal', 'tasks/state/failed', 'inbox/unread',
-];
+import { studioRoutes, merchantRoutes, categories } from '../test-support/studio-routes.js';
 
 async function routesFrom(page, origin, filename) {
   const response = await page.request.get(origin + '/studio/' + filename);

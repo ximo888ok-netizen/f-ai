@@ -81,12 +81,13 @@ test('knowledge owners edit and grant libraries, manage memories and search thro
   const document = (await read(documents)).items.find(item => item.name === '工作室测试手册');
   const documentPath = documents + '/' + document.id;
   await act('阅读已上传文档', page.getByRole('link', { name: '阅读', exact: true }), route('GET', documentPath));
-  await page.getByText('手册含有湖泊验收说明。', { exact: true }).waitFor();
+  const documentView = page.locator('pre.live-result');
+  await documentView.filter({ hasText: '手册含有湖泊验收说明。' }).waitFor();
   await page.getByText('编辑文档', { exact: true }).click();
   const edit = form(page, 'edit-document');
   await fill(edit, { content: '训练文档含有北极星验收说明。' });
   await act('编辑文档并更新检索', submit(edit), route('PATCH', documentPath));
-  await page.getByText('训练文档含有北极星验收说明。', { exact: true }).waitFor();
+  await documentView.filter({ hasText: '训练文档含有北极星验收说明。' }).waitFor();
   const search = form(page, 'search');
   await open('resources', search);
   await fields(search, 'baseId').selectOption(base.id);

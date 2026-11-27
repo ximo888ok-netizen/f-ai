@@ -22,7 +22,7 @@ test('platform owner manages members, access, credits, features, connections and
     configureProviders(providers) {
       providers.set('model:platform-connection', {
         info: { id: 'platform-connection', model: 'Platform QA alias', protocol: 'openai-chat', kind: 'text',
-          capabilities: ['model.chat'] },
+          capabilities: ['model.chat'], streamText: false },
         supports: capability => capability.id === 'model.chat',
         run: async () => ({ type: 'text', text: '本机连接夹具' }),
       });
@@ -44,28 +44,41 @@ test('platform owner manages members, access, credits, features, connections and
   const invitation = await invited.json();
   const inviteTarget = '/v1/invitations/' + invitation.id;
   const replacement = await act('重发成员邀请', page.locator(`[data-renew="${invitation.id}"]`), route('PUT', inviteTarget + '/token'));
-  assert.notEqual((await replacement.json()).token, invitation.token);
-  await page.locator('[data-ticket]').waitFor();
-  await page.locator('[data-copy-invite]').click();
-  const accepted = await app.inject({ method: 'POST', url: '/v1/invitations/accept',
-    headers: { authorization: 'Bearer ' + member.token }, payload: { token: (await replacement.json()).token },
-  });
-  assert.equal(accepted.statusCode, 200, accepted.body);
+  const { token: replacementToken } = await replacement.json();
+  assert.notEqual(replacementToken, invitation.token);
+  await page.waitForFunction(token => document.querySelector('[data-ticket]')?.value.includes(token), replacementToken);
+  await act('复制当前邀请链接', page.locator('[data-copy-invite]'));
+  const memberPage = await page.context().newPage();
+  memberPage.setDefaultTimeout(10000);
+  await memberPage.goto(origin + '/#team');
+  const personal = member.workspaces[0].id;
+  await memberPage.evaluate(({ token, personal }) => {
+    sessionStorage.setItem('fai.live.session', token);
+    sessionStorage.setItem('fai.live.workspace', personal);
+  }, { token: member.token, personal });
+  await memberPage.reload();
+  const acceptance = form(memberPage, 'accept');
+  await type(acceptance, { token: replacementToken });
+  const [accepted] = await Promise.all([memberPage.waitForResponse(response =>
+    new URL(response.url()).pathname === '/v1/invitations/accept' && response.request().method() === 'POST'),
+  submit(acceptance).click()]);
+  assert.equal(accepted.status(), 200);
+  const company = session.workspaces[0].id;
+  await memberPage.waitForFunction(id => document.querySelector('#workspace-selector')?.value === id, company);
+  t.diagnostic('UI action: 接受企业邀请 → POST /v1/invitations/accept 200');
   const memberFilter = form(page, 'filters');
   await type(memberFilter, { q: memberEmail });
   await act('筛选企业成员', submit(memberFilter), route('GET', '/v1/members'));
-  const memberField = id => `/v1/members/${memberId}/${id}`;
+  const memberPath = '/v1/members/' + memberId;
   for (const [action, label, expected] of [['member-role', '设为管理员', 'admin'], ['member-role', '设为成员', 'member'],
     ['member-state', '停用', 'suspended'], ['member-state', '恢复', 'active']]) {
     const attribute = action.endsWith('role') ? 'role' : 'state';
     const button = page.locator(`[data-${action}="${memberId}"]`).filter({ hasText: label });
-    await act(label, button, route('PATCH', memberField(attribute)));
+    await act(label, button, route('PATCH', attribute === 'role' ? memberPath : memberPath + '/state'));
     assert.equal((await read('/v1/members')).items.find(entry => entry.id === memberId)[attribute], expected);
   }
-  const second = await act('生成待撤回邀请', await (async () => {
-    await type(invitationForm, { email: randomUUID() + '@example.test' });
-    return submit(invitationForm);
-  })(), route('POST', '/v1/invitations'));
+  await type(invitationForm, { email: randomUUID() + '@example.test' });
+  const second = await act('生成待撤回邀请', submit(invitationForm), route('POST', '/v1/invitations'));
   const revoked = await second.json();
   await act('撤回邀请', page.locator(`[data-revoke="${revoked.id}"]`), route('DELETE', '/v1/invitations/' + revoked.id));
   assert.equal((await read('/v1/invitations')).items.find(entry => entry.id === revoked.id).status, 'revoked');
@@ -154,4 +167,17 @@ test('platform owner manages members, access, credits, features, connections and
   await type(allocation, { amount: '3' });
   await act('从账户页分配积分', submit(allocation), route('POST', '/v1/credits/allocate'));
   assert.ok((await read('/v1/credits/ledger')).items.some(entry => entry.operation === 'transfer_out' && Math.abs(entry.amount) === 3));
+
+  const workspaceControl = memberPage.locator('#workspace-selector');
+  await memberPage.locator('#profile').click();
+  for (const workspaceId of [personal, company]) {
+    const [response] = await Promise.all([memberPage.waitForResponse(response =>
+      new URL(response.url()).pathname === '/v1/plugins' &&
+      response.request().headers()['x-workspace-id'] === workspaceId), workspaceControl.selectOption(workspaceId)]);
+    assert.equal(response.status(), 200);
+    await memberPage.waitForFunction(id => document.querySelector('#workspace-selector')?.value === id, workspaceId);
+    t.diagnostic('UI action: 切换并读取工作区目录 → GET /v1/plugins 200');
+    if (workspaceId === personal) await memberPage.locator('#profile').click();
+  }
+  await memberPage.close();
 });
