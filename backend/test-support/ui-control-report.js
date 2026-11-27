@@ -9,15 +9,15 @@ export async function watchControls(t, context) {
   if (!directory) return;
   const rows = new Map();
   await context.exposeBinding('__faiUiCoverage', (_, events) => {
-    for (const [view, action, count] of events) {
-      const key = JSON.stringify([view, action]);
-      const row = rows.get(key) ?? { view, action, clicks: 0 };
+    for (const [view, action, control, count] of events) {
+      const key = JSON.stringify([view, action, control]);
+      const row = rows.get(key) ?? { view, action, control, clicks: 0 };
       row.clicks += count;
       rows.set(key, row);
     }
   });
   await context.addInitScript(() => {
-    const selector = 'button, input[type=submit], input[type=button], summary, [role=button], [role=tab], [role=menuitem], a[href]';
+    const selector = 'button, input[type=submit], input[type=button], summary, [role=button], [role=tab], [role=menuitem], [data-glass-preset], .dm-track, a[href]';
     const seen = new Set();
     const clean = value => String(value ?? '').replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, ':id')
       .replace(/\s+/g, ' ').trim().slice(0, 150);
@@ -33,7 +33,16 @@ export async function watchControls(t, context) {
       else if (node.type === 'submit' && form) action = 'submit ' + form;
       else if (attr.length) action = attr.map(a => a.name).join(' ') + ' ' + name;
       else action = (node.id || node.getAttribute('role') || node.localName) + ' ' + name;
-      return [view, action];
+      const keyAttr = attr.find(a => ['data-select','data-switch-scene','data-plugin-state','data-glass-preset','data-dual-mode','data-dual-step','data-brief-chip','data-model-choice'].includes(a.name));
+      let control = action;
+      if (!href && !(node.type === 'submit' && form)) {
+        if (keyAttr) control = keyAttr.name + '=' + clean(keyAttr.value);
+        else if (node.id) control = '#' + node.id;
+        else if (attr.length) control = attr[0].name;
+        else if (node.matches('.dm-track')) control = '玻璃主题点阵开关';
+        else if (node.matches('summary')) control = 'summary ' + clean(name).replace(/\d+/g,'#');
+      }
+      return [view, action, control];
     }
     let timer;
     function inspect() {
@@ -60,4 +69,3 @@ export async function watchControls(t, context) {
     await writeFile(join(directory, randomUUID() + '.json'), JSON.stringify({ suite: t.name, controls: [...rows.values()] }));
   });
 }
-

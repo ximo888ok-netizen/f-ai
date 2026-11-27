@@ -4,7 +4,7 @@ import test from 'node:test';
 import { createStudioFixture } from '../test-support/ui-actions.js';
 
 test('catalog favorites cover each capability; personal workspace plugin switches and a failed detail can recover', {
-  skip: !process.env.FAI_TEST_PLAYWRIGHT_PATH, timeout: 220000,
+  skip: !process.env.FAI_TEST_PLAYWRIGHT_PATH, timeout: 340000,
 },async t=>{
   const {page,app,origin,open,act,api,read}=await createStudioFixture(t);
   await open('library','[data-live-favorites]');
@@ -42,17 +42,17 @@ test('catalog favorites cover each capability; personal workspace plugin switche
     sessionStorage.setItem('fai.live.workspace',workspace);
   },{token,workspace:workspaces[0].id});
   await page.goto('about:blank');
-  await open('manager','[data-plugin-state]');
-  for(const plugin of catalog.items){
+  await open('manager',page.locator('[data-plugin-state]').first());
+  for(const plugin of [...catalog.items,catalog.models]){
     const toggle=page.locator('[data-plugin-state="'+plugin.id+'"]');
     for(const enabled of [false,true]){
       const target='/v1/plugins/'+plugin.id+'/state';
       await act('个人工作区插件 '+plugin.id+' '+enabled,toggle,{method:'PUT',path:target});
       const actual=await page.request.get(origin+'/v1/plugins',{headers:{authorization:'Bearer '+token,'x-workspace-id':workspaces[0].id}});
       assert.equal(actual.status(),200);
-      assert.equal((await actual.json()).items.find(p=>p.id===plugin.id).enabled,enabled);
+      const directory=await actual.json();
+      assert.equal([...directory.items,directory.models].find(p=>p.id===plugin.id).enabled,enabled);
       await toggle.filter({hasText:enabled?'停用':'启用'}).waitFor();
     }
   }
 });
-

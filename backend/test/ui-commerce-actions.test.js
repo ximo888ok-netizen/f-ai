@@ -410,9 +410,17 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
   const reply = await (await submit('new-reply', { title: '客服验收话术', scenario: '商品容量', content: '已确认容量。' },
     { method: 'POST', path: replies, status: 201 })).json();
   await visible(reply.title);
+  assert.equal((await read(replies)).items.find(item => item.id === reply.id).content, '已确认容量。');
   await act('展开快捷话术编辑', page.getByText('查看或编辑', { exact: true }));
   await submit('reply-' + reply.id, { content: '人工核对结果为 375 毫升。' }, { method: 'PUT', path: replies + '/' + reply.id });
+  assert.equal((await read(replies)).items.find(item => item.id === reply.id).content, '人工核对结果为 375 毫升。');
   await act('返回客服接待台', link('返回客服工作台'), { method: 'GET', path: conversations });
+  await act('打开非空客服店铺管理', '#scene-customer-shops-tab');
+  const persistedShop = page.locator('.shop-record').filter({ hasText: serviceShop.name });
+  await persistedShop.waitFor();
+  await act('展开客服门店已有档案', persistedShop.getByText('管理店铺', { exact: true }));
+  assert.equal(await form('shop-edit-' + serviceShop.id).locator('[name=name]').inputValue(), serviceShop.name);
+  await act('从店铺管理返回接待台', '#scene-customer-inbox-tab');
   const newChat = button('新建工作台会话').first();
   await act('打开并关闭空白会话表单', newChat);
   await act('关闭新会话表单', page.locator('[data-close-new]'));
@@ -463,6 +471,8 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
   const notice = await (await submit('rights-submit', { statement: '合成权利声明', evidenceReference: '合成证据引用' },
     { method: 'POST', path: rights, status: 201 })).json();
   const target = rights + '/' + notice.id;
+  assert.equal((await read(target)).notice.statement, '合成权利声明');
+  assert.equal((await read(target)).notice.state, 'submitted');
   const transitions = [
     ['forward', 'forwarded'], ['restrict', 'restricted'], ['counter', 'counter_received'],
     ['forward-counter', 'counter_forwarded'], ['uphold', 'upheld'], ['restore', 'restored'],

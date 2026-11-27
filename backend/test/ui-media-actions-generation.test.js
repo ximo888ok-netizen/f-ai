@@ -57,8 +57,9 @@ function fixtureProviders(providers) {
   ], { skill: 'image.skill-stitch', text: '合成测试制作说明' }));
 }
 
-async function download(page, action) {
+async function download(page, action, expectedFilename) {
   const [file] = await Promise.all([page.waitForEvent('download'), action()]);
+  if (expectedFilename) assert.equal(file.suggestedFilename(), expectedFilename);
   return readFile(await file.path());
 }
 
@@ -355,6 +356,7 @@ test('media task actions recover trace errors, query and filter real events, re-
   await open('desk/image/skills', '.media-skill-desk');
   await page.getByRole('link', { name: '商品组图方案', exact: true }).waitFor();
   const team = await read('/v1/media-skills/image');
+  assert.equal(team.items.find(item => item.id === 'image.skill-linkpix-image-translate').alias, 'image-linkpix-image-translate');
   const unavailable = team.items.find(item => item.id === 'image.skill-kling-generate');
   assert.deepEqual(unavailable.models, []);
   const desk = page.locator('.media-skill-desk');
@@ -394,7 +396,7 @@ test('media task actions recover trace errors, query and filter real events, re-
   await act('media.skill.alternate', desk.locator('[data-select="image.skill-white-check"]'));
   await act('media.skill.return-to-draft', desk.locator('[data-select="image.skill-stitch"]'));
   assert.deepEqual(await skillForm.locator('[data-asset-order] li span').allTextContents(), [sources[1].name, sources[0].name]);
-  const brief = JSON.parse((await download(page, () => act('media.skill.brief', skillForm.locator('[data-brief]')))).toString());
+  const brief = JSON.parse((await download(page, () => act('media.skill.brief', skillForm.locator('[data-brief]')), 'image-stitch-制作单.json')).toString());
   assert.deepEqual(brief.parameters.assetIds, [sources[1].id, sources[0].id]);
   const submitted = await act('media.skill.run', skillForm.locator('[type=submit]'), post(taskRoot));
   assert.deepEqual(submitted.request().postDataJSON().parameters.assetIds, brief.parameters.assetIds);

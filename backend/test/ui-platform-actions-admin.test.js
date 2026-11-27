@@ -51,13 +51,14 @@ test('platform owner manages members, access, credits, features, connections and
   await page.locator('#merchantNotice').filter({ hasText: /邀请链接已复制|链接已选中/ }).waitFor();
   const memberPage = await page.context().newPage();
   memberPage.setDefaultTimeout(10000);
-  async function memberAction(label, control, method, pathname, expectedStatus) {
-    const [response] = await Promise.all([memberPage.waitForResponse(result =>
+  async function browserAction(browserPage, label, control, method, pathname, expectedStatus) {
+    const [response] = await Promise.all([browserPage.waitForResponse(result =>
       result.request().method() === method && new URL(result.url()).pathname === pathname), control.click()]);
     assert.equal(response.status(), expectedStatus, await response.text());
     t.diagnostic('UI action: ' + label + ' → ' + method + ' ' + pathname + ' ' + expectedStatus);
     return response;
   }
+  const memberAction = (...args) => browserAction(memberPage, ...args);
   await memberPage.goto(origin + '/#team');
   const acceptance = form(memberPage, 'accept');
   await acceptance.waitFor();
@@ -199,13 +200,15 @@ test('platform owner manages members, access, credits, features, connections and
   const records = JSON.parse(await readFile(await (await exported).path(), 'utf8'));
   assert.ok(records.length > 0 && records.every(record => record.targetId === project.id));
 
-  await act('从商家后台返回工作台', page.getByRole('link', { name: '返回工作台', exact: true }), route('GET', '/v1/plugins'));
-  await act('从工作台打开账户与积分', page.locator('[data-shell-credit]'), route('GET', '/v1/credits/ledger'));
-  const allocation = form(page, 'allocate');
+  const ownerWorkbench = await page.context().newPage();
+  ownerWorkbench.setDefaultTimeout(15000);
+  await ownerWorkbench.goto(origin + '/#account', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  const allocation = form(ownerWorkbench, 'allocate');
   await named(allocation, 'memberId').selectOption(memberId);
   await type(allocation, { amount: '3' });
-  await act('从账户页分配积分', submit(allocation), route('POST', '/v1/credits/allocate'));
+  await browserAction(ownerWorkbench, '从账户页分配积分', submit(allocation), 'POST', '/v1/credits/allocate', 200);
   assert.ok((await read('/v1/credits/ledger')).items.some(entry => entry.operation === 'transfer_out' && Math.abs(entry.amount) === 3));
+  await ownerWorkbench.close();
 
   const workspaceControl = memberPage.locator('#workspace-selector');
   await memberPage.locator('#profile').click();
@@ -256,8 +259,7 @@ test('platform owner manages members, access, credits, features, connections and
       SELECT id,$1,$2,'workspace','test.pagination',$3,'{}'::jsonb,'pagination-fixture'
       FROM unnest($4::uuid[]) AS entries(id)`, [company, session.account.id, project.id, eventIds]);
   });
-  await page.locator('#profile').click();
-  await act('通过账号菜单打开商家后台', page.locator('#merchantLink'), route('GET', '/v1/members'));
+  await act('打开商家成员清单', page.locator('#nav a[href="#members"]'), route('GET', '/v1/members'));
   await type(memberFilter, { q: '' });
   await act('清除筛选显示完整成员清单', submit(memberFilter), route('GET', '/v1/members'));
   const nextMembers = await act('翻到下一页成员', page.locator('[data-page="25"]'), route('GET', '/v1/members'));

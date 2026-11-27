@@ -98,7 +98,7 @@ export function registerMediaSkills(app,db,providers,directory){
         if(s.alsoNative && matches.some(p=>available.get(p).info.protocol===s.alsoNative))state='configured';
         if(!matches.length&&['configured','local_ready'].includes(state))state='disabled';
         if(!eligible)state='disabled';
-        return {id:s.id,title:s.title,group:s.group,channels:s.channels,origin:s.origin,source:s.source,
+        return {id:s.id,alias:s.alias,title:s.title,group:s.group,channels:s.channels,origin:s.origin,source:s.source,
           revision:s.native||s.source==='aidge'?null:mediaSources[s.source].revision,installed:runtime.installed,
           state,models:matches.map(p=>available.get(p).info.id),usesPlanner:runtime.usesPlanner(req.context.workspaceId),slots:s.slots??[],frameMode:s.alsoNative==='ark-video',cost:cap.cost,min:s.min,max:s.max,types:s.mediaTypes,
           needsMovie:!!s.needsMovie,needsImage:!!s.needsImage,consent:s.consent,output:s.output,minOutputs:s.minOutputs,local:s.local??null,native:s.native??null};

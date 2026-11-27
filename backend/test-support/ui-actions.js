@@ -84,11 +84,13 @@ export async function createStudioFixture(t, { configureProviders, credits = 500
       return;
     }
     assert.ok(method, label + ' requires an HTTP method');
-    const [response] = await Promise.all([page.waitForResponse(r => {
+    const [request] = await Promise.all([page.waitForRequest(r => {
       const u = new URL(r.url());
-      return u.origin === origin && r.request().method() === method &&
+      return u.origin === origin && r.method() === method &&
         (path instanceof RegExp ? path.test(u.pathname) : u.pathname === path);
     }), node.click()]);
+    const response = await request.response();
+    assert.ok(response,label+' request was interrupted');
     assert.ok(status === undefined ? response.ok() : response.status() === status,
       label + ' ' + method + ' ' + new URL(response.url()).pathname + ' HTTP ' + response.status());
     t.diagnostic('UI action: ' + label + ' → ' + method + ' ' + new URL(response.url()).pathname + ' ' + response.status());
@@ -97,4 +99,3 @@ export async function createStudioFixture(t, { configureProviders, credits = 500
   return { page, browser, origin, app, db, providers, shops, session, workspace, headers, api,
     read: path => api('GET', path), open, act };
 }
-

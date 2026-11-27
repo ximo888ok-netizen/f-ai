@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        area: [media, platform, commerce, copy, catalog, navigation]
+        area: [media, platform, commerce, copy, catalog, navigation, baseline]
     defaults:
       run:
         shell: bash
@@ -45,8 +45,8 @@ jobs:
           AREA: ${{ matrix.area }}
           FAI_UI_REPORT_DIR: ${{ runner.temp }}/ui-controls
         run: |
-          if [[ "$AREA" == navigation ]]; then
-            suites=(test/studio-browser.test.js test/studio-navigation-browser.test.js test/ui-navigation*.test.js)
+          if [[ "$AREA" == baseline ]]; then
+            suites=(test/studio-browser.test.js test/studio-navigation-browser.test.js)
           else
             suites=(test/ui-"$AREA"*.test.js)
           fi
@@ -61,6 +61,7 @@ jobs:
           name: controls-${{ matrix.area }}
           path: |
             ${{ runner.temp }}/ui-controls/*.json
+            ${{ runner.temp }}/ui-controls/platform-link-*.png
             ${{ runner.temp }}/actions.tap
           retention-days: 14
 
@@ -84,4 +85,3 @@ jobs:
           path: ${{ runner.temp }}/report
           if-no-files-found: error
           retention-days: 30
-

@@ -18,13 +18,14 @@ concurrency:
 
 jobs:
   regression:
-    name: Full suite (${{ matrix.database }})
+    name: Full suite (${{ matrix.database }}, ${{ matrix.group }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         database: [PGlite, PostgreSQL]
+        group: [core, commerce-platform, catalog-media, navigation-copy]
     defaults:
       run:
         shell: bash
@@ -38,9 +39,11 @@ jobs:
           node-version: '24'
       - uses: actions/setup-python@v6
         id: python311
+        if: matrix.group == 'core'
         with:
           python-version: '3.11'
       - uses: actions/setup-python@v6
+        if: matrix.group == 'core'
         with:
           python-version: '3.12'
       - name: Install locked backend dependencies and test tools
@@ -59,6 +62,7 @@ jobs:
             echo 'FAI_TEST_VIDEO_ENCODER=libx264'
           } >> "$GITHUB_ENV"
       - name: Prepare pinned integration and media sources for local fixtures
+        if: matrix.group == 'core'
         env:
           PYTHON311: ${{ steps.python311.outputs.python-path }}
         run: |
@@ -112,26 +116,41 @@ jobs:
             echo 'FAI_TEST_SMS_REAL_BACKOFF=1'
           } >> "$GITHUB_ENV"
       - name: Run every test and require zero skips
+        env:
+          TEST_GROUP: ${{ matrix.group }}
         run: |
-          python -I -B test/media-profile-preflight.py
+          if [[ "$TEST_GROUP" == core ]]; then python -I -B test/media-profile-preflight.py; fi
+          selected=()
+          for suite in test/*.test.js; do
+            case "${suite##*/}" in
+              ui-commerce-*|ui-platform-*) group=commerce-platform ;;
+              ui-catalog-*|ui-media-*) group=catalog-media ;;
+              ui-navigation-*|ui-copy-*) group=navigation-copy ;;
+              *) group=core ;;
+            esac
+            if [[ "$group" == "$TEST_GROUP" ]]; then selected+=("$suite"); fi
+          done
+          (( ${#selected[@]} > 0 ))
           report="$RUNNER_TEMP/backend.tap"
           if [[ -n "$FAI_TEST_DATABASE_URL" ]]; then
             : > "$report"
-            for suite in test/*.test.js; do
+            for suite in "${selected[@]}"; do
               database="regression_$(basename "$suite" .test.js | tr '-' '_')"
               "$FAI_QA_PG_BIN/createdb" --maintenance-db="$FAI_TEST_DATABASE_URL" "$database"
               FAI_TEST_DATABASE_URL="${FAI_TEST_DATABASE_URL%/*}/$database" \
                 node --test --test-reporter=tap "$suite" | tee -a "$report"
             done
           else
-            node --test --test-concurrency=1 --test-reporter=tap | tee "$report"
+            node --test --test-concurrency=1 --test-reporter=tap "${selected[@]}" | tee "$report"
           fi
           tests=$(awk '/^# tests / {sum+=$3} END {print sum+0}' "$report")
           passed=$(awk '/^# pass / {sum+=$3} END {print sum+0}' "$report")
           [[ "$tests" =~ ^[1-9][0-9]*$ && "$tests" == "$passed" ]]
           ! grep -Eq '^# (skipped|todo) [1-9]' "$report"
           echo "Passed $passed of $tests tests with zero skips." >> "$GITHUB_STEP_SUMMARY"
-          grep -q 'Browser check passed: 通过真实 ffmpeg 合成与下载 MP4' "$report"
+          if [[ "$TEST_GROUP" == core ]]; then
+            grep -q 'Browser check passed: 通过真实 ffmpeg 合成与下载 MP4' "$report"
+          fi
           {
             echo '### Studio browser checks'
             sed -n 's/^# Browser check passed: /- /p' "$report"
@@ -139,7 +158,7 @@ jobs:
             echo 'Browser requests use the application and database on this runner. Model outputs come from local fixtures.'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Verify a fresh source deployment and backup restore
-        if: matrix.database == 'PostgreSQL'
+        if: matrix.database == 'PostgreSQL' && matrix.group == 'core'
         run: |
           if [[ ! -w /var/run/postgresql ]]; then
             sudo setfacl -m "u:$(id -un):rwx" /var/run/postgresql

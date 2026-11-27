@@ -31,4 +31,3 @@ test('open and close every native disclosure on registered root and category pag
   assert.ok(count>20,'Too few disclosures clicked');
   t.diagnostic('Disclosure controls verified: '+count);
 });
-

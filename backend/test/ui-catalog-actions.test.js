@@ -5,10 +5,11 @@ import test from 'node:test';
 import { createCanvas } from '@napi-rs/canvas';
 import { catalog } from '../src/catalog.js';
 import { GeneratedFile } from '../src/model-file.js';
+import { MediaOutputs } from '../src/media-skill-files.js';
 import { createStudioFixture } from '../test-support/ui-actions.js';
 
 test('submit each non-shop catalog task form to the real queue, worker, wallet and result store', {
-  skip: !process.env.FAI_TEST_PLAYWRIGHT_PATH, timeout: 420000,
+  skip: !process.env.FAI_TEST_PLAYWRIGHT_PATH, timeout: 780000,
 }, async t => {
   const { page, api, read, open, act, providers } = await createStudioFixture(t,{credits:1000});
   const image = createCanvas(1024,1024).toBuffer('image/png');
@@ -37,6 +38,10 @@ test('submit each non-shop catalog task form to the real queue, worker, wallet a
     providers.set(key,{info:{id:alias,kind,model:'Synthetic '+c.name,protocol:c.mediaSkill?'media-skill':'openai-chat',streamText:false,capabilities:[c.id]},
       supports: cap=>cap.id===c.id,run:async task=>{
         assert.equal(task.capability_id,c.id);
+        if (kind==='image' && c.mediaSkill?.minOutputs>1) {
+          const names=task.input.parameters.slots ?? Array.from({length:c.mediaSkill.minOutputs},(_,i)=>'图片'+(i+1));
+          return new MediaOutputs(names.map(name=>({name:name+'.png',file:new GeneratedFile(image,'image/png',{})})),{skill:c.id});
+        }
         if (kind==='image') return new GeneratedFile(image,'image/png',{});
         if (kind==='video') return new GeneratedFile(video,'video/mp4',{});
         if (c.id==='model.speech') return new GeneratedFile(audio,'audio/mpeg',{});
@@ -50,7 +55,16 @@ test('submit each non-shop catalog task form to the real queue, worker, wallet a
     // A document navigation gives identical forms on consecutive tool routes a
     // fresh lifecycle instead of inadvertently submitting the preceding tool.
     await page.goto('about:blank');
-    await open('create/'+c.pluginId+'/'+c.id,form);
+    const route='create/'+c.pluginId+'/'+c.id;
+    if(c.mediaSkill) {
+      await open(route,form);
+    } else {
+      await open('create/'+c.pluginId,'#main .live-catalog-grid');
+      const entry=page.locator('#main a[href="#'+route+'"]').first();
+      if(!await entry.isVisible()) await page.locator('#main details').filter({has:page.locator('a[href="#'+route+'"]')}).locator('summary').click();
+      await entry.click();
+      await form.waitFor();
+    }
     const props = c.parameters.properties ?? {};
     const control = name => page.locator('[name="'+name+'"]');
     for (const [field,schema] of Object.entries(props)) {
@@ -72,7 +86,7 @@ test('submit each non-shop catalog task form to the real queue, worker, wallet a
         else if (schema.type==='array') await target.fill('参照样本');
       }
     }
-    if(c.id==='image.main-image') {
+    if(c.pluginId==='image') {
       for(const chip of await page.locator('[data-brief-chip]').all()) {
         await chip.click();
         assert.ok((await control('params.prompt').inputValue()).includes(await chip.getAttribute('data-brief-chip')));
@@ -97,6 +111,32 @@ test('submit each non-shop catalog task form to the real queue, worker, wallet a
       assert.deepEqual(stored.parameters[name],value,c.id+' '+name);
     }
   });
+  for (const kind of ['image','video']) {
+    const skills=(await read('/v1/media-skills/'+kind)).items;
+    await open('desk/'+kind+'/skills','[data-skill-list]');
+    const list=page.locator('[data-skill-list]');
+    assert.deepEqual((await list.locator('[data-select]').evaluateAll(nodes=>nodes.map(n=>n.dataset.select))).sort(),
+      skills.map(skill=>skill.id).sort());
+    for (const skill of skills) await t.test('平台技能按钮 '+skill.id,async()=>{
+      await list.locator('[data-select="'+skill.id+'"]').click();
+      const editor=page.locator('[data-skill-run]');
+      await page.locator('[data-skill-editor]').getByRole('heading',{name:skill.title,exact:true}).waitFor();
+      const prompt=editor.locator('textarea[name=prompt]');
+      if(await prompt.count()) await prompt.fill('测试商品规格与交付要求');
+      const color=editor.locator('[name=color]');
+      if(await color.count()) await color.fill('浅灰');
+      const ids=skill.needsMovie ? [movie,...images.slice(0,Math.max(skill.min-1,0))] : images.slice(0,skill.min);
+      for(const id of ids) await editor.locator('[name=library]').selectOption(id);
+      const submit=editor.locator('button[type=submit]');
+      const run=await act('平台技能运行 '+skill.id,submit,{method:'POST',path:'/v1/tasks',status:202});
+      assert.equal(run.request().postDataJSON().capabilityId,skill.id);
+      const task=await run.json();
+      await page.locator('[data-results] [data-task-state]').filter({hasText:'任务已完成'}).waitFor();
+      await page.waitForFunction(()=>document.querySelector('[data-skill-run] button[type=submit]')?.disabled===false);
+      const result=await read('/v1/tasks/'+task.id);
+      assert.equal(result.state,'succeeded');
+      assert.ok(result.result.assetId || result.result.files?.length || result.result.text);
+    });
+  }
   assert.equal((await read('/v1/credits/wallet')).reserved,0);
 });
-

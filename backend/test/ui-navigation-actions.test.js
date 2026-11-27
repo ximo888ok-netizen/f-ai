@@ -156,4 +156,3 @@ test('directory feature switches, cancellation, shell search, theme, motion, abo
   await page.locator('#sidebarBackdrop').click({position:{x:375,y:300}});
   assert.equal(await page.locator('#studioMenu').getAttribute('aria-expanded'),'false');
 });
-
