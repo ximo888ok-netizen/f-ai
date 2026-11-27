@@ -18,6 +18,10 @@ const paths = {
   service: '<path d="M21 13a4 4 0 0 1-4 4H9l-5 4v-5a4 4 0 0 1-1-3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M7 9h10m-10 4h6"/>',
   arrow: '<path d="M5 12h14m-6-6 6 6-6 6"/>',
   outward: '<path d="M6 18 18 6M7 6h11v11"/>',
+  book: '<path d="M5 3.5h13.5V20H6a2.5 2.5 0 0 1-2.5-2.5V6A2.5 2.5 0 0 1 6 3.5zM4 17.5A2 2 0 0 1 6 16h12.5M8 7h6"/>',
+  document: '<path d="M5 3h9l5 5v13H5zM14 3v5h5"/>',
+  lines: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.1M4 12h.1M4 18h.1"/>',
+  more: '<circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
 };
 export function studioIcon(name) {

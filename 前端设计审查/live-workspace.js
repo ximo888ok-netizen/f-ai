@@ -1,6 +1,8 @@
 import { assetDetails, searchable } from './live-record-tools.js';
+import { knowledgeCenter } from './knowledge-center.js';
+import { createBaseForm, uploadDocumentForm, saveKnowledgeDocument } from './knowledge-forms.js';
 import { settings } from './live-settings.js';
-import { categoryDocs, categoryPage, customerScopeField, knowledgeDocument, readCustomerScope, webSearch } from './live-knowledge-tools.js';
+import { categoryDocs, categoryPage, knowledgeDocument, webSearch } from './live-knowledge-tools.js';
 
 import { action, date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, result, select, textarea, toast, uid } from './live.js';
 import { downloadAsset } from './live-tasks.js';
@@ -70,47 +72,44 @@ async function resources(ctx) {
   const basesPath = '/v1/knowledge/bases';
   if (id === 'web') return webSearch(ctx);
   if (id === 'memory') { await memory(ctx, documentId === 'enterprise' && ctx.enterprise ? 'enterprise' : 'personal'); return; }
-  if (!id) {
+  if (!id || id === 'space' || (id !== 'manage' && !documentId)) return knowledgeCenter(ctx);
+  if (id === 'manage') {
     const bases = await ctx.all(basesPath);
-    ctx.html(heading('知识库与记忆') + '<div class="live-row">' + link('个人记忆', 'resources/memory/personal') + link('联网检索', 'resources/web') +
+    ctx.html(heading('知识库管理') + link('返回知识库中心', 'resources') + '<div class="live-row">' + link('个人记忆', 'resources/memory/personal') + link('联网检索', 'resources/web') +
       (ctx.enterprise ? link('企业记忆', 'resources/memory/enterprise') : '') + '</div>' +
-      grid(panel('知识库', list(bases, base => item(base.name, date(base.createdAt), link('打开知识库', 'resources/' + base.id))) +
-        (ctx.manager ? form('new-base', nameField('知识库名称'), '创建知识库') : '')),
+      grid(panel('知识库', list(bases, base => item(base.name, date(base.createdAt), link('打开知识库', 'resources/' + base.id + '/manage'))) +
+        (ctx.manager ? createBaseForm() : '')),
       panel('检索文档', form('search', field('关键词', input('query', 'required maxlength="160"')) +
-        (bases.length ? field('限定知识库', select('baseId', [['', '全部已授权库'], ...bases.map(base => [base.id, base.name])])) : ''), '检索') +
+        (bases.length ? field('限定知识库', select('baseId', [['', '全部已授权库'], ...bases.map(base => [base.id, base.name])], ctx.args[2])) : ''), '检索') +
         '<div id="search-results"></div>')));
-    ctx.submit('new-base', async data => ctx.go('resources/' + (await post(ctx, basesPath, body(data))).id));
+    ctx.submit('new-base', async data => ctx.go('resources/' + (await post(ctx, basesPath, body(data))).id + '/manage'));
     ctx.submit('search', async data => {
       const baseId = data.get('baseId');
       const hits = await post(ctx, '/v1/knowledge/search', { query: data.get('query'), ...(baseId ? { baseIds: [baseId] } : {}) });
       if (ctx.active()) document.querySelector('#search-results').innerHTML = list(hits.items, hit => item(hit.name + ' · ' + hit.baseName,
         hit.snippet, link('查看文档', 'resources/' + hit.baseId + '/' + hit.documentId)), '未找到匹配文档。');
     });
+    if (documentId === 'search') document.querySelector('[data-form="search"] input')?.focus();
     return;
   }
   const endpoint = basesPath + '/' + path(id);
   const documents = endpoint + '/documents';
   if (documentId === 'categories') return categoryPage(ctx, id);
   if (documentId === 'category') return categoryDocs(ctx, id, ctx.args[2]);
-  if (documentId) return knowledgeDocument(ctx, id, documentId);
+  if (documentId !== 'manage') return knowledgeDocument(ctx, id, documentId);
   const [bases, docs, roster, grants, products] = await Promise.all([ctx.all(basesPath), ctx.all(documents), members(ctx),
     ctx.manager && ctx.enterprise ? ctx.all(endpoint+'/grants') : [], ctx.manager ? ctx.all('/v1/studio/products') : []]);
   const base = bases.find(base => base.id === id);
   const eligible = roster.filter(member => member.role === 'member' && !grants.some(g=>g.accountId===member.id));
-  ctx.html(heading(base?.name ?? '知识库') + link('文档分类', 'resources/' + id + '/categories') + panel('已上传文档', list(docs, doc => item(doc.name, doc.category,
+  ctx.html(heading(base?.name ?? '知识库') + link('返回知识库', 'resources/' + id) + link('文档分类', 'resources/' + id + '/categories') + panel('已上传文档', list(docs, doc => item(doc.name, doc.category,
     link('阅读', 'resources/' + id + '/' + doc.id) + (ctx.manager ? action('删除', 'delete-document', doc.id) : '')))) +
-    (ctx.manager ? grid(panel('添加文本资料', form('add-doc', field('名称', input('name', 'required maxlength="200"')) +
-      field('分类', input('category', 'maxlength="100"')) + customerScopeField(products) + field('正文', textarea('content', 'maxlength="200000"')) +
-      field('或读取 UTF-8 文本文件', input('file', 'type="file" accept=".txt,text/plain"')), '保存文档')),
+    (ctx.manager ? grid(panel('添加文本资料', uploadDocumentForm(products)),
       panel('库设置', form('rename-base', nameField('知识库名称', base?.name), '保存名称') + action('删除知识库', 'delete-base')),
       ...(ctx.enterprise ? [panel('文档访问授权',list(grants,g=>item(roster.find(m=>m.id===g.accountId)?.displayName??g.accountId,'已授权',action('撤销访问','remove-grant',g.accountId)),'暂无单独授权的成员。')+
         (eligible.length?form('grant',pickMember(eligible),'授予访问'):''))] : [])) : '') +
-    link('返回知识库清单', 'resources'));
+    link('返回知识库清单', 'resources/manage'));
   ctx.submit('add-doc', async data => {
-    const file = data.get('file');
-    const content = file.size ? await file.text() : data.get('content');
-    await post(ctx, documents, { name: data.get('name'), category: data.get('category') || undefined, content,
-      customerScope: readCustomerScope(data.get('customerScope')) });
+    await saveKnowledgeDocument(ctx, documents, data);
     ctx.reload();
   });
   ctx.submit('rename-base', async data => { await patch(ctx, endpoint, body(data)); ctx.reload(); });

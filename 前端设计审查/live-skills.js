@@ -1,5 +1,7 @@
 import { action, field, form, grid, h, heading, input, item, link, list, notice, panel, path, result, retryKey, select, textarea, toast } from './live.js';
 
+import { libraryDirectory } from './library-directory.js';
+
 const root='/v1/library';
 const actions={
   'copy-review':'文案措辞检查','sku-review':'商品 SKU 核对','model-chat':'模型对话',
@@ -30,12 +32,7 @@ export async function skillsPage(ctx) {
     return;
   }
   if (id) {await details(ctx,id);return;}
-  const entries=await ctx.all(root+'?kind=skill');
-  ctx.html(heading('技能运行') + '<div class="live-row">'+link('平台文案校验','copy-review')+
-    (ctx.manager?link('新增技能','skills/new'):'')+'</div>' +
-    panel('工作区技能',list(entries,entry=>item(entry.name,
-      actions[actionOf(entry)]+' · '+(entry.enabled?'可运行':'已停用'),
-      (entry.description?notice(entry.description):'')+link('打开技能','skills/'+entry.id)))));
+  return libraryDirectory(ctx, 'skills');
 }
 
 async function runFields(ctx,kind) {

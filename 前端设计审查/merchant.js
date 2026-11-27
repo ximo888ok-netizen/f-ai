@@ -131,7 +131,7 @@ function login(ctx) {
   menu.hidden = true;
   ctx.html(studioEntry({ title: '登录商家后台', description: '使用拥有企业管理权限的账号登录。', merchant: true,
     fields: form('login',
-      field('登录账号', input('email', 'type="text" required autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="输入登录账号或邮箱"')) +
+      field('邮箱', input('email', 'type="email" required autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="输入邮箱"')) +
       field('密码', input('password', 'type="password" required maxlength="128" autocomplete="current-password"')), '登录') }));
   ctx.form('login', async data => {
     const result = await ctx.api('/v1/auth/login', { method: 'POST', body: Object.fromEntries(data) });

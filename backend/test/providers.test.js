@@ -24,12 +24,16 @@ test('gateway sends a stable idempotency key and validates outcomes without foll
     assert.equal(options.headers['idempotency-key'], 'task-id');
     assert.equal(options.redirect, 'error');
     assert.deepEqual(JSON.parse(options.body), { capabilityId: capability.id, assets: [] });
-    return new Response(JSON.stringify({ result: { status: 'done' } }));
+    return Response.json({ result: { type:'image', url:'https://outputs.example.test/product.png' } });
   });
   const gateway = createProviders(gatewaySettings).get('gateway');
   const task = { id: 'task-id' };
   const input = { capabilityId: capability.id, assets: [] };
-  assert.deepEqual(await gateway.run(task, input), { status: 'done' });
+  assert.deepEqual(await gateway.run(task, input), { type:'image', url:'https://outputs.example.test/product.png' });
+  for (const result of [{}, {status:'done'}, {type:'video',url:'https://outputs.example.test/video.mp4'}, {type:'image',url:''}]) {
+    fetcher.mock.mockImplementation(async () => Response.json({result}));
+    await assert.rejects(gateway.run(task,input), {code:'INVALID_PROVIDER_RESULT'});
+  }
   fetcher.mock.mockImplementation(async () => new Response(null, { status: 429 }));
   await assert.rejects(gateway.run(task, input), { code: 'PROVIDER_REJECTED', retryable: true });
   fetcher.mock.mockImplementation(async () => new Response(null, { status: 403 }));

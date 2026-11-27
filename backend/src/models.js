@@ -8,12 +8,14 @@ import { generateImage, supportsImageQuality } from './model-image.js';
 import { pollMapped, runMapped, validateMappedMedia, validateMapping } from './model-mapping.js';
 import { generateText, textCapabilities, textPrompt, textRequest } from './model-text.js';
 import { utilityCapabilities, runUtility } from './model-utilities.js';
-import { pollVideo, startVideo } from './model-video.js';
+import { pollVideo, startVideo, videoInputLimits } from './model-video.js';
 
 const protocols = {
   'openai-embeddings': 'embedding', 'cohere-rerank': 'rerank', 'openai-transcription': 'transcription', 'openai-speech': 'speech',
   'chat-completions': 'text', responses: 'text', 'anthropic-messages': 'text', 'gemini-content': 'text',
   'cohere-chat': 'text', 'ollama-chat': 'text', 'openai-images': 'image', 'gemini-image': 'image',
+  'qwen-image': 'image', 'seedream-image': 'image', 'minimax-h3-image': 'image',
+  'wan3-video': 'video', 'minimax-h3-video': 'video', 'kling-video': 'video',
   'runway-video': 'video', 'ark-video': 'video', 'wan-video': 'video', 'wan-frames':'video', 'minimax-video': 'video',
 };
 const idPattern=modelAlias.pattern;
@@ -32,6 +34,10 @@ function validateParameters(config, capability, params) {
   if (config.protocol === 'json-http') return validateMappedMedia(config.mapping, params);
   if (!params.prompt?.trim()) throw invalid('This model requires a prompt');
   const count = params.assetIds?.length ?? 0;
+  const limits = videoInputLimits(config);
+  if (limits && params.options?.durationSeconds < limits.minSeconds) throw invalid('该模型视频至少需要 ' + limits.minSeconds + ' 秒');
+  if (limits?.frameRatioFromImage && count && params.ratio) throw invalid('首帧生视频的画幅由输入图片决定');
+  if (config.protocol === 'qwen-image' && (count > 3 || params.format === 'jpg')) throw invalid('千问图像 3.0 最多接收三张参考图，输出格式为 PNG');
   if(config.protocol==='ark-video' && capability.id==='video.skill-seedance-film'){
     if(count>(params.frameMode==='references'?9:2))throw invalid('首尾帧最多两张，多图参考最多九张。');
     return;
@@ -106,20 +112,22 @@ export function installModels(providers, definitions, env = process.env) {
     if (streaming && (!supportsTextStream(config.protocol) || !capabilities.includes('model.chat'))) {
       throw new Error('Text streaming requires a supported streaming protocol with model.chat');
     }
+    const videoLimits = videoInputLimits(config);
     const info = { id: config.id, model: config.model, protocol: config.protocol, kind, capabilities: [...new Set(capabilities)],
-      streamText: streaming, imageQuality: supportsImageQuality(config) };
+      ...(videoLimits ? { videoLimits } : {}), streamText: streaming, imageQuality: supportsImageQuality(config) };
     const signature = createHash('sha256').update(JSON.stringify([base.href,config,entry.keyEnv,...(streaming?[true]:[])])).digest('hex');
     const call = (path,body,extra,binary=false,timeout) => requestUpstream(new URL(path,base), {
       body, headers: { ...headers, ...extra }, repeatable: body === undefined,
       maxBytes: binary ? 10 * 1024 * 1024 : ['image', 'embedding'].includes(kind) ? 15 * 1024 * 1024 : 512 * 1024,
       binary,timeout:timeout ?? (body===undefined?30000:90000),
     });
+    const longImageRequest = ['qwen-image', 'seedream-image', 'minimax-h3-image'].includes(config.protocol);
     const adapter = {
-      info, signature, loopback,
+      info, signature, loopback, ...(longImageRequest ? { runTimeoutMs: 600000 } : {}),
       supports: capability => capabilities.includes(capability.id),
       validate: (capability, params) => validateParameters(config, capability, params),
       async run(task,payload,{timeout}={}) {
-        const request=(path,body,extra,binary)=>call(path,body,extra,binary,timeout);
+        const request=(path,body,extra,binary)=>call(path,body,extra,binary,timeout ?? adapter.runTimeoutMs);
         if (config.protocol === 'json-http') {
           const prompt = kind === 'text' ? textPrompt(payload) : payload.parameters.prompt;
           return runMapped(config,payload,prompt,request);

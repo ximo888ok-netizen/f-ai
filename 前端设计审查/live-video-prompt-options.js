@@ -22,10 +22,12 @@ export function videoLimits(model, type, capability) {
   const ratios = schema?.ratio?.enum ?? [];
   const duration = schema?.options?.properties?.durationSeconds;
   const runway = model?.protocol === 'runway-video';
+  const limits = model?.videoLimits;
+  const inputRatio = type === 'frame' && limits?.frameRatioFromImage;
   const accepted = runway ? (type === 'frame' ? ['16:9', '9:16', '1:1'] : ['16:9', '9:16']) : ratios;
   return {
-    ratios: model?.protocol === 'minimax-video' ? [] : ratios.filter(ratio => accepted.includes(ratio)),
-    min: Math.max(duration?.minimum ?? 1, runway ? 2 : 1), max: duration?.maximum ?? 10,
+    ratios: model?.protocol === 'minimax-video' || inputRatio ? [] : ratios.filter(ratio => accepted.includes(ratio)),
+    min: Math.max(duration?.minimum ?? 1, limits?.minSeconds ?? (runway ? 2 : 1)), max: duration?.maximum ?? 10,
     promptMax: runway ? 1000 : schema?.prompt?.maxLength ?? 4000,
   };
 }

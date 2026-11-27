@@ -345,7 +345,7 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
   const { page, open, act, api, read, app, headers, workspace } = fixture;
   const { form, link, button, visible, submit, confirmed } = controls(fixture);
   const product = await api('POST', products, { sku: 'K-1', name: '客服合成商品' });
-  await open('resources', form('new-base'));
+  await open('resources/manage', form('new-base'));
   const knowledge = await (await submit('new-base', { name: '客服合成知识库' }, { method: 'POST', path: bases, status: 201 })).json();
   const knowledgeUrl = bases + '/' + knowledge.id;
   const email = randomUUID() + '@example.test';
@@ -368,7 +368,7 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
   assert.ok(!(await memberBases()).some(base => base.id === knowledge.id));
   const roster = await read('/v1/members?state=active');
   assert.ok(roster.items.some(entry => entry.id === member.account.id && entry.role === 'member'));
-  await open('resources', link('打开知识库'));
+  await open('resources/manage', link('打开知识库'));
   await act('打开已加载成员名单的知识库', link('打开知识库'), { method: 'GET', path: knowledgeUrl + '/grants' });
   const grantPath = knowledgeUrl + '/grants/' + member.account.id;
   await submit('grant', { memberId: member.account.id }, { method: 'PUT', path: grantPath, status: 204 });
@@ -391,19 +391,21 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
   await act('从分类文档返回分类', link('返回分类'), { method: 'GET', path: categoryUrl });
   await confirmed('删除空的知识分类', button('删除空分类'), { method: 'DELETE', path: categoryUrl + '/' + category.id });
   await act('从分类回到知识库', link('返回知识库'), { method: 'GET', path: documents });
+  await button('添加文档').click();
   const doc = await (await submit('add-doc', {
     name: '陶杯手册', category: '产品规格', content: '容量是 350 毫升。', customerScope: product.id,
   }, { method: 'POST', path: documents, status: 201 })).json();
   await visible(doc.name);
-  await act('读取知识文档', link('阅读'), { method: 'GET', path: documents + '/' + doc.id });
+  await act('读取知识文档', page.getByRole('link', {name:/陶杯手册/}), { method: 'GET', path: documents + '/' + doc.id });
   await act('展开文档编辑', page.getByText('编辑文档', { exact: true }));
   await submit('edit-document', { content: '新容量是 375 毫升。' }, { method: 'PATCH', path: documents + '/' + doc.id });
   await visible('新容量是 375 毫升。');
   await act('返回当前知识库', link('返回知识库'), { method: 'GET', path: documents });
-  await act('返回知识库清单', link('返回知识库清单'), { method: 'GET', path: bases });
+  await button('知识库中心操作').click();
+  await act('打开知识库检索', link('检索知识库'), { method: 'GET', path: bases });
   await submit('search', { query: '375', baseId: knowledge.id }, { method: 'POST', path: '/v1/knowledge/search' });
   await act('打开搜索命中文档', link('查看文档'), { method: 'GET', path: documents + '/' + doc.id });
-  await open('resources', link('联网检索'));
+  await open('resources/manage', link('联网检索'));
   await act('进入联网检索', link('联网检索'), { method: 'GET', path: '/v1/search/web' });
   await submit('web-search', { query: '合成竞品检索' }, { method: 'POST', path: '/v1/search/web' });
   await visible('合成竞品参考');
@@ -412,6 +414,7 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
   assert.equal(await resultLink.getAttribute('target'), '_blank');
   await act('返回工作区知识库', link('返回知识库'), { method: 'GET', path: bases });
   for (const [label, scope] of [['个人记忆', 'personal'], ['企业记忆', 'enterprise']]) {
+    await button('知识库中心操作').click();
     await act('打开' + label, link(label), { method: 'GET', path: '/v1/memory' });
     const memoryResult = await (await submit('memory', { content: '合成' + label }, { method: 'POST', path: '/v1/memory' })).json();
     assert.equal(memoryResult.scope, scope);
@@ -525,7 +528,7 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
     { method: 'POST', path: rights + '/' + dismissed.id + '/actions' })).json();
   assert.equal(closed.state, 'dismissed');
 
-  await open('resources/' + knowledge.id, form('add-doc'));
+  await open('resources/' + knowledge.id + '/manage', form('add-doc'));
   await confirmed('删除知识库文档', button('删除'), { method: 'DELETE', path: documents + '/' + doc.id, status: 204 });
   await confirmed('删除空知识库', button('删除知识库'), { method: 'DELETE', path: knowledgeUrl, status: 204 });
   assert.equal((await read(bases)).items.length, 0);

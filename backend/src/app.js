@@ -58,7 +58,7 @@ import { registerCopywritingDrafts } from './copywriting-drafts.js';
 export async function buildApp({
   integrations = {}, integrationRunner, mediaRuntime, shopAuth = taobaoSettings(), shopTokenExchange,
   db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null,
-  dedicatedDatabases = new Map(), previewAdmin = false, packagedStudio = false,
+  dedicatedDatabases = new Map(), packagedStudio = false,
   cloudAssets = new Map(), feishu = new Map(), wechat = new Map(), sms = new Map(), realtimeVoice = new Map(),
   videoDelivery = null, customerAnswer = null, loopbackOnly = false,
   releases = featureReleases(process.env.FAI_FEATURE_RELEASES_JSON),
@@ -154,7 +154,7 @@ export async function buildApp({
 
   registerStudio(app, packagedStudio);
   registerVersionHelp(app);
-  registerAuth(app, db, previewAdmin);
+  registerAuth(app, db);
   app.decorate('verifyFeature', (context, plugin) => {
     const capability = catalog.get(plugin);
     return requireFeature(workspaceDb, context, capability?.pluginId ?? plugin, capability?.id);

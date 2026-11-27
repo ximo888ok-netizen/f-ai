@@ -77,6 +77,14 @@ test('Chrome renders all registered business routes and key categories against t
     });
     page.setDefaultTimeout(5000);
 
+    // Establish the signed-in session on a separate route before measuring SPA navigation.
+    const [identity] = await Promise.all([
+      page.waitForResponse(r => new URL(r.url()).pathname === '/v1/auth/me', {timeout:30000}),
+      page.goto(origin + '/#account', {waitUntil:'domcontentloaded'}),
+    ]);
+    assert.equal(identity.status(),200);
+    await page.locator('#profile:visible').waitFor({timeout:30000});
+
     async function checkRoute(pathname, fragment, main) {
       locationUnderTest = pathname + '#' + fragment;
       try {

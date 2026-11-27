@@ -55,13 +55,19 @@ export async function agentHome(ctx) {
     persist();
   }
   if (ctx.args?.[0] === 'new') {
+    let knowledgeBase;
+    if (ctx.args[1] === 'knowledge') {
+      const bases = await ctx.all('/v1/knowledge/bases');
+      if (!ctx.active()) return;
+      knowledgeBase = bases.find(base => base.id === ctx.args[2]);
+      if (!knowledgeBase) throw new Error('当前工作区无法访问这个知识库。');
+    }
     archive();
-    thread = { messages: [], input: '' };
+    thread = knowledgeBase ? { messages: [], input: '查知识库 ', knowledgeBase: { id: knowledgeBase.id, name: knowledgeBase.name } } : { messages: [], input: '' };
     persist();
     window.history.replaceState(window.history.state, '', '#chat');
   }
   const layout = document.querySelector('#chat-template').content.cloneNode(true);
-  layout.querySelector('[data-chat-scope]').textContent = ctx.workspace.name + ' · 电商 AI 助手';
   layout.querySelector('.agent-starters').innerHTML = starters.map(([label, prompt, icon]) =>
     '<button class="skill-pill" type="button" data-prompt="' + h(prompt) + '">' + studioIcon(icon) + label + '</button>').join('');
   (layout.querySelector('form .glow-body') ?? layout.querySelector('form')).insertAdjacentHTML('beforeend', agentControls(ctx));
@@ -99,6 +105,7 @@ export async function agentHome(ctx) {
     next.hidden = !choices.length;
   }
   function sync() {
+    view.querySelector('[data-chat-scope]').textContent = ctx.workspace.name + ' · ' + (thread.knowledgeBase?.name ?? '电商 AI 助手');
     const started = thread.messages.length > 0;
     input.placeholder = !started ? initialPrompt : thread.draft && !thread.draft.title ? '输入拼多多商品草稿名称' : '继续输入消息…';
     view.classList.toggle('in-chat', started);

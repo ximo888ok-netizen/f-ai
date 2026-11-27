@@ -167,7 +167,7 @@ function viewContext(controller, routeArgs, section) {
   const session = identity;
   const active = () => !controller.signal.aborted;
   const ctx = {
-    args: routeArgs, section, workspace: selected, account: session?.account, active, signal: controller.signal,
+    args: routeArgs, section, workspaces: session?.workspaces ?? [], workspace: selected, account: session?.account, active, signal: controller.signal,
     navigation: Object.fromEntries(Object.entries(pages).map(([id,[label]])=>[label,id])),
     manager: selected?.role === 'owner' || selected?.role === 'admin',
     enterprise: selected?.kind === 'enterprise',
@@ -184,6 +184,12 @@ function viewContext(controller, routeArgs, section) {
       else location.hash = to;
     },
     reload: () => { if (active()) void render(); },
+    switchWorkspace: id => {
+      if (!active()) return;
+      if (!session.workspaces.some(entry => entry.id === id)) throw new Error('当前账号无法访问这个工作区。');
+      setIdentity(session, id);
+      ctx.reload();
+    },
     acceptInvitation: data => {
       if (!active()) return;
       setIdentity({ ...session, workspaces: data.workspaces }, data.workspaceId);
@@ -219,7 +225,7 @@ function authPage(ctx) {
   ctx.html(studioEntry({
     title: signUp ? '创建账号' : '登录工作台',
     description: signUp ? '创建个人或企业工作区，开始制作商品内容。' : '使用你的工作区账号继续。',
-    fields: form('auth', field(signUp ? '邮箱' : '登录账号', input('email', (signUp ? 'type="email" placeholder="you@example.com"' : 'type="text" placeholder="输入登录账号或邮箱" autocapitalize="none" spellcheck="false"') + ' required autocomplete="username" maxlength="254"')) +
+    fields: form('auth', field('邮箱', input('email', 'type="email" placeholder="输入邮箱" autocapitalize="none" spellcheck="false" required autocomplete="username" maxlength="254"')) +
       field('密码', input('password', 'type="password" required maxlength="128" ' + (signUp ? 'minlength="10" autocomplete="new-password"' : 'autocomplete="current-password"') + ' placeholder="' + (signUp ? '至少 10 个字符' : '输入密码') + '"')) +
       (signUp ? field('显示名', input('displayName', 'required maxlength="100"')) +
         field('账号类型', select('type', [['personal','个人'], ['enterprise','企业']], 'personal')) +

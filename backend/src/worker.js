@@ -134,9 +134,19 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
         result=await provider.streamText(payload,(sequence,text)=>appendTaskText(db,task,sequence,text));
       } else result=await provider.run(task,payload);
     }
+    if (task.provider_id === 'gateway' && result?.assetId && ['image.main-image','video.compose','video.from-image'].includes(task.capability_id)) {
+      const asset = await row(db, 'SELECT media_type FROM assets WHERE workspace_id=$1 AND account_id=$2 AND id=$3 AND NOT rights_restricted',
+        [task.workspace_id, task.account_id, result.assetId]);
+      if (!asset || !(capability.pluginId === 'image' ? ['image/png','image/jpeg'] : ['video/mp4']).includes(asset.media_type)) {
+        throw new ProviderError('INVALID_PROVIDER_RESULT');
+      }
+      result = { ...result, type:capability.pluginId, mediaType:asset.media_type };
+    }
     if (task.input.requireImageAsset && !(result instanceof PendingModelJob)) {
       if (!(result instanceof GeneratedFile)) result = GeneratedFile.image(result?.dataBase64, result?.mediaType);
       if (!['image/png','image/jpeg'].includes(result.mediaType)) throw new ProviderError('INVALID_PROVIDER_IMAGE');
+    }
+    if (result instanceof GeneratedFile && (task.input.requireImageAsset || (task.provider_id === 'gateway' && task.capability_id === 'image.main-image'))) {
       try {
         await decodeImage(result.bytes);
       } catch {
@@ -144,7 +154,7 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
       }
     }
   } catch (error) {
-    if (task.input.requireImageAsset) result = undefined;
+    result = undefined;
     if (error instanceof ApiError) failure = new ProviderError(error.code);
     else if (error instanceof ProviderError) failure = error;
     else failure = new ProviderError('TASK_EXECUTION_ERROR', (!provider?.signature && !provider?.nonRepeatable) || Boolean(task.provider_job_id));

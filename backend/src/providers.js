@@ -1,7 +1,8 @@
 import { ApiError } from './http.js';
 import { detectTerms } from './catalog.js';
 import { voiceTurnProvider } from './voice-turn.js';
-import { ProviderError, requestUpstream } from './model-http.js';
+import { mediaUrl, ProviderError, requestUpstream } from './model-http.js';
+import { GeneratedFile } from './model-file.js';
 
 export { ProviderError };
 
@@ -21,8 +22,17 @@ export function createProviders({ url, token, capabilities = [] } = {}) {
     supports: capability => enabled.has(capability.id),
     async run(task, payload) {
       const data = await requestUpstream(endpoint, { headers: { authorization: 'Bearer ' + token, 'idempotency-key': task.id }, body: payload, repeatable: true });
-      if (!data?.result || typeof data.result !== 'object' || Array.isArray(data.result)) throw new ProviderError('INVALID_PROVIDER_RESULT');
-      return data.result;
+      const result = data?.result;
+      if (!result || typeof result !== 'object' || Array.isArray(result) || !Object.keys(result).length) throw new ProviderError('INVALID_PROVIDER_RESULT');
+      const kind = { 'image.main-image':'image', 'video.compose':'video', 'video.from-image':'video' }[payload.capabilityId];
+      if (!kind) return result;
+      if (result.type && result.type !== kind) throw new ProviderError('INVALID_PROVIDER_RESULT');
+      if (kind === 'image' && result.dataBase64) return GeneratedFile.image(result.dataBase64, result.mediaType);
+      if (result.assetId !== undefined) {
+        if (typeof result.assetId !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(result.assetId)) throw new ProviderError('INVALID_PROVIDER_RESULT');
+        return { ...result, type:kind };
+      }
+      return { ...result, type:kind, url:mediaUrl(result.url) };
     },
   });
   return providers;

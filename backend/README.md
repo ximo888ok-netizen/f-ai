@@ -300,6 +300,8 @@ npm run credits -- <workspace-id> <account-id> 20 integration-seed-01
 
 GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维显式启用的能力会向配置中的 HTTPS 网关发请求。网关接收 capabilityId、mode、parameters 和必要的素材，响应为 {"result": {...}}。请求头带以任务 ID 为值的 Idempotency-Key。网关需对该键做去重，在写入结果不明时先查询平台状态，避免因超时重试重复上架。API 不把账号资料、知识库、供应商密钥或平台日志放进任务网关请求。联调只使用获准外发的素材和文本。
 
+商品主图、智能成片和首帧转视频任务需要交付可用结果。网关可以返回 HTTPS 成品地址 `url`，或当前工作区内归提交者所有、类型匹配且可访问的 `assetId`。主图还可返回 PNG/JPEG 的 `dataBase64`，工作进程解码成功后入库。套图对图片字节的要求见上文。空结果、仅有完成状态的媒体回执、损坏的返回图片或无权访问的素材会使任务失败，并释放预占积分。
+
 店铺绑定由部署方维护。SHOP_BINDINGS_JSON 接受一个包含 id、workspaceId、name、platform、gatewayReference 和 capabilities 的数组。id 和 workspaceId 是 UUID，platform 为 taobao、pinduoduo 或 douyin。可选 authorizedUntil 为带时区的 ISO 到期时间。到期后列表撤去可执行能力，提交与执行前都再次核对。gatewayReference 是网关侧店铺标识，业务端不能修改或读取。发布及批量维护先提交店铺和参数换取有效期 5 分钟的 confirmationId，再用相同参数提交任务。后端在执行前复核角色、绑定目标及店铺能力。
 
 ## AI 产物导出标识

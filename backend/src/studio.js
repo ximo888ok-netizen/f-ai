@@ -2,8 +2,8 @@
 import { readFile } from 'node:fs/promises';
 import { notFound } from './http.js';
 
-const styles = ['studio.css', 'creation.css', 'glass.css', 'themes.css', 'theme-palettes.css', 'components.css', 'live.css', 'merchant.css', 'live-depth.css', 'live-spatial.css', 'live-light.css', 'live-agent.css', 'liquid-glass.css', 'liquid-layout.css', 'studio-wallpaper.css', 'workbench-layout.css', 'image-generation/style.css', 'live-video-prompt.css', 'live-video-quick.css', 'live-video-director.css', 'studio-foundation.css', 'studio-entry.css', 'studio-workflows.css', 'dot-matrix-switch.css'];
-const scripts = ['live-agent-integrations.js', 'live-commerce-sdk.js', 'studio-icons.js', 'studio-entry.js', 'studio-workflows.js', 'live-spatial.js', 'live-navigation.js', 'live-home.js', 'live-agent-home.js', 'live-agent-dialogue.js', 'live-agent-tools.js', 'live-agent-model.js', 'live-asset-preview.js', 'live-task-fields.js', 'live-catalog.js', 'studio-session.js', 'studio-appearance.js', 'studio-errors.js', 'live-ui.js', 'merchant.js', 'merchant-ui.js', 'merchant-team.js', 'merchant-projects.js', 'merchant-settings.js', 'themes.js', 'glass.js', 'theme-motion.js', 'live.js', 'live-workspace.js', 'live-tasks.js', 'live-customer.js', 'live-products.js', 'live-drafts.js', 'live-operations.js', 'operations-file.js', 'live-psd.js', 'live-connectors.js',
+const styles = ['library-directory.css', 'knowledge-center.css', 'studio.css', 'creation.css', 'glass.css', 'themes.css', 'theme-palettes.css', 'components.css', 'live.css', 'merchant.css', 'live-depth.css', 'live-spatial.css', 'live-light.css', 'live-agent.css', 'liquid-glass.css', 'liquid-layout.css', 'studio-wallpaper.css', 'workbench-layout.css', 'image-generation/style.css', 'live-video-prompt.css', 'live-video-quick.css', 'live-video-director.css', 'studio-foundation.css', 'studio-entry.css', 'studio-workflows.css', 'dot-matrix-switch.css'];
+const scripts = ['library-directory.js', 'library-collections.js', 'knowledge-center.js', 'knowledge-forms.js', 'live-agent-integrations.js', 'live-commerce-sdk.js', 'studio-icons.js', 'studio-entry.js', 'studio-workflows.js', 'live-spatial.js', 'live-navigation.js', 'live-home.js', 'live-agent-home.js', 'live-agent-dialogue.js', 'live-agent-tools.js', 'live-agent-model.js', 'live-asset-preview.js', 'live-task-fields.js', 'live-catalog.js', 'studio-session.js', 'studio-appearance.js', 'studio-errors.js', 'live-ui.js', 'merchant.js', 'merchant-ui.js', 'merchant-team.js', 'merchant-projects.js', 'merchant-settings.js', 'themes.js', 'glass.js', 'theme-motion.js', 'live.js', 'live-workspace.js', 'live-tasks.js', 'live-customer.js', 'live-products.js', 'live-drafts.js', 'live-operations.js', 'operations-file.js', 'live-psd.js', 'live-connectors.js',
   'live-popover.js', 'live-account-menu.js', 'live-capability-center.js', 'live-data-center.js', 'live-agent-controls.js',
   'image-generation/index.js', 'image-generation/files.js', 'image-generation/options.js',
   'image-generation/results.js', 'image-generation/prompt-favorites.js', 'image-generation/agent.js', 'image-generation/product-plans.js',
@@ -18,7 +18,7 @@ const types = new Map([
 ]);
 const workbenchPage = 'ai.html';
 const merchantPage = '商家管理后台.html';
-const artwork = ['optic-wave.webp', 'leather.webp', 'citrus.webp', 'audio.webp'];
+const artwork = ['library-scenes.webp', 'optic-wave.webp', 'leather.webp', 'citrus.webp', 'audio.webp'];
 export const studioPublicFiles = [workbenchPage, merchantPage, ...types.keys(), ...artwork.map(name => 'assets/' + name)];
 const security = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 

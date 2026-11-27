@@ -1,7 +1,6 @@
-import { h, heading, link, notice, path } from './live-ui.js';
+import { h, notice } from './live-ui.js';
 import { studioIcon } from './studio-icons.js';
-
-const tabs = { experts: '专家', skills: '技能', connections: '连接器' };
+import { libraryDirectory, libraryTabs } from './library-directory.js';
 
 async function connectedEntries(ctx) {
   const [cloud, feishu] = await Promise.all([
@@ -14,45 +13,26 @@ async function connectedEntries(ctx) {
   ];
 }
 
-async function catalogEntries(ctx, tab) {
-  if (tab === 'connections') return connectedEntries(ctx);
-  const entries = await ctx.all('/v1/library' + (tab === 'skills' ? '?kind=skill' : ''));
-  return entries.filter(entry => tab === 'skills' || entry.kind === 'expert' || entry.kind === 'team')
-    .map(entry => ({
-      name: entry.name,
-      description: entry.description,
-      state: entry.enabled ? '已启用' : '已停用',
-      category: entry.kind === 'team' ? '专家团' : tabs[tab],
-      route: (tab === 'skills' ? 'skills/' : 'library/experts/') + path(entry.id),
-    }));
-}
-
-function capabilityCard(entry, tab) {
-  const icon = tab === 'connections' ? 'connections' : tab === 'skills' ? 'capabilities' : 'members';
-  return '<a class="card directory-card" href="#' + h(entry.route) + '"><div class="directory-card-head">' +
-    '<span class="directory-icon">' + studioIcon(icon) + '</span><small>' +
-    h([entry.category, entry.state].filter(Boolean).join(' · ')) + '</small></div><h2>' + h(entry.name) +
-    '</h2><div class="directory-card-detail">' + notice(entry.description) + studioIcon('outward') + '</div></a>';
-}
-
 export async function capabilityCenter(ctx) {
-  const tab = Object.hasOwn(tabs, ctx.args[0]) ? ctx.args[0] : 'experts';
-  const entries = await catalogEntries(ctx, tab);
+  const tab = ctx.args[0] ?? 'experts';
+  if (tab !== 'connections') return libraryDirectory(ctx, tab === 'skills' ? 'skills' : 'experts');
+  const entries = await connectedEntries(ctx);
   if (!ctx.active()) return;
-  const actions = tab === 'skills' && ctx.manager ? link('新增技能', 'skills/new')
-    : tab === 'experts' && ctx.manager ? link('管理专家', 'library/experts')
-    : tab === 'connections' && ctx.enterprise && ctx.manager ? '<a class="smallbtn" href="/merchant#connections">管理接入</a>' : '';
-  ctx.html('<section class="studio-directory" aria-label="能力中心">' + heading('能力中心') +
-    '<div class="directory-toolbar"><nav aria-label="能力类别">' + Object.entries(tabs).map(([id, label]) =>
-      '<a class="smallbtn" href="#capabilities/' + id + '"' + (id === tab ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') +
-    '</nav><div><input type="search" aria-label="搜索' + tabs[tab] + '" placeholder="搜索' + tabs[tab] + '">' + actions + '</div></div>' +
-    '<div class="directory-grid">' + entries.map(entry => capabilityCard(entry, tab)).join('') + '</div><p class="live-muted" data-directory-empty role="status"' +
-    (entries.length ? ' hidden' : '') + '>没有符合条件的' + tabs[tab] + '。</p></section>');
-  const search = document.querySelector('.studio-directory input');
-  const cards = [...document.querySelectorAll('.directory-card')];
-  search.addEventListener('input', () => {
-    const query = search.value.trim().toLowerCase();
+  const manage = ctx.enterprise && ctx.manager ? '<a class="smallbtn" href="/merchant#connections">管理接入</a>' : '';
+  ctx.html('<section class="studio-directory lib-directory"><h1 class="lib-sr">能力中心</h1><div class="lib-top">' +
+    libraryTabs(tab) + '<div class="lib-tools"><label class="lib-search">' + studioIcon('search') +
+    '<input type="search" aria-label="搜索连接器" placeholder="搜索连接器"></label>' + manage + '</div></div>' +
+    '<div class="directory-grid">' + entries.map(entry => '<a class="card directory-card" href="#' + h(entry.route) +
+      '"><div class="directory-card-head"><span class="directory-icon">' + studioIcon('connections') + '</span><small>' +
+      h(entry.state) + '</small></div><h2>' + h(entry.name) + '</h2><div class="directory-card-detail">' +
+      notice(entry.description) + studioIcon('outward') + '</div></a>').join('') +
+    '</div><p class="live-muted" data-directory-empty hidden>没有符合条件的连接器。</p></section>');
+  const root = document.querySelector('.studio-directory');
+  const input = root.querySelector('input');
+  input.addEventListener('input', () => {
+    const query = input.value.trim().toLowerCase();
+    const cards = [...root.querySelectorAll('.directory-card')];
     for (const card of cards) card.hidden = !card.textContent.toLowerCase().includes(query);
-    document.querySelector('[data-directory-empty]').hidden = cards.some(card => !card.hidden);
+    root.querySelector('[data-directory-empty]').hidden = cards.some(card => !card.hidden);
   });
 }

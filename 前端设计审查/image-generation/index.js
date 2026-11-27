@@ -2,7 +2,7 @@ import { quickUploadField, bindQuickFiles } from './files.js';
 import { bindQuickResults } from './results.js';
 import { bindImagePlanner } from './agent.js';
 import { advancedPromptField, bindPromptFavorites } from './prompt-favorites.js';
-import { advancedRecipes, imageStyles, imageTypes, languages, mainImageCapabilityId, platforms, quickChoices, quickPrompt, quickRecipes, regions, sizePresets } from './options.js';
+import { advancedRecipes, imageStyles, imageTypes, languages, platforms, quickChoices, quickPrompt, quickRecipes, regions, sizePresets } from './options.js';
 import { describeError } from '../studio-errors.js';
 import { field, generationModeTabs, h, select } from '../live-ui.js';
 
@@ -39,7 +39,7 @@ export function imageGenerationTabs(mode) {
   ], mode);
 }
 
-export function imageGenerationForm(wallet, capability, mode, planning) {
+export function imageGenerationForm(wallet, capability, mode, planning, models) {
   const advanced = mode === 'advanced';
   const agent = mode === 'agent';
   const modes = imageGenerationTabs(mode);
@@ -59,6 +59,7 @@ export function imageGenerationForm(wallet, capability, mode, planning) {
   return '<div class="quick-image-layout"><form class="card quick-image-form" data-image-mode="' + h(mode) +
     '" aria-label="' + (agent ? 'Agent 生图' : advanced ? '高级模式' : '快速生成主图') + '">' +
     '<div class="quick-image-config">' + group('生成模式', modes) +
+    (models.length ? field('生图模型', select('modelId', models.map(m => [m.id, m.model === m.id ? m.id : m.model + ' · ' + m.id]))) : '') +
     group(advanced ? '商品图（选填）' : '商品图', quickUploadField('products')) +
     (advanced ? advancedPromptField() : quickTargets(agent)) + group('图片尺寸', quickChoices('size', sizePresets) + custom) +
     group('生图质量', quality) + group('生成数量', quickChoices('quantity', quantities)) + (advanced ? '' : quickStyles(agent)) + '</div>' +
@@ -73,7 +74,7 @@ export function imageGenerationForm(wallet, capability, mode, planning) {
     '<div class="quick-image-results"></div></section></div>';
 }
 
-export function bindImageGeneration(ctx, capability, wallet, planning) {
+export function bindImageGeneration(ctx, capability, wallet, planning, models) {
   const form = document.querySelector('.quick-image-form');
   const stage = document.querySelector('.quick-image-stage');
   const status = form.querySelector('[data-quick-status]');
@@ -89,7 +90,7 @@ export function bindImageGeneration(ctx, capability, wallet, planning) {
   let available = wallet.available;
   let remaining = null;
   let resultsCurrent = false;
-  let model;
+  const selectedModel = () => models.find(m => m.id === form.elements.modelId?.value);
   let busy = false;
   const files = bindQuickFiles(ctx, form, () => {
     const preview = stage.querySelector('[data-quick-source]');
@@ -130,6 +131,7 @@ export function bindImageGeneration(ctx, capability, wallet, planning) {
     form.elements.width.disabled = form.elements.height.disabled = !custom;
     let qualityLabel = qualityLabels[Number(quality.value)] + ' · 画质要求随提示词提交';
     if (advanced) {
+      const model = selectedModel();
       quality.disabled = !model?.imageQuality;
       qualityLabel = model?.imageQuality ? qualityLabels[Number(quality.value)] + ' · 由 ' + model.id + ' 执行'
         : '使用模型默认画质';
@@ -195,7 +197,7 @@ export function bindImageGeneration(ctx, capability, wallet, planning) {
         if (ctx.active()) status.textContent = '请查看右侧方案，确认后生成。';
         return;
       }
-      const recipes = agent ? planner.recipes() : advanced ? advancedRecipes(values, model) : quickRecipes(values, useReference);
+      const recipes = agent ? planner.recipes() : advanced ? advancedRecipes(values, selectedModel()) : quickRecipes(values, useReference);
       status.textContent = files.count('products') ? '正在上传图片并提交任务…' : '正在提交任务…';
       const assetIds = await files.upload(useReference);
       if (!ctx.active()) return;
@@ -222,13 +224,6 @@ export function bindImageGeneration(ctx, capability, wallet, planning) {
       }
     }
   });
-  if (advanced) {
-    bindPromptFavorites(ctx, form);
-    ctx.api('/v1/models?capabilityId=' + mainImageCapabilityId).then(({ items }) => {
-      if (!ctx.active()) return;
-      model = items[0];
-      sync();
-    }).catch(() => { /* Generation can use the default model quality. */ });
-  }
+  if (advanced) bindPromptFavorites(ctx, form);
   sync();
 }

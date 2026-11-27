@@ -2,6 +2,23 @@
 
 前端调用 f-ai 的任务 API，服务端把任务转换为部署方选定的供应商协议。每个模型有独立的别名、地址、上游模型 ID、认证和允许的能力。可同时配置多家供应商或同一供应商的多个模型。
 
+## 国产图片与视频模型
+
+在 `backend/.env` 中设置 `FAI_MEDIA_MODELS`，按逗号列出本部署需要的上游模型 ID，大小写需与表格相同。本机使用 `npm run studio:demo` 时，写入 `backend/.env.preview.local`。配置所选供应商的密钥后重启后端。工作台在图片生成页和视频生成页分别列出当前工作区可用的模型。
+
+| 提供商 | 图片模型 ID | 视频模型 ID | 配置 |
+| --- | --- | --- | --- |
+| 阿里云百炼 | `qwen-image-3.0`、`qwen-image-3.0-pro` | `wan3.0-video`、`wan3.0-video-prime` | `FAI_DASHSCOPE_KEY` 和北京地域的业务空间 ID `FAI_DASHSCOPE_WORKSPACE` |
+| 火山方舟 | `doubao-seedream-5-5-261028` | `doubao-seedance-2-5-260628`、`doubao-seedance-2-5-flash-261115` | `FAI_ARK_KEY`，北京地域 |
+| MiniMax | `MiniMax-H3-Image`、`MiniMax-H3-Image-Highspeed` | `MiniMax-H3`、`MiniMax-H3-Highspeed`、`MiniMax-H3-Lite`、`MiniMax-H3-Max` | `FAI_MINIMAX_KEY`，中国站 |
+| 可灵 | | `kling-4.0`、`kling-4.0-flash` | `FAI_KLING_KEY`，中国站新版开放平台 API Key |
+
+例如只接千问标准版和万相标准版，可设置 `FAI_MEDIA_MODELS=qwen-image-3.0,wan3.0-video`。使用其他区域或方舟推理接入点时，可在 `MODEL_PROVIDERS_FILE` 中填写账号对应的 `baseUrl` 和 `model`。两种配置可并用，已有条目排在前面，别名需唯一。预置别名将上游 ID 转为小写，并将点号换成连字符。
+
+图片支持文生图和带参考图生成。千问 3.0 接受至多三张参考图，输出 PNG。生成的图片写回当前用户的素材库。视频支持文生视频和单张首帧图生视频，提交后由任务中心轮询同一供应商任务。MiniMax H3 和可灵的首帧模式沿用输入画幅。工作台现有时长选择上限为 10 秒，MiniMax H3 视频预置使用 768P。本地配置通过后，可从图片高级模式选模型出一张图，再把它作为首帧测试视频。核对任务详情的模型、成品和积分流水。供应商模型权限、额度和视频归档来源由部署方配置。
+
+协议依据见[千问图像 API](https://help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference)、[万相视频 API](https://help.aliyun.com/zh/model-studio/wan3-video-generation-api-reference)、[Seedream 5.5](https://docs.volcengine.com/docs/ark/seedream-5-5)、[Seedance 2.5](https://console.volcengine.com/ark/region%3Acn-beijing/docs/seedance-2-5)、[MiniMax 图片](https://platform.minimax.io/docs/guides/image-generation)、[MiniMax 视频](https://platform.minimax.io/docs/guides/video-generation)和[可灵 4.0](https://kling.ai/document-api/api/usage-guide/kling-4-0)。
+
 ## 开启一个模型
 
 1. 在 backend 目录将 model-providers.example.json 复制为 model-providers.local.json。文件中的 32 项是可单独启用的配置示例。
@@ -52,8 +69,8 @@ modelId 可省略。服务按配置顺序选择第一个声明支持该能力的
 | --- | --- | --- |
 | 兼容聊天 | chat-completions | 接收多轮 user/assistant 消息，提取可见文本。示例包括 DeepSeek、通义千问、Kimi、智谱、火山方舟、MiniMax、硅基流动、Mistral、Groq、xAI、Azure OpenAI、OpenRouter、vLLM、LiteLLM 等。 |
 | 原生文本 | responses、anthropic-messages、gemini-content、cohere-chat、ollama-chat | 分别使用 Responses、Messages、generateContent、Cohere Chat v2、Ollama Chat 的请求体、认证和响应结构。支持通用对话与四项文案生成能力。 |
-| 图片 | openai-images、gemini-image | 用提示词生成图片，可用获授权的 PNG/JPEG 素材进行编辑。支持的主图、背景、换色和延展能力以部署配置为准。二进制结果存为当前用户的素材，返回 assetId、mediaType。供应商返回临时链接时提供 result.url。 |
-| 视频 | ark-video、wan-video、minimax-video、runway-video | 对接方舟 Seedance、Wan 文生视频、MiniMax 海螺和 Runway。支持提交、持久化任务号、轮询和获取视频 URL。方舟、海螺和 Runway 支持首帧图片；实际可用的时长、画幅和输入类型取决于具体模型。 |
+| 图片 | openai-images、gemini-image、qwen-image、seedream-image、minimax-h3-image | 用提示词生成图片，可用获授权的 PNG/JPEG 素材进行编辑。支持的主图、背景、换色和延展能力以部署配置为准。二进制结果存为当前用户的素材，返回 assetId、mediaType。供应商返回临时链接时提供 result.url。 |
+| 视频 | ark-video、wan-video、wan3-video、minimax-video、minimax-h3-video、kling-video、runway-video | 对接方舟 Seedance、万相、MiniMax、可灵和 Runway。支持提交、持久化任务号、轮询和获取视频 URL。方舟、海螺和 Runway 支持首帧图片；实际可用的时长、画幅和输入类型取决于具体模型。 |
 | 语音 | openai-transcription、openai-speech | 用一个已上传 MP3/MP4 的 assetIds 转写，或用 input 与 voice 合成 MP3，结果通过素材下载接口读取。 |
 | 检索 | openai-embeddings、cohere-rerank | 字符串数组 input 生成按输入顺序排列的 vectors。query、documents、可选 topN 生成包含原始文档 index 和 score 的 results。 |
 | 自定义 | json-http | 配置字段映射即可对接同步或异步 JSON 服务。附 Replicate 和 fal 的图片生成样例，支持另行查询最终结果。 |

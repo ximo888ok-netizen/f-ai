@@ -1,4 +1,6 @@
-import { action, field, form, grid, h, heading, input, item, link, list, notice, panel, path, select, textarea } from './live-ui.js';
+import { action, field, form, h, heading, input, item, link, list, notice, panel, path, select, textarea } from './live-ui.js';
+
+import { libraryDirectory } from './library-directory.js';
 
 const root='/v1/library';
 const kinds={expert:'专家',team:'专家团'};
@@ -17,18 +19,8 @@ function definition(data) {
 }
 export async function experts(ctx) {
   const [,id,arg]=ctx.args;
+  if (!id || id === 'search') return libraryDirectory(ctx, 'experts', arg ? decodeURIComponent(arg) : '');
   const entries=await ctx.all(root);
-  if(!id || id==='search'){
-    const q=arg?decodeURIComponent(arg):'';
-    const groups=Object.keys(kinds).map(kind=>panel(kinds[kind],list(entries.filter(e=>e.kind===kind &&
-      (e.name+' '+e.description).toLowerCase().includes(q.toLowerCase())),e=>item(e.name,e.description,
-      notice(e.enabled?'已启用':'已停用')+link('详情',base+'/'+e.id)), '没有匹配的条目。')));
-    ctx.html(heading('专家与专家团')+link('返回工具库','library')+
-      (ctx.manager?'<div class="live-row">'+link('新建专家',base+'/new/expert')+link('组建专家团',base+'/new/team')+'</div>':'')+
-      form('expert-search',field('搜索名称或场景',input('q','type="search" maxlength="100" value="'+h(q)+'"')),'搜索')+grid(...groups));
-    ctx.submit('expert-search',async data=>ctx.go(base+'/search/'+path(data.get('q').trim())));
-    return;
-  }
   const fresh=id==='new';
   const entry=fresh?{kind:arg,name:'',description:'',instructions:'',relatedIds:[]}:entries.find(e=>e.id===id);
   if(!entry || !Object.hasOwn(kinds,entry.kind) || (fresh && !ctx.manager))throw new Error('当前工作区无法访问该定义。');

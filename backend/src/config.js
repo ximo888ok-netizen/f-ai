@@ -1,13 +1,18 @@
 
 import { readFileSync } from 'node:fs';
 import { catalog } from './catalog.js';
+import { mediaModelPresets } from './media-model-presets.js';
 import { databaseAlias, openCredential } from './database-credentials.js';
 
 export const isUuid = value => typeof value === 'string' && /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(value);
 const list = value => (value ?? '').split(',').map(item => item.trim()).filter(Boolean);
 
 export function modelDefinitions(env=process.env){
-  return JSON.parse(env.MODEL_PROVIDERS_JSON || (env.MODEL_PROVIDERS_FILE ? readFileSync(env.MODEL_PROVIDERS_FILE,'utf8').replace(/^\uFEFF/,''):'[]'));
+  const configured = JSON.parse(env.MODEL_PROVIDERS_JSON || (env.MODEL_PROVIDERS_FILE ? readFileSync(env.MODEL_PROVIDERS_FILE,'utf8').replace(/^\uFEFF/,''):'[]'));
+  const names = list(env.FAI_MEDIA_MODELS);
+  if (!names.length) return configured;
+  if (!Array.isArray(configured)) throw new Error('Model configuration must be an array');
+  return [...configured, ...mediaModelPresets(names, env)];
 }
 export function config(env = process.env) {
   if (!env.DATABASE_URL) throw new Error('DATABASE_URL is required');

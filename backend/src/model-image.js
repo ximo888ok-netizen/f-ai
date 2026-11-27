@@ -4,9 +4,34 @@ import { GeneratedFile } from './model-file.js';
 export const supportsImageQuality = config => config.protocol === 'openai-images' &&
   /^(?:gpt-image-|chatgpt-image-latest$)/.test(config.model);
 
+const imageSizes = { '1:1': '1024x1024', '4:3': '1280x960', '3:4': '960x1280', '16:9': '1280x720', '9:16': '720x1280' };
+
+async function generateJsonImage(route, payload, call) {
+  const { prompt, ratio, format } = payload.parameters;
+  const images = payload.assets.map(asset => 'data:' + asset.mediaType + ';base64,' + asset.dataBase64);
+  const body = { model: route.model, prompt, response_format: 'b64_json' };
+  let path = 'images/generations';
+  if (route.protocol === 'minimax-h3-image') {
+    body.area = '1K';
+    if (ratio) body.aspect_ratio = ratio;
+    if (images.length) {
+      path = 'images/edits';
+      body.images = images.map(image_url => ({ image_url }));
+    }
+  } else {
+    if (ratio) body.size = imageSizes[ratio];
+    if (images.length) body.image = images.length === 1 ? images[0] : images;
+  }
+  if (route.protocol !== 'qwen-image') body.output_format = format === 'jpg' ? 'jpeg' : 'png';
+  const data = await call(path, body);
+  return GeneratedFile.image(data?.data?.[0]?.b64_json, format === 'jpg' ? 'image/jpeg' : 'image/png');
+}
+
 export async function generateImage(route, payload, call) {
   const { prompt, ratio, format } = payload.parameters;
   const expected = format ? { png: 'image/png', jpg: 'image/jpeg' }[format] : undefined;
+
+  if (['qwen-image', 'seedream-image', 'minimax-h3-image'].includes(route.protocol)) return generateJsonImage(route, payload, call);
 
   if (route.protocol === 'openai-images') {
     const body = { model: route.model, prompt, n: 1 };

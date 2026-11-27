@@ -157,7 +157,7 @@ test('the served workbench completes tasks, merchant settings, drafts, ledger, s
     await form(page, 'audit-filter').waitFor();
     covered('商家后台创建与接受邀请，读取操作记录');
 
-    await open(page, origin, 'resources', form(page, 'new-base'));
+    await open(page, origin, 'resources/manage', form(page, 'new-base'));
     await save(page, 'new-base', { name: '陶瓷商品资料' });
     await form(page, 'add-doc').waitFor();
     await form(page, 'add-doc').locator('[name=customerScope]').selectOption('general');

@@ -66,6 +66,6 @@ uv pip install --python content-env/Scripts/python.exe -e ecommerce-content-agen
 - **AI 运营**支持店铺只读查询，一次返回平台的一页数据。管理人员也可以导入 SDK 日报 JSON，在上海时区汇总订单、支付金额及退款。文件包含 `date` 和 `shops`，每家店铺提供 `platform`、`shop_id`、`orders`、`refunds` 和按日期记录的 `coverage`。金额使用整数分，支付和退款时间应包含时区偏移。导出方应在读完对应日期全部分页后才标记该来源覆盖完整；缺失覆盖的指标显示为未知。[上游日报输入示例](https://github.com/TonyWang-hub/mcp-cn-commerce/tree/main/examples/daily-report)
 - **电商文案**支持淘宝、抖音、小红书，按商品资料生成标题、卖点、描述、社交文案及 SEO 关键词。卖点和规格需人工核实。淘宝与抖音可以将标题和卖点带入已有工作区规则校验。内容包及客服草稿均使用工作台既有的任务、积分预留和失败释放流程；模型供应商按实际请求计费。
 
-启动后，分别访问登录态下的 `GET /v1/integrations/customer-agent`、`/v1/integrations/mcp-cn-commerce`、`/v1/integrations/ecommerce-content-agent` 查看运行时、绑定、模型和操作目录。生产环境沿用工作区权限与持久数据库。本机内存预览可以用 `FAI_PREVIEW_ADMIN_CREDITS` 为初始预览账号分配任务积分。
+启动后，分别访问登录态下的 `GET /v1/integrations/customer-agent`、`/v1/integrations/mcp-cn-commerce`、`/v1/integrations/ecommerce-content-agent` 查看运行时、绑定、模型和操作目录。生产环境沿用工作区权限与持久数据库。新账号初始积分为零，持久环境使用积分管理命令向指定账号入账。
 
 从 backend 目录运行 `npm test` 验证权限、任务计费和 SQLite 店铺范围。另将 `FAI_TEST_INTEGRATIONS_FILE` 设为运行时配置路径，可同时验证真实 SDK、日报和上游文案流程。该测试的模型端点只使用本机测试服务器。

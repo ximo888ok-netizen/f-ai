@@ -99,7 +99,8 @@ export function bindQuickResults(ctx, container, onSettled) {
         job.task = await ctx.api('/v1/tasks', { method: 'POST', body: {
           capabilityId: mainImageCapabilityId, mode: 'workflow', idempotencyKey: job.requestId,
           parameters: { ...job.recipe.parameters, ...(assetIds.length ? { assetIds } : {}) },
-          ...(job.recipe.imageQuality ? { imageQuality: job.recipe.imageQuality, modelId: job.recipe.modelId } : {}),
+          ...(job.recipe.modelId ? { modelId: job.recipe.modelId } : {}),
+          ...(job.recipe.imageQuality ? { imageQuality: job.recipe.imageQuality } : {}),
         } });
         if (!ctx.active()) return null;
         job.view.links.innerHTML = link('查看任务', 'tasks/' + path(job.task.id));

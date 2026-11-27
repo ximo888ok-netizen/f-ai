@@ -14,6 +14,9 @@ const shape = properties => ({ type: 'object', properties, required: Object.keys
 const items = schema => ({ type: 'array', items: schema });
 const collection = schema => shape({ items: items(schema) });
 const none = { type: 'null', description: 'No content' };
+const modelInfo = shape({ id: string, model: string, protocol: string, kind: string,
+  capabilities: items(string), streamText: bool, imageQuality: bool });
+modelInfo.properties.videoLimits = shape({ minSeconds: count, frameRatioFromImage: bool });
 const fileAttachment = {type:'string',description:'Attachment disposition for the binary download'};
 
 export function assetDownload(description, mediaTypes, headers = {}) {
@@ -132,8 +135,7 @@ export const contracts = new Map([
   ['/v1/knowledge/search', { POST: { 200: collection(shape({ baseId: uuid, baseName: string, documentId: uuid, name: string, category: string, ordinal: count, snippet: string })) } }],
   ['/v1/assets', { GET: { 200: collection(asset) }, POST: { 201: asset } }],
   ['/v1/assets/:id', { GET: { 200: shape({ ...asset.properties, sha256: {type:'string',pattern:'^[a-f0-9]{64}$'} }) }, DELETE: { 204: none } }],
-  ['/v1/models', { GET: { 200: collection(shape({ id: string, model: string, protocol: string, kind: string,
-    capabilities: items(string), streamText: bool, imageQuality: bool })) } }],
+  ['/v1/models', { GET: { 200: collection(modelInfo) } }],
   ['/v1/plugins', { GET: { 200: shape({ items: items(plugin), models: plugin }) } }],
   ['/v1/plugins/:id/state', { PUT: { 200: shape({ id: string, enabled: bool }) } }],
   ['/v1/customer-service/conversations', { GET: { 200: collection(conversation) }, POST: { 201: conversation } }],

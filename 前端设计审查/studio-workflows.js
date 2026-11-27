@@ -128,7 +128,7 @@ export async function commerceHome(ctx) {
   const plugins = new Map(catalog.items.map(plugin => [plugin.id, plugin]));
   const features = new Map(policies?.items.map(policy => [policy.id, policy]) ?? []);
   const working = catalog.items.filter(plugin => plugin.enabled).length;
-  layout.querySelector('[data-live-plan]').textContent = ctx.enterprise ? '企业工作区' : '个人工作区';
+  layout.querySelector('[data-live-plan]').textContent = ctx.enterprise ? '企业工作区' : ctx.workspace.kind === 'agent' ? '代理工作区' : '个人工作区';
   layout.querySelector('#enabledPluginCount').textContent = working + ' / ' + plugins.size;
   layout.querySelector('#pluginStatus').textContent = working + ' 个已启用';
   const cards = Array.from(layout.querySelectorAll('[data-scene]'));

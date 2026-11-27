@@ -26,6 +26,8 @@
 @import url("/studio/scene-desk.css") layer(business);
 @import url("/studio/media-skills.css") layer(business);</style>
 <link rel="stylesheet" href="/studio/dot-matrix-switch.css">
+<link rel="stylesheet" href="/studio/knowledge-center.css">
+<link rel="stylesheet" href="/studio/library-directory.css">
 <style id="native-glass-design">
     /* ==========================================================================
        1. 核心光学设计令牌 (三态单色玻璃体系 + 精密排版刻度 + 统一圆角)
@@ -2954,6 +2956,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
           <a href="#settings">设置与诊断</a>
           <button type="button" data-account-appearance>外观与壁纸</button>
           <a href="#resources/memory/personal">个人记忆</a>
+          <a href="#settings/feedback">意见反馈</a>
           <a href="#inbox">消息中心</a>
           <button type="button" data-account-logout>退出登录</button>
         </section>
@@ -3006,7 +3009,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
 
             <div class="commerce-metrics" aria-label="工作台核心指标">
               <div class="metric-chip">
-                <div class="metric-chip-val tabular" id="enabledPluginCount">5 / 5</div>
+                <div class="metric-chip-val tabular" id="enabledPluginCount">…</div>
                 <div class="metric-chip-lbl">已启用场景插件</div>
               </div>
               <a class="metric-chip" href="#psd">
@@ -3020,7 +3023,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
           <div class="workbench-top">
             <div class="plugins-heading">
               <h2>场景插件</h2>
-              <span class="live-count" id="pluginStatus">5 个运行中</span>
+              <span class="live-count" id="pluginStatus">正在读取…</span>
             </div>
             <div class="glass-search">
               <svg width="14" height="14" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted);flex-shrink:0"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.35-4.35"></path></svg>
@@ -3036,7 +3039,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
                   <div class="plugin-icon">
                     <svg width="20" height="20" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="4"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
                   </div>
-                  <button class="apple-switch" role="switch" aria-checked="true" aria-label="启用图片生成" type="button" data-switch-scene="image"></button>
+                  <button class="apple-switch" role="switch" aria-checked="false" aria-label="启用图片生成" type="button" data-switch-scene="image"></button>
                 </div>
                 <div class="plugin-name">图片生成 <span class="pill-tag">核心</span></div>
                 <p class="plugin-desc">主图、6屏详情长图、模特换装、AI抠图与多SKU批量出图，支持可编辑多层 PSD 下载。</p>
@@ -3053,7 +3056,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
                   <div class="plugin-icon">
                     <svg width="19" height="19" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><polygon points="7 5 19 12 7 19 7 5"></polygon></svg>
                   </div>
-                  <button class="apple-switch" role="switch" aria-checked="true" aria-label="启用视频生成" type="button" data-switch-scene="video"></button>
+                  <button class="apple-switch" role="switch" aria-checked="false" aria-label="启用视频生成" type="button" data-switch-scene="video"></button>
                 </div>
                 <div class="plugin-name">视频生成</div>
                 <p class="plugin-desc">智能成片、爆款复刻、视频换装换脸、一镜到底与多比例导出，分镜脚本自由编辑。</p>
@@ -3070,7 +3073,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
                   <div class="plugin-icon">
                     <svg width="19" height="19" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                   </div>
-                  <button class="apple-switch" role="switch" aria-checked="true" aria-label="启用AI客服" type="button" data-switch-scene="customer-service"></button>
+                  <button class="apple-switch" role="switch" aria-checked="false" aria-label="启用AI客服" type="button" data-switch-scene="customer-service"></button>
                 </div>
                 <div class="plugin-name">AI 客服</div>
                 <p class="plugin-desc">挂载企业独立知识库，支持多轮上下文承接、快捷话术库与一键转人工无缝接管。</p>
@@ -3087,7 +3090,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
                   <div class="plugin-icon">
                     <svg width="19" height="19" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="M7 15l4-4 3 3 6-7"></path></svg>
                   </div>
-                  <button class="apple-switch" role="switch" aria-checked="true" aria-label="启用AI运营" type="button" data-switch-scene="operations"></button>
+                  <button class="apple-switch" role="switch" aria-checked="false" aria-label="启用AI运营" type="button" data-switch-scene="operations"></button>
                 </div>
                 <div class="plugin-name">AI 运营</div>
                 <p class="plugin-desc">管理店铺授权、商品档案和运营台账，测算投放收益，并在提交店铺操作前核对变更。</p>
@@ -3104,7 +3107,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: 16px; }
                   <div class="plugin-icon">
                     <svg width="19" height="19" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                   </div>
-                  <button class="apple-switch" role="switch" aria-checked="true" aria-label="启用电商文案" type="button" data-switch-scene="copywriting"></button>
+                  <button class="apple-switch" role="switch" aria-checked="false" aria-label="启用电商文案" type="button" data-switch-scene="copywriting"></button>
                 </div>
                 <div class="plugin-name">电商文案</div>
                 <p class="plugin-desc">按平台生成商品标题与卖点，按工作区规则检测字数、禁用短语和需要审阅的用词。</p>

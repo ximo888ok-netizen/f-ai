@@ -123,7 +123,7 @@ export async function respond(ctx, thread, raw, options = {}) {
   if(knowledge){
     const query=clean(knowledge[1]);
     if(query.length>160)return {text:'检索词最多 160 字。'};
-    const {items}=await ctx.api('/v1/knowledge/search',{method:'POST',body:{query}});
+    const {items}=await ctx.api('/v1/knowledge/search',{method:'POST',body:{query,...(thread.knowledgeBase ? {baseIds:[thread.knowledgeBase.id]} : {})}});
     return {text:items.length?'以下是你有权访问的知识库出处。':'已授权知识库中没有找到匹配的文档。',items:items.slice(0,5).map(r=>({title:r.name,detail:r.baseName+' · '+r.snippet,route:'resources/'+encodeURIComponent(r.baseId)+'/'+encodeURIComponent(r.documentId)}))};
   }
   let plan = localIntent(input);

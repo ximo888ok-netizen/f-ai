@@ -63,11 +63,12 @@ export async function dashboard(ctx) {
   const current = Object.hasOwn(deskSections, ctx.args[0]) ? ctx.args[0] : 'image';
   const section = deskSections[current];
   const operations = current === 'operations';
-  const [wallet, catalog, tasks, messages, drafts, settings] = await Promise.all([
+  const [wallet, catalog, tasks, messages, drafts, settings, imageDirectory] = await Promise.all([
     ctx.api('/v1/credits/wallet'), ctx.api('/v1/plugins'), ctx.api('/v1/tasks?limit=30'),
     ctx.api('/v1/notifications?limit=1'),
     operations ? ctx.api('/v1/studio/pinduoduo-drafts?limit=3') : null,
     operations ? ctx.api('/v1/settings') : null,
+    current === 'image' && ctx.args[1] !== 'skills' ? ctx.api('/v1/models?capabilityId=' + mainImageCapabilityId) : null,
   ]);
   if (!ctx.active()) return;
   const capabilityNames = new Map([...catalog.items, catalog.models].flatMap(plugin =>
@@ -104,10 +105,10 @@ export async function dashboard(ctx) {
         bindDualModePanel(document.querySelector('#main'), 'image');
       }},plugin,wallet,ctx.args[2]);
     }
-    render(dualModePanel('image') + imageGenerationForm(wallet, mainImage, mode, planning) +
+    render(dualModePanel('image') + imageGenerationForm(wallet, mainImage, mode, planning, imageDirectory.items) +
       '<details class="live-fold"><summary>更多图片工具</summary><div class="live-row">' +
       link('图片处理', 'media/images') + link('PSD 分层设计', 'psd') + '</div>' + tools + '</details>');
-    bindImageGeneration(ctx, mainImage, wallet, planning);
+    bindImageGeneration(ctx, mainImage, wallet, planning, imageDirectory.items);
     bindDualModePanel(document.querySelector('#main'), 'image');
     return;
   }

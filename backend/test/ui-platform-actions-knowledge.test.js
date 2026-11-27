@@ -36,11 +36,14 @@ test('knowledge owners edit and grant libraries, manage memories and search thro
 
   const basePath = '/v1/knowledge/bases';
   const baseForm = form(page, 'new-base');
-  await open('resources', baseForm);
+  await open('resources', page.getByRole('button', {name:'新建知识库',exact:true}));
+  await page.getByRole('button', {name:'新建知识库',exact:true}).click();
   await fill(baseForm, { name: '回归验收资料库' });
   const created = await act('创建知识库', submit(baseForm), route('POST', basePath));
   const base = await created.json();
   const endpoint = basePath + '/' + base.id;
+  await page.getByRole('button', {name:'知识库操作',exact:true}).click();
+  await page.getByRole('link', {name:'库设置与授权'}).click();
   const rename = form(page, 'rename-base');
   await fill(rename, { name: '回归验收资料库改名' });
   await act('重命名知识库', submit(rename), route('PATCH', endpoint));
@@ -74,13 +77,14 @@ test('knowledge owners edit and grant libraries, manage memories and search thro
 
   await page.getByRole('link', { name: '返回知识库', exact: true }).click();
   const documents = endpoint + '/documents';
+  await page.getByRole('button', {name:'添加文档'}).click();
   const addDocument = form(page, 'add-doc');
   await fill(addDocument, { name: '工作室测试手册', category: '内部文档' });
   await fields(addDocument, 'file').setInputFiles({ name: 'qa-manual.txt', mimeType: 'text/plain', buffer: Buffer.from('手册含有湖泊验收说明。') });
   await act('上传知识库文本文件', submit(addDocument), route('POST', documents));
   const document = (await read(documents)).items.find(item => item.name === '工作室测试手册');
   const documentPath = documents + '/' + document.id;
-  await act('阅读已上传文档', page.getByRole('link', { name: '阅读', exact: true }), route('GET', documentPath));
+  await act('阅读已上传文档', page.getByRole('link', { name: /工作室测试手册/ }), route('GET', documentPath));
   const documentView = page.locator('pre.live-result');
   await documentView.filter({ hasText: '手册含有湖泊验收说明。' }).waitFor();
   await page.getByText('编辑文档', { exact: true }).click();
@@ -89,13 +93,15 @@ test('knowledge owners edit and grant libraries, manage memories and search thro
   await act('编辑文档并更新检索', submit(edit), route('PATCH', documentPath));
   await documentView.filter({ hasText: '训练文档含有北极星验收说明。' }).waitFor();
   const search = form(page, 'search');
-  await open('resources', search);
+  await open('resources', page.getByRole('button', {name:'知识库中心操作'}));
+  await page.getByRole('button', {name:'知识库中心操作'}).click();
+  await page.getByRole('link', {name:'检索知识库',exact:true}).click();
   await fields(search, 'baseId').selectOption(base.id);
   await fill(search, { query: '北极星' });
   const hits = await act('检索已更新的文档', submit(search), route('POST', '/v1/knowledge/search'));
   assert.ok((await hits.json()).items.some(item => item.documentId === document.id));
   await page.locator('#search-results').getByRole('link', { name: '查看文档' }).waitFor();
-  await open('resources/' + base.id, page.locator('[data-delete-document]'));
+  await open('resources/' + base.id + '/manage', page.locator('[data-delete-document]'));
   await act('删除知识库文档', page.locator(`[data-delete-document="${document.id}"]`), route('DELETE', documentPath));
   assert.equal((await read(documents)).items.length, 0);
   await act('删除临时知识库', page.locator('[data-delete-base]'), route('DELETE', endpoint));

@@ -74,7 +74,7 @@ export function quickRecipes(values, includeReference) {
   const kinds = values.quantity === 'suite' ? imageTypes : Array.from({ length: imageCount(values) }, () => values.imageType);
   return kinds.map((kind, index) => ({
     label: kinds.length === 1 ? kind : kind + ' ' + (index + 1),
-    width, height,
+    width, height, ...(values.modelId ? { modelId: values.modelId } : {}),
     parameters: {
       ratio,
       prompt: quickPrompt(values, includeReference, kind) + (values.notes?.trim() ? '\n追加要求：' + values.notes.trim() : ''),
@@ -90,6 +90,6 @@ export function advancedRecipes(values, model) {
   return Array.from({ length: imageCount(values) }, (_, index) => ({
     label: '主图 ' + (index + 1), width, height,
     parameters: { prompt, ratio },
-    ...(imageQuality ? { imageQuality, modelId: model.id } : {}),
+    ...(model ? { modelId: model.id } : {}), ...(imageQuality ? { imageQuality } : {}),
   }));
 }

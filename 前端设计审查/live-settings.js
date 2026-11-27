@@ -10,16 +10,57 @@ function metrics(d) {
     ['累计 CPU 时间', d.cpuMilliseconds == null ? null : d.cpuMilliseconds+' 毫秒']];
   return '<dl class="live-facts">'+values.filter(([,v])=>v!=null).map(([k,v])=>'<dt>'+h(k)+'</dt><dd>'+h(v)+'</dd>').join('')+'</dl>';
 }
+
+function feedbackHistory(records) {
+  return list(records, f => item(f.category === 'issue' ? '使用问题' : '功能建议', date(f.createdAt), notice(f.message)), '暂无反馈。');
+}
+
+function feedbackContent(records) {
+  return form('feedback', field('类别', select('category', [['issue','使用问题'],['suggestion','功能建议']])) +
+    field('内容', textarea('message','required maxlength="4000"')), '提交反馈') +
+    '<output data-feedback-status role="status"></output><h3>最近提交</h3><div data-feedback-history>' + feedbackHistory(records) + '</div>';
+}
+
+function bindFeedback(ctx, records) {
+  let key = retryKey();
+  ctx.submit('feedback', async (data, node) => {
+    const status = document.querySelector('[data-feedback-status]');
+    const values = { category: data.get('category'), message: data.get('message').trim() };
+    if (!values.message) {
+      status.textContent = '请填写反馈内容。';
+      node.elements.message.focus();
+      return;
+    }
+    status.textContent = '正在提交…';
+    try {
+      const saved = await ctx.api('/v1/feedback', { method:'POST', body:{ ...values, id:key(values) } });
+      if (!ctx.active()) return;
+      records = [saved, ...records.filter(record => record.id !== saved.id)].slice(0,10);
+      document.querySelector('[data-feedback-history]').innerHTML = feedbackHistory(records);
+      if (node.elements.message.value.trim() === values.message && node.elements.category.value === values.category) node.reset();
+      key = retryKey();
+      status.textContent = '反馈已提交。';
+    } catch (error) {
+      if (ctx.active()) status.textContent = describeError(error);
+    }
+  });
+}
+
 export async function settings(ctx) {
+  if (ctx.args[0] === 'feedback') {
+    const {items} = await ctx.api('/v1/feedback?limit=10');
+    if (!ctx.active()) return;
+    ctx.html(heading('意见反馈') + '<section class="card live-panel">' + feedbackContent(items) + '</section>');
+    bindFeedback(ctx, items);
+    return;
+  }
   const [{preferences}, feedback] = await Promise.all([ctx.api('/v1/settings'),ctx.api('/v1/feedback?limit=10')]);
   ctx.html(heading('设置与诊断')+'<div class="live-row">'+action('外观主题','appearance')+link('个人资料与积分','account')+link('个人记忆','resources/memory/personal')+action('查找功能（Ctrl / ⌘ + K）','find-navigation')+'</div>'+
     grid(panel('工作区偏好',form('settings',Object.entries(flags).map(([key,name])=>field(name,
       input(key,'type="checkbox" '+((preferences[key]??true)?'checked':'')))).join(''))),
       panel('服务诊断',action('检查服务和数据库','check')+'<div id="checks" aria-live="polite"></div>'))+
     '<details class="card live-panel live-fold"><summary>意见反馈</summary>'+
-    form('feedback',field('类别',select('category',[['issue','使用问题'],['suggestion','功能建议']]))+
-      field('内容',textarea('message','required maxlength="4000"')),'提交反馈')+
-    '<h3>最近提交</h3>'+list(feedback.items,f=>item(f.category==='issue'?'使用问题':'功能建议',date(f.createdAt),notice(f.message)),'暂无反馈。')+'</details>');
+    feedbackContent(feedback.items)+'</details>');
   ctx.click('appearance',()=>document.querySelector('[data-theme-open]')?.click());
   ctx.submit('settings',async data=>{
     const values=Object.fromEntries(Object.keys(flags).map(k=>[k,data.has(k)]));
@@ -30,12 +71,7 @@ export async function settings(ctx) {
     }
     ctx.reload();
   });
-  const key=retryKey();
-  ctx.submit('feedback',async data=>{
-    const values={category:data.get('category'),message:data.get('message').trim()};
-    await ctx.api('/v1/feedback',{method:'POST',body:{...values,id:key(values)}});
-    ctx.reload();
-  });
+  bindFeedback(ctx, feedback.items);
   ctx.click('check',async()=>{
     const requests=[['运行状态','/health'],['数据库与迁移','/ready']];
     if(ctx.manager)requests.push(['资源诊断','/v1/diagnostics'],['工作区数据库','/v1/workspace/database']);

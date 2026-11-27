@@ -60,17 +60,13 @@ foreach ($file in @('prepare.mjs','Dockerfile','README.md','aidge/SKILL.md','aid
 $studio = '前端设计审查'
 $root = Join-Path $app $studio
 New-Item -ItemType Directory -Path (Join-Path $root 'assets') -Force | Out-Null
-$routes = Get-Content -LiteralPath (Join-Path $backend 'src/studio.js') -Raw
-$files = [regex]::Matches($routes, "'((?:[\w-]+/)*[^'/]+\.(?:js|css|html))'") | ForEach-Object { $_.Groups[1].Value }
+$files = & (Join-Path $NodeDirectory 'node.exe') --input-type=module -e "import { pathToFileURL } from 'node:url'; const {studioPublicFiles} = await import(pathToFileURL(process.argv[1])); console.log(studioPublicFiles.join('\n'))" (Join-Path $backend 'src/studio.js')
+if ($LASTEXITCODE -or !$files) { throw 'Could not enumerate the public workbench files' }
 foreach ($file in ($files | Sort-Object -Unique)) {
     if ($tracked -notcontains "$studio/$file") { throw "Untracked workbench file $file" }
     $destination = Join-Path $root $file
     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path (Join-Path $repo $studio) $file) -Destination $destination
-}
-foreach ($file in @('optic-wave.webp', 'leather.webp', 'citrus.webp', 'audio.webp')) {
-    if ($tracked -notcontains "$studio/assets/$file") { throw "Untracked workbench image $file" }
-    Copy-Item -LiteralPath (Join-Path $repo "$studio/assets/$file") -Destination (Join-Path $root 'assets')
 }
 
 Copy-Item -LiteralPath (Join-Path $NodeDirectory 'node.exe') -Destination $app

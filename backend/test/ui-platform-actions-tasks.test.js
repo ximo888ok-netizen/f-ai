@@ -12,6 +12,31 @@ const submit = scope => scope.locator('button:not([type]), button[type=submit]')
 const request = (method, path) => ({ method, path });
 const textReply = '本机模型已回答验收问题。';
 
+test('account menu opens feedback and submitted records persist on refresh', options, async t => {
+  const {page, open, act, read} = await createStudioFixture(t);
+  await open('home', '#profile');
+  await page.locator('#profile').click();
+  const menu = page.locator('#account-menu');
+  const entry = menu.getByRole('link', { name:'意见反馈', exact:true });
+  assert.equal(await entry.evaluate(node => node.previousElementSibling.textContent.trim()), '个人记忆');
+  await act('从账号菜单打开意见反馈', entry, request('GET','/v1/feedback'));
+  await page.getByRole('heading', {name:'意见反馈',exact:true}).waitFor();
+  assert.equal(await menu.isVisible(), false);
+  const box = form(page,'feedback');
+  await field(box,'message').fill('   ');
+  await submit(box).click();
+  await page.getByText('请填写反馈内容。',{exact:true}).waitFor();
+  await field(box,'category').selectOption('suggestion');
+  await field(box,'message').fill('希望支持按商品分类检索。');
+  const posted = await act('从反馈页面提交建议', submit(box), request('POST','/v1/feedback'));
+  const record = await posted.json();
+  await page.getByText('反馈已提交。',{exact:true}).waitFor();
+  assert.equal(record.category,'suggestion');
+  assert.equal((await read('/v1/feedback')).items[0].id,record.id);
+  await page.reload();
+  await page.locator('[data-feedback-history]').getByText('希望支持按商品分类检索。',{exact:true}).waitFor();
+});
+
 function provider(providers, { id, capability, kind, protocol, run }) {
   providers.set('model:' + id, {
     info: { id, model: id, protocol, kind, capabilities: [capability], streamText: false },
@@ -95,7 +120,7 @@ test('workspace shell, text and voice tasks, schedules, settings and notificatio
   const prefs = await act('保存个人偏好', submit(settings), request('PATCH', '/v1/settings'));
   assert.equal((await prefs.json()).preferences.rememberConversations, false);
   await prefsReloaded;
-  await page.getByText('意见反馈', { exact: true }).click();
+  await page.locator('summary').filter({hasText:'意见反馈'}).click();
   const feedback = form(page, 'feedback');
   await field(feedback, 'category').selectOption('suggestion');
   await field(feedback, 'message').fill('自动验收反馈记录');
