@@ -138,7 +138,13 @@ test('product categories, catalog transfers, ROI and asset controls persist and 
     { method: 'GET', path: assets + '/' + uploaded.id + '/content' }), image.buffer);
   await submit('source-review', { personCount: 0, occlusionPercent: 0 },
     { method: 'PUT', path: /\/v1\/media\/images\/.*\/preflight/ });
-  await act('返回素材库', link('返回素材库'), { method: 'GET', path: assets });
+  await act('从素材详情带入图片处理', link('以这张图开始处理'), { method: 'GET', path: assets });
+  assert.equal(await form('image-batch').locator('[name=source]').inputValue(), uploaded.id);
+  await act('从图片处理返回素材库', link('打开素材库'), { method: 'GET', path: assets });
+  await act('从素材清单带入图片处理', assetRow.getByRole('link', { name: '处理图片', exact: true }),
+    { method: 'GET', path: assets });
+  assert.equal(await form('image-batch').locator('[name=source]').inputValue(), uploaded.id);
+  await act('返回素材库删除合成文件', link('打开素材库'), { method: 'GET', path: assets });
   await confirmed('删除素材文件', button('删除'), { method: 'DELETE', path: assets + '/' + uploaded.id, status: 204 });
   assert.ok(!(await read(assets)).items.some(({ id }) => id === uploaded.id));
 });
@@ -148,7 +154,7 @@ function ledgerSample(kind) {
     orders: { title: '订单商品', day: '2026-11-12', status: '待发货', units: 2, paidMinor: '12.50', shipBy: '2026-11-13' },
     shipments: { title: '测试包裹', orderRef: 'orders-main', status: '待配货' },
     returns: { title: '测试售后', orderRef: 'orders-main', kind: '换货', status: '待处理' },
-    tickets: { title: '咨询工单', orderRef: 'orders-main', status: '待处理', due: '2026-11-13' },
+    tickets: { title: '咨询工单', orderRef: 'orders-main', status: '待处理', due: '2000-01-02' },
     reviews: { title: '测试评价', day: '2026-11-12', content: '合成评价', status: '待拟回复' },
     inventory: { title: '测试库存', day: '2026-11-12', stock: 5, threshold: 6 },
     performance: { title: '测试商品数据', sku: 'BROWSER-SKU', day: '2026-11-12', views: 10, visitors: 5, buyers: 2, salesMinor: '12.50' },
@@ -240,7 +246,16 @@ test('shop directory, all ledger modules, report filters, imports and downloads 
   }
 
   const orderPath = bookPath + '/records/orders';
-  const overdueLink = page.getByRole('link', { name: /^逾期 / }).first();
+  const overdueTickets = await act('从总览打开逾期工单', page.locator('a[href*="/tickets/list/overdueOn"]'),
+    { method: 'GET', path: bookPath + '/records/tickets' });
+  const dates = new URL(overdueTickets.url()).searchParams;
+  assert.match(dates.get('overdueOn'), /^\d{4}-\d{2}-\d{2}$/);
+  const overdueRows = (await overdueTickets.json()).items;
+  assert.ok(overdueRows.some(item => item.reference === 'tickets-main'));
+  assert.ok(overdueRows.every(({ details }) => details.due < dates.get('overdueOn') && details.status !== '已结案'));
+  assert.equal(await form('filter-records').locator('[name=overdueOn]').inputValue(), dates.get('overdueOn'));
+  await act('从工单筛选返回总览', link('返回运营总览'), { method: 'GET', path: bookPath + '/summary' });
+  const overdueLink = page.locator('a[href*="/orders/list/overdueOn"]');
   const overdue = await act('从总览打开逾期订单', overdueLink, { method: 'GET', path: orderPath });
   assert.ok(new URL(overdue.url()).searchParams.has('overdueOn'));
   await act('从逾期筛选返回总览', link('返回运营总览'), { method: 'GET', path: bookPath + '/summary' });
@@ -457,6 +472,14 @@ test('knowledge, workspace support and rights forms persist changes and enforce 
   assert.equal(await page.locator('[data-thread]').count(), 0);
   await page.locator('[name=inboxShop]').selectOption(serviceShop.id);
   await visible(chat.subject);
+  const savedChats = (await read(conversations)).items.map(item => item.id);
+  await act('在已有会话的队列头新建会话', button('新建会话'));
+  const dialog = page.locator('[data-inbox-dialog]');
+  await dialog.waitFor();
+  assert.equal(await form('new-conversation').locator('[name=shopId]').inputValue(), serviceShop.id);
+  await act('关闭非空队列的新会话弹窗', dialog.locator('[data-close-new]'));
+  await dialog.waitFor({ state: 'hidden' });
+  assert.deepEqual((await read(conversations)).items.map(item => item.id), savedChats);
   await open('customer/replies', form('new-reply'));
   await act('再次展开话术编辑', page.getByText('查看或编辑', { exact: true }));
   await confirmed('删除已用话术', button('删除话术'), { method: 'DELETE', path: replies + '/' + reply.id });
@@ -578,6 +601,9 @@ test('commerce query and file report use configured shop bindings and explicit s
   assert.equal((await detailResponse.json()).operation, 'get_order_detail');
   await act('查看平台返回详情', page.locator('[data-query-result] summary'));
   assert.match(await page.locator('[data-query-result] pre').innerText(), /SYN-ORDER-778/);
+  await act('从非空经营查询打开店铺登录与管理', '[data-open-shops]');
+  await page.locator('#scene-operations-shops-tab[aria-selected=true]').waitFor();
+  await page.locator('#scene-operations-shops .shop-record').filter({ hasText: '合成已配置店铺' }).waitFor();
 });
 
 test('native customer history, evidence, handoff and generated draft use a synthetic shop database', options, async t => {

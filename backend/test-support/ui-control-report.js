@@ -35,6 +35,12 @@ export async function watchControls(t, context) {
       else action = (node.id || node.getAttribute('role') || node.localName) + ' ' + name;
       const keyAttr = attr.find(a => ['data-select','data-switch-scene','data-plugin-state','data-glass-preset','data-dual-mode','data-dual-step','data-brief-chip','data-model-choice'].includes(a.name));
       let control = action;
+      if (href) {
+        // Ledger reference strings are user data. Editing multiple rows uses
+        // the same control; retain the exact link separately in the trace.
+        control = action.replace(/(\/(?:edit|list)\/)[^/]+$/, (match,prefix) =>
+          /#(?:desk\/operations|commerce)\/:id\//.test(action) ? prefix+':record' : match);
+      }
       if (!href && !(node.type === 'submit' && form)) {
         if (keyAttr) control = keyAttr.name + '=' + clean(keyAttr.value);
         else if (node.id) control = '#' + node.id;

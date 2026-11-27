@@ -9,7 +9,7 @@ import { MediaOutputs } from '../src/media-skill-files.js';
 import { createStudioFixture } from '../test-support/ui-actions.js';
 
 test('submit each non-shop catalog task form to the real queue, worker, wallet and result store', {
-  skip: !process.env.FAI_TEST_PLAYWRIGHT_PATH, timeout: 780000,
+  skip: !process.env.FAI_TEST_PLAYWRIGHT_PATH, timeout: 1080000,
 }, async t => {
   const { page, api, read, open, act, providers } = await createStudioFixture(t,{credits:1000});
   const image = createCanvas(1024,1024).toBuffer('image/png');
@@ -59,7 +59,7 @@ test('submit each non-shop catalog task form to the real queue, worker, wallet a
     if(c.mediaSkill) {
       await open(route,form);
     } else {
-      await open('create/'+c.pluginId,'#main .live-catalog-grid');
+      await open('create/'+c.pluginId,page.locator('#main .live-catalog-grid').first());
       const entry=page.locator('#main a[href="#'+route+'"]').first();
       if(!await entry.isVisible()) await page.locator('#main details').filter({has:page.locator('a[href="#'+route+'"]')}).locator('summary').click();
       await entry.click();

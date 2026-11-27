@@ -41,7 +41,7 @@ test('follow every distinct local navigation destination and switch each scene t
       const links = await area.locator('a[href]:visible').evaluateAll(els => [...new Set(els.map(e=>e.getAttribute('href')))]);
       for (const href of links) {
         if (!href || !/^(?:#|\/(?:merchant)?#)/.test(href) || /^#(?:main|merchantContent)$/.test(href)) continue;
-        const dest = new URL(href, page.url());
+        const dest = new URL(href, origin+view);
         const key = dest.pathname + dest.hash;
         if (checked.has(key)) continue;
         await mount(view, tab);

@@ -54,7 +54,10 @@ test('platform owner manages members, access, credits, features, connections and
   async function browserAction(browserPage, label, control, method, pathname, expectedStatus) {
     const [response] = await Promise.all([browserPage.waitForResponse(result =>
       result.request().method() === method && new URL(result.url()).pathname === pathname), control.click()]);
-    assert.equal(response.status(), expectedStatus, await response.text());
+    if (response.status() !== expectedStatus) {
+      const body = await response.text().catch(() => 'Response body unavailable after navigation');
+      assert.equal(response.status(), expectedStatus, body);
+    }
     t.diagnostic('UI action: ' + label + ' → ' + method + ' ' + pathname + ' ' + expectedStatus);
     return response;
   }

@@ -74,6 +74,16 @@ test('workspace shell, text and voice tasks, schedules, settings and notificatio
   const assistantTask = await act('发送工作台对话', assistant.getByRole('button', { name: '发送消息' }), request('POST', '/v1/tasks'));
   await assistant.getByText('模型建议：' + textReply, { exact: true }).waitFor({ timeout: 20000 });
   assert.equal((await read('/v1/tasks/' + (await assistantTask.json()).id)).state, 'succeeded');
+  await act('为默认模型开始新的对话', assistant.locator('.agent-new'));
+  await act('打开默认模型选项', assistant.locator('.composer-model'));
+  await act('选择服务端默认对话模型', assistant.locator('[data-model-choice="auto"]'));
+  await assistant.locator('textarea').fill('请给出默认模型验收建议。');
+  const autoTask = await act('提交由服务端选模的对话', assistant.getByRole('button', { name: '发送消息' }), request('POST', '/v1/tasks'));
+  assert.ok(!Object.hasOwn(autoTask.request().postDataJSON(), 'modelId'));
+  await assistant.getByText('模型建议：' + textReply, { exact: true }).waitFor({ timeout: 20000 });
+  const autoResult = await read('/v1/tasks/' + (await autoTask.json()).id);
+  assert.equal(autoResult.state, 'succeeded');
+  assert.equal(autoResult.modelId, 'platform-chat');
   await act('打开工作区访问范围', assistant.getByRole('button', { name: '访问范围' }));
   await assistant.getByText('当前角色 · 所有者', { exact: true }).waitFor();
   await assistant.locator('#composer-access a[href="#settings"]').click();
