@@ -1,4 +1,4 @@
-import { action, field, form, h, heading, input, item, link, list, notice, panel, result, textarea } from './live.js';
+import { action, field, form, h, heading, input, item, link, list, notice, panel, path, result, textarea } from './live.js';
 import { bindCustomerAgent, integrationSlot } from './live-agent-integrations.js';
 import { sceneDesk } from './studio-workflows.js';
 import { bindShopPane, shopPane, storesFor } from './desk-shops.js';

@@ -63,9 +63,17 @@ export async function createStudioFixture(t, { configureProviders, credits = 500
   await watchControls(t, context);
   const page = await context.newPage();
   page.setDefaultTimeout(10000);
+  page.setDefaultNavigationTimeout(30000);
   page.on('pageerror', error => errors.push(error.message));
   const open = async (hash, target) => {
-    await page.goto(origin + (hash.startsWith('/') ? hash : '/#' + hash.replace(/^#/, '')));
+    const url = origin + (hash.startsWith('/') ? hash : '/#' + hash.replace(/^#/, ''));
+    if (page.url() === url) await page.reload({waitUntil:'commit'});
+    else await page.goto(url,{waitUntil:'commit'});
+    await page.waitForFunction(() => {
+      const root = document.querySelector(location.pathname === '/merchant' ? '#merchantContent' : '#main');
+      return document.querySelector('#commerce-directory')?.getBoundingClientRect().height ||
+        (root?.firstElementChild && root.innerText.trim() && !/正在读取(工作区|工作台|后台数据)…/.test(root.innerText));
+    });
     if (target) await (typeof target === 'string' ? page.locator(target) : target).waitFor();
   };
   const act = async (label, locator, { method, path, status } = {}) => {

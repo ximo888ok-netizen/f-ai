@@ -17,7 +17,7 @@ async function type(scope, fields) {
 test('platform owner manages members, access, credits, features, connections and audits in Chrome', options, async t => {
   const cloudAssets = new Map();
   let checks = 0;
-  const { page, origin, app, db, session, read, open, act } = await createStudioFixture(t, {
+  const { page, origin, app, db, session, read, act } = await createStudioFixture(t, {
     cloudAssets,
     configureProviders(providers) {
       providers.set('model:platform-connection', {
@@ -51,6 +51,13 @@ test('platform owner manages members, access, credits, features, connections and
   await page.locator('#merchantNotice').filter({ hasText: /邀请链接已复制|链接已选中/ }).waitFor();
   const memberPage = await page.context().newPage();
   memberPage.setDefaultTimeout(10000);
+  async function memberAction(label, control, method, pathname, expectedStatus) {
+    const [response] = await Promise.all([memberPage.waitForResponse(result =>
+      result.request().method() === method && new URL(result.url()).pathname === pathname), control.click()]);
+    assert.equal(response.status(), expectedStatus, await response.text());
+    t.diagnostic('UI action: ' + label + ' → ' + method + ' ' + pathname + ' ' + expectedStatus);
+    return response;
+  }
   await memberPage.goto(origin + '/#team');
   const acceptance = form(memberPage, 'accept');
   await acceptance.waitFor();
@@ -62,13 +69,9 @@ test('platform owner manages members, access, credits, features, connections and
   await memberPage.reload();
   await memberPage.locator('#profile .account-sub').filter({ hasText: '平台验收成员' }).waitFor();
   await type(acceptance, { token: replacementToken });
-  const [accepted] = await Promise.all([memberPage.waitForResponse(response =>
-    new URL(response.url()).pathname === '/v1/invitations/accept' && response.request().method() === 'POST'),
-  submit(acceptance).click()]);
-  assert.equal(accepted.status(), 200, await accepted.text());
+  await memberAction('接受企业邀请', submit(acceptance), 'POST', '/v1/invitations/accept', 200);
   const company = session.workspaces[0].id;
   await memberPage.waitForFunction(id => document.querySelector('#workspace-selector')?.value === id, company);
-  t.diagnostic('UI action: 接受企业邀请 → POST /v1/invitations/accept 200');
   const memberFilter = form(page, 'filters');
   await type(memberFilter, { q: memberEmail });
   await act('筛选企业成员', submit(memberFilter), route('GET', '/v1/members'));
@@ -137,6 +140,33 @@ test('platform owner manages members, access, credits, features, connections and
     await page.getByRole('heading', { name: '功能管理', exact: true }).waitFor();
     await feature.waitFor({ state: 'hidden' });
   }
+  for (const enabled of [false, true]) {
+    await featureSection.locator('summary').first().click();
+    if (!enabled) {
+      const releaseNotes = feature.locator('details').filter({ hasText: '查看更新说明' });
+      await act('展开企业功能更新说明', releaseNotes.locator('summary'));
+      assert.ok(await releaseNotes.getAttribute('open') !== null);
+    }
+    await named(feature, 'enabled').selectOption(String(enabled));
+    await act(enabled ? '启用企业功能' : '停用企业功能', submit(feature), route('PUT', '/v1/merchant/features/copywriting'));
+    const saved = (await read('/v1/merchant/features')).items.find(item => item.id === 'copywriting');
+    assert.equal(saved.enabled, enabled);
+    await feature.waitFor({ state: 'hidden' });
+  }
+  const featureDirectory = await read('/v1/merchant/features');
+  for (const current of featureDirectory.items.filter(item => item.id !== 'copywriting')) {
+    const editor = form(page, 'feature-' + current.id);
+    await page.locator('details.merchant-feature-row').filter({ has: editor }).locator('summary').first().click();
+    const savedResponse = await act('保存功能设置 ' + current.id, submit(editor), route('PUT', '/v1/merchant/features/' + current.id));
+    const sent = savedResponse.request().postDataJSON();
+    assert.equal(sent.revision, current.revision);
+    const saved = await savedResponse.json();
+    const persisted = (await read('/v1/merchant/features')).items.find(item => item.id === current.id);
+    assert.deepEqual(saved, { id: current.id, enabled: persisted.enabled, revision: persisted.revision });
+    assert.deepEqual({ enabled: persisted.enabled, mode: persisted.mode, version: persisted.version, memberIds: persisted.memberIds },
+      { enabled: current.enabled, mode: current.mode, version: current.version, memberIds: current.memberIds });
+    await editor.waitFor({ state: 'hidden' });
+  }
 
   await page.locator('#nav a[href="#connections"]').click();
   await act('读取企业接入概况', page.locator('[data-readiness]'), route('GET', '/v1/models'));
@@ -146,6 +176,11 @@ test('platform owner manages members, access, credits, features, connections and
   const check = await act('检查本机 WebDAV 夹具连接', webdav.getByRole('button', { name: '检查连接' }), route('POST', webdavPath + '/check'));
   assert.equal((await check.json()).checkState, 'reachable');
   assert.equal(checks, 1);
+  for (const [label, enabled] of [['断开连接', false], ['启用连接', true]]) {
+    const changed = await act(label + '工作区 WebDAV', webdav.getByRole('button', { name: label, exact: true }), route('PUT', webdavPath));
+    assert.equal((await changed.json()).enabled, enabled);
+    assert.equal((await read('/v1/cloud-assets/status')).available, enabled);
+  }
   const model = page.locator('#merchantContent article').filter({ hasText: 'platform-connection' });
   for (const [label, enabled] of [['断开连接', false], ['启用连接', true]]) {
     const changed = await act(label + '模型别名', model.getByRole('button', { name: label, exact: true }),
@@ -164,7 +199,8 @@ test('platform owner manages members, access, credits, features, connections and
   const records = JSON.parse(await readFile(await (await exported).path(), 'utf8'));
   assert.ok(records.length > 0 && records.every(record => record.targetId === project.id));
 
-  await open('account', form(page, 'allocate'));
+  await act('从商家后台返回工作台', page.getByRole('link', { name: '返回工作台', exact: true }), route('GET', '/v1/plugins'));
+  await act('从工作台打开账户与积分', page.locator('[data-shell-credit]'), route('GET', '/v1/credits/ledger'));
   const allocation = form(page, 'allocate');
   await named(allocation, 'memberId').selectOption(memberId);
   await type(allocation, { amount: '3' });
@@ -182,13 +218,30 @@ test('platform owner manages members, access, credits, features, connections and
     t.diagnostic('UI action: 切换并读取工作区目录 → GET /v1/plugins 200');
     await memberPage.locator('#profile').click();
   }
+  await memberPage.goto(origin + '/#projects');
+  const personalForm = form(memberPage, 'project');
+  await type(personalForm, { name: '个人验收项目' });
+  const personalProject = await (await memberAction('从个人工作台创建项目', submit(personalForm), 'POST', '/v1/projects', 201)).json();
+  const personalRoute = '/v1/projects/' + personalProject.id;
+  const personalRename = form(memberPage, 'rename');
+  await type(personalRename, { name: '个人验收项目已改名' });
+  const renamed = await memberAction('重命名个人项目', submit(personalRename), 'PATCH', personalRoute, 200);
+  assert.equal((await renamed.json()).name, '个人验收项目已改名');
+  await memberPage.getByRole('heading', { name: '个人验收项目已改名', exact: true }).waitFor();
+  for (const [label, archived] of [['归档项目', true], ['恢复项目', false]]) {
+    const state = await memberAction(label + '（个人工作台）', memberPage.getByRole('button', { name: label, exact: true }),
+      'PATCH', personalRoute, 200);
+    assert.equal(Boolean((await state.json()).archivedAt), archived);
+  }
   await memberPage.goto(origin + '/#account');
-  const [personalLogout] = await Promise.all([memberPage.waitForResponse(response =>
-    new URL(response.url()).pathname === '/v1/auth/logout' && response.request().method() === 'POST'),
-  memberPage.locator('#main [data-logout]').click()]);
-  assert.equal(personalLogout.status(), 204);
-  await form(memberPage, 'auth').waitFor();
-  t.diagnostic('UI action: 从个人工作台退出登录 → POST /v1/auth/logout 204');
+  await memberAction('从个人工作台退出登录', memberPage.locator('#main [data-logout]'), 'POST', '/v1/auth/logout', 204);
+  const personalLogin = form(memberPage, 'auth');
+  await type(personalLogin, { email: memberEmail, password: 'platform-member-fixture' });
+  const personalSession = await memberAction('重新登录工作台个人账号', submit(personalLogin), 'POST', '/v1/auth/login', 200);
+  assert.equal((await personalSession.json()).account.id, memberId);
+  await memberPage.locator('#profile').click();
+  await memberAction('从工作台账号菜单退出登录', memberPage.locator('[data-account-logout]'), 'POST', '/v1/auth/logout', 204);
+  await personalLogin.waitFor();
   await memberPage.close();
 
   const pageMembers = Array.from({ length: 25 }, () => randomUUID());
@@ -203,7 +256,8 @@ test('platform owner manages members, access, credits, features, connections and
       SELECT id,$1,$2,'workspace','test.pagination',$3,'{}'::jsonb,'pagination-fixture'
       FROM unnest($4::uuid[]) AS entries(id)`, [company, session.account.id, project.id, eventIds]);
   });
-  await open('/merchant#members', form(page, 'filters'));
+  await page.locator('#profile').click();
+  await act('通过账号菜单打开商家后台', page.locator('#merchantLink'), route('GET', '/v1/members'));
   await type(memberFilter, { q: '' });
   await act('清除筛选显示完整成员清单', submit(memberFilter), route('GET', '/v1/members'));
   const nextMembers = await act('翻到下一页成员', page.locator('[data-page="25"]'), route('GET', '/v1/members'));

@@ -162,6 +162,13 @@ test('media actions publish and apply image export specifications, process sourc
 test('media actions edit and reorder storyboard shots, open the prompt view and exercise both native confirmation choices', options, async t => {
   const { page, api, read, open, act } = await createStudioFixture(t);
   const [first, second] = await Promise.all([seedImage(api, '分镜一.png'), seedImage(api, '分镜二.png', '#da9928')]);
+  let audio;
+  if (ffmpeg && ffprobe) {
+    const sound = await promisify(execFile)(ffmpeg, ['-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=44100',
+      '-t', '1', '-c:a', 'libmp3lame', '-f', 'mp3', 'pipe:1'], { encoding: 'buffer', windowsHide: true, timeout: 10000 });
+    audio = await api('POST', '/v1/assets', { name: '分镜合成音轨.mp3', source: 'ffmpeg 合成', purpose: '分镜测试',
+      mediaType: 'audio/mpeg', dataBase64: sound.stdout.toString('base64') });
+  }
   await open('media/storyboards', page.getByRole('link', { name: '新建视频分镜' }));
   await act('media.story.create-link', page.getByRole('link', { name: '新建视频分镜' }));
   const editor = form(page, 'storyboard-save');
@@ -169,6 +176,7 @@ test('media actions edit and reorder storyboard shots, open the prompt view and 
   await control(editor, 'title').fill('合成商品分镜');
   await control(editor, 'ratio').selectOption('1:1');
   await control(editor, 'template').selectOption('feature-details');
+  if (audio) await control(editor, 'audioAssetId').selectOption(audio.id);
   await control(shots.first(), 'assetId').selectOption(first.id);
   await control(shots.first(), 'duration').fill('1.25');
   await control(shots.first(), 'caption').fill('第一幕');
@@ -185,6 +193,7 @@ test('media actions edit and reorder storyboard shots, open the prompt view and 
   const created = await (await act('media.story.save', submit(editor), put(newRecord(storiesPath), 200))).json();
   const record = storiesPath + '/' + created.id;
   assert.equal(created.revision, 1);
+  assert.equal((await read(record)).configuration.audioAssetId, audio?.id ?? null);
   assert.deepEqual((await read(record)).configuration.shots.map(({ assetId, durationMs }) => [assetId, durationMs]), [[first.id, 1250], [second.id, 1500]]);
   await act('media.story.prompts', page.locator('[data-storyboard-prompts]'), get(record + '/prompts', 200));
   await page.locator('[data-story-prompts]').getByText('商品正面', { exact: false }).waitFor();
@@ -219,8 +228,8 @@ test('media video export switches format controls, rejects out-of-range frames a
   const { page, api, read, open, act } = await createStudioFixture(t, { configureProviders(providers) {
     const id = 'media-browser-local-video';
     providers.set('model:' + id, {
-      info: { id, model: id, kind: 'video', protocol: 'ark-video', capabilities: ['video.compose'], streamText: false },
-      supports: capability => capability.id === 'video.compose', run: async () => new GeneratedFile(sampleBytes, 'video/mp4'),
+      info: { id, model: id, kind: 'video', protocol: 'ark-video', capabilities: ['video.reference'], streamText: false },
+      supports: capability => capability.id === 'video.reference', run: async () => new GeneratedFile(sampleBytes, 'video/mp4'),
     });
   } });
   const source = await api('POST', '/v1/assets', {
@@ -261,9 +270,23 @@ test('media video export switches format controls, rejects out-of-range frames a
   assert.equal((await exported('media.video.export.mp3')).subarray(0, 3).toString(), 'ID3');
   assert.deepEqual(response.request().postDataJSON(), { format: 'mp3', aiGenerated: true });
 
-  const task = await api('POST', '/v1/tasks', { capabilityId: 'video.compose', mode: 'workflow', parameters: { prompt: '生成本地合成视频结果' },
-    modelId: 'media-browser-local-video', idempotencyKey: 'media-generated-video-output' });
-  await open('tasks/' + task.id, '#media-result video');
+  const reference = await api('POST', '/v1/assets', {
+    name: '已授权合成参考.mp4', source: 'ffmpeg 合成', purpose: '参考视频测试', mediaType: 'video/mp4', dataBase64: sampleBytes.toString('base64'),
+    consentReference: '合成视频验收授权', consentExpiresAt: '2099-01-01T00:00:00.000Z',
+  });
+  const prompt = form(page, 'video-prompt');
+  await open('desk/video', prompt);
+  await act('media.video.export.reference-mode', prompt.locator('[popovertarget=video-input]'));
+  await prompt.locator('[name=inputType][value=reference]').check();
+  await page.keyboard.press('Escape');
+  await control(prompt, 'prompt').fill('根据已授权的合成参考生成本地视频。');
+  await act('media.video.export.reference-picker', prompt.locator('[popovertarget=video-media]'));
+  assert.equal(await prompt.locator(`[data-video-asset-picker] option[value="${source.id}"]`).count(), 0);
+  await prompt.locator('[data-video-asset-picker]').selectOption(reference.id);
+  const submission = await act('media.video.export.reference-submit', submit(prompt), post('/v1/tasks', 202));
+  assert.deepEqual(submission.request().postDataJSON().parameters.assetIds, [reference.id]);
+  const task = await submission.json();
+  await page.locator('#media-result video').waitFor();
   await page.waitForFunction(() => document.querySelector('#media-result video').videoWidth === 720);
   const finished = await read('/v1/tasks/' + task.id);
   const content = '/v1/assets/' + finished.result.assetId;

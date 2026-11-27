@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createCanvas } from '@napi-rs/canvas';
 import { createStudioFixture } from '../test-support/ui-actions.js';
 import { studioRoutes, merchantRoutes, categories } from '../test-support/studio-routes.js';
 
@@ -114,13 +115,41 @@ test('directory feature switches, cancellation, shell search, theme, motion, abo
   assert.equal((await read('/v1/settings')).preferences.studioMotion,(await motion.json()).preferences.studioMotion);
   await inspector.locator('[data-more-appearance]').click();
   const settings = page.locator('#themeDialog[open]');
-  const theme = settings.locator('input[name=faiColorMode][value=dark]');
-  const saved = page.waitForResponse(r=>r.request().method()==='PATCH' && r.url().endsWith('/v1/settings'));
-  await theme.check();
-  assert.equal((await (await saved).json()).preferences.theme,'dark');
+  const sound = settings.locator('.dm-sound-btn');
+  const previousSound = await sound.innerText();
+  await sound.click();
+  assert.notEqual(await sound.innerText(),previousSound);
+  await sound.click();
+  const picker = settings.locator('[data-wallpaper-choose]');
+  const [choose] = await Promise.all([page.waitForEvent('filechooser'),picker.click()]);
+  await choose.setFiles({name:'synthetic-wallpaper.png',mimeType:'image/png',buffer:createCanvas(8,8).toBuffer('image/png')});
+  await settings.getByText(/已保存到本机/).waitFor();
+  assert.equal(await page.locator('html').getAttribute('data-custom-wallpaper'),'');
+  await settings.locator('[data-wallpaper-reset]').click();
+  await settings.getByText('正在使用默认壁纸').waitFor();
+  for (const mode of ['dark','system','light','dark']) {
+    const radio = settings.locator('input[name=faiColorMode][value='+mode+']');
+    if (await radio.isChecked()) continue;
+    const changed = await act('切换显示模式 '+mode,settings.locator('label:has(input[name=faiColorMode][value='+mode+']) span'),{
+      method:'PATCH',path:'/v1/settings'});
+    assert.equal((await changed.json()).preferences.theme,mode);
+  }
   await settings.locator('[data-reset-material]').click();
   await settings.getByRole('button',{name:'完成'}).click();
   assert.equal((await read('/v1/settings')).preferences.theme,'dark');
+  await page.locator('#profile').click();
+  await page.locator('[data-account-appearance]').click();
+  await inspector.waitFor();
+  await inspector.locator('[data-more-appearance]').click();
+  await settings.locator('.themeClose').click();
+  const track=page.locator('.head-themes .dm-track');
+  const rect=await track.boundingBox();
+  for(const [fraction,material] of [[0.17,'dark'],[0.5,'gray'],[0.83,'white']]){
+    const [saved]=await Promise.all([page.waitForResponse(r=>r.request().method()==='PATCH' && r.url().endsWith('/v1/settings')),
+      track.click({position:{x:Math.round(rect.width*fraction),y:Math.round(rect.height/2)}})]);
+    assert.equal(saved.status(),200);
+    assert.equal(await page.locator('html').getAttribute('data-material'),material);
+  }
   await page.setViewportSize({width:390,height:844});
   await page.locator('#studioMenu').click();
   await page.locator('#appSidebar.mobile-open').waitFor();
