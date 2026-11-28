@@ -12,7 +12,7 @@ export function workspaceNavigation(pages) {
   const menu = document.querySelector('#studioMenu'), veil = document.querySelector('#sidebarBackdrop');
   const switcher = document.querySelector('#stageSwitcher'), thumb = document.querySelector('#switcherThumb');
   const business = document.querySelector('.business-root'), mobile = matchMedia('(max-width:900px)');
-  bindNavigationSearch(nav, Object.entries(pages).map(([route,[label]]) => ['#' + route, label]));
+  bindNavigationSearch(nav, Object.entries(pages).filter(([route]) => route !== 'admin').map(([route,[label]]) => ['#' + route, label]));
   let collapsed = false;
   function layoutMenu(open = false) {
     rail.classList.toggle('mobile-open', mobile.matches && open);

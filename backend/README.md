@@ -347,3 +347,5 @@ GATEWAY_URL、GATEWAY_TOKEN 和 GATEWAY_CAPABILITIES 配合使用。只有运维
 记忆只在用户明确提交更改时更新。列表和创建结果含 `revision`，已有记忆从 0 开始。用 `PUT /v1/memory/{id}/changes/{请求UUID}` 提交 `{"revision":0,"action":"update","content":"新内容"}`。撤回最近一次更新时传当前版本和 `"action":"undo"`。同一请求可以重试，过期版本返回 409。个人记忆仅本人可读写，企业记忆由成员读取、管理者修改。历史接口 `GET /v1/memory/{id}/changes` 返回版本、操作者、动作和时间；删除记忆一并删除历史。
 
 微信适配范围为公众号安全模式和企业微信自建应用的文本消息。部署方用 `WECHAT_BINDINGS_JSON` 配置渠道、连接别名、工作区、接收标识、两项密钥的环境变量名和被动回复文本。公众号的 `receiver` 为 AppID、`recipient` 为公众号原始 ID；企业微信的 `channel` 为 `wecom`，两者均填 CorpID，另填 `agentId`。回调地址为 `/v1/channels/{wechat或wecom}/{别名}/callback`。GET 完成绑定验证，POST 验签解密、按企业和消息编号去重、保存接收文本并加密返回配置好的确认消息。管理者可从 `GET /v1/channels/{渠道}/inbox` 查询绑定状态、消息和回复内容；外部是否收到被动回复由渠道端核实。飞书继续使用已有的人工确认回复队列。[企业微信回调示例](https://github.com/sbzhu/weworkapi_python/blob/master/callback/WXBizMsgCrypt.py)
+
+工作台管理员页面、演示数据与自建服务接口见 [管理员控制台](ADMIN_CONSOLE.md)。

@@ -1,4 +1,5 @@
 import { action, date, field, form, grid, h, heading, input, item, link, list, notice, panel, retryKey, select, textarea } from './live-ui.js';
+import { adminEntry, updateAdminEntry } from './studio-admin.js';
 import { describeError } from './studio-errors.js';
 
 const flags = {taskNotifications:'接收任务消息', memberNotifications:'接收成员变更消息', rememberConversations:'在当前标签页记住首页对话'};
@@ -55,12 +56,13 @@ export async function settings(ctx) {
     return;
   }
   const [{preferences}, feedback] = await Promise.all([ctx.api('/v1/settings'),ctx.api('/v1/feedback?limit=10')]);
-  ctx.html(heading('设置与诊断')+'<div class="live-row">'+action('外观主题','appearance')+link('个人资料与积分','account')+link('个人记忆','resources/memory/personal')+action('查找功能（Ctrl / ⌘ + K）','find-navigation')+'</div>'+
+  ctx.html(heading('设置与诊断')+adminEntry(ctx)+'<div class="live-row">'+action('外观主题','appearance')+link('个人资料与积分','account')+link('个人记忆','resources/memory/personal')+action('查找功能（Ctrl / ⌘ + K）','find-navigation')+'</div>'+
     grid(panel('工作区偏好',form('settings',Object.entries(flags).map(([key,name])=>field(name,
       input(key,'type="checkbox" '+((preferences[key]??true)?'checked':'')))).join(''))),
       panel('服务诊断',action('检查服务和数据库','check')+'<div id="checks" aria-live="polite"></div>'))+
     '<details class="card live-panel live-fold"><summary>意见反馈</summary>'+
     feedbackContent(feedback.items)+'</details>');
+  void updateAdminEntry(ctx);
   ctx.click('appearance',()=>document.querySelector('[data-theme-open]')?.click());
   ctx.submit('settings',async data=>{
     const values=Object.fromEntries(Object.keys(flags).map(k=>[k,data.has(k)]));

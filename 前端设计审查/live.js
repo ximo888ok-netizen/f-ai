@@ -5,6 +5,7 @@ import { mountStudioAuth } from './studio-auth.js';
 import { dashboard } from './live-home.js';
 import { agentHome } from './live-agent-home.js';
 import { workspaceNavigation } from './live-navigation.js';
+import { adminPage, canOpenAdmin, forgetAdminCredentials } from './studio-admin.js';
 import { bindAccountMenu } from './live-account-menu.js';
 import { capabilityCenter } from './live-capability-center.js';
 import { dataCenter } from './live-data-center.js';
@@ -67,6 +68,7 @@ const pages = {
   inbox: ['消息中心', workspacePages.inbox],
   account: ['账户与积分', workspacePages.account],
   settings: ['设置与诊断', workspacePages.settings],
+  admin: ['管理员控制台', adminPage],
 };
 const updateNavigation = workspaceNavigation(pages);
 const updateAccount = bindAccountMenu(error => toast(describeError(error)));
@@ -119,9 +121,11 @@ async function getAll(ctx, endpoint) {
 }
 
 function setIdentity(data, selected = workspace?.id ?? sessionStorage.getItem(workspaceKey)) {
+  const nextWorkspace = data?.workspaces.find(entry => entry.id === selected) ?? data?.workspaces[0] ?? null;
+  if (identity?.account.id !== data?.account.id || workspace?.id !== nextWorkspace?.id) forgetAdminCredentials();
   token = data ? data.token ?? token : null;
   identity = data;
-  workspace = data?.workspaces.find(entry => entry.id === selected) ?? data?.workspaces[0] ?? null;
+  workspace = nextWorkspace;
   connectAppearance(token, workspace?.id, identity?.account.id);
   if (token) sessionStorage.setItem(tokenKey, token);
   else sessionStorage.removeItem(tokenKey);
@@ -165,7 +169,7 @@ function viewContext(controller, routeArgs, section) {
   const active = () => !controller.signal.aborted;
   const ctx = {
     args: routeArgs, section, workspaces: session?.workspaces ?? [], workspace: selected, account: session?.account, active, signal: controller.signal,
-    navigation: Object.fromEntries(Object.entries(pages).map(([id,[label]])=>[label,id])),
+    navigation: Object.fromEntries(Object.entries(pages).filter(([id]) => id !== 'admin' || canOpenAdmin(selected)).map(([id,[label]])=>[label,id])),
     manager: selected?.role === 'owner' || selected?.role === 'admin',
     enterprise: selected?.kind === 'enterprise',
     api: (url, options) => request(url, { signal: controller.signal, workspaceId: selected?.id, ...options }),
@@ -233,7 +237,7 @@ async function render() {
   const [entry, ...tail] = target.split('/');
   const embedded = { customer: 'customer-service', commerce: 'operations', 'copy-review': 'copywriting' };
   if (Object.hasOwn(embedded, entry)) target = ['desk', embedded[entry], ...tail].join('/');
-  if (!target) target = 'home';
+  if (!target) target = 'chat/new';
   if (target === 'desk') target = 'desk/image';
   if (target !== fragment && identity) history.replaceState(history.state, '', '#' + target);
   const [requested, ...args] = target.split('/');

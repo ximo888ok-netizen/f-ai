@@ -1,3 +1,4 @@
+import { canOpenAdmin } from './admin-data.js';
 import { bindPopover } from './live-popover.js';
 import { describeError } from './studio-errors.js';
 
@@ -45,6 +46,7 @@ export function bindAccountMenu(onError) {
     current = ctx;
     if (panel.matches(':popover-open')) panel.hidePopover();
     trigger.hidden = !ctx.account;
+    panel.querySelector('[data-account-admin]').hidden = !canOpenAdmin(ctx.workspace);
     trigger.dataset.initial = Array.from(ctx.account?.displayName ?? '')[0] ?? '';
     name.textContent = ctx.account?.displayName ?? '';
     trigger.querySelector('.account-avatar').textContent = trigger.dataset.initial;

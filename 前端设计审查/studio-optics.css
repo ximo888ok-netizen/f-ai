@@ -1,0 +1,443 @@
+@font-face { font-family: "Plus Jakarta Sans"; src: url("/studio/fonts/plus-jakarta-sans.woff2") format("woff2"); font-style: normal; font-weight: 200 800; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/studio/fonts/inter.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("/studio/fonts/jetbrains-mono.woff2") format("woff2"); font-style: normal; font-weight: 100 800; font-display: swap; }
+@font-face { font-family: "Noto Sans SC"; src: url("/studio/fonts/noto-sans-sc.woff2") format("woff2"); font-style: normal; font-weight: 100 900; font-display: swap; }
+
+/* =========================================================
+   Liquid Glass 柔和轻盈排版系统（全局生效）
+   ========================================================= */
+:root, #studio {
+  --font-display: "Plus Jakarta Sans", "Inter", "SF Pro Display", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
+  --font: "Inter", "SF Pro Text", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
+  --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, SFMono-Regular, Menlo, monospace !important;
+}
+
+/* 银白磨砂：用通透冷墨灰替代死黑，保留玻璃呼吸感 */
+:root[data-material="white"] {
+  --ink: rgba(18, 27, 40, 0.86);
+  --text-primary: rgba(18, 27, 40, 0.86);
+  --sub: rgba(24, 36, 54, 0.56);
+  --text-secondary: rgba(24, 36, 54, 0.56);
+  --muted: rgba(28, 42, 62, 0.40);
+  --text-tertiary: rgba(28, 42, 62, 0.40);
+}
+
+/* 雾灰磨砂：柔和冷白光泽 */
+:root[data-material="gray"] {
+  --ink: rgba(245, 248, 255, 0.90);
+  --text-primary: rgba(245, 248, 255, 0.90);
+  --sub: rgba(228, 236, 248, 0.64);
+  --text-secondary: rgba(228, 236, 248, 0.64);
+  --muted: rgba(212, 224, 240, 0.44);
+  --text-tertiary: rgba(212, 224, 240, 0.44);
+}
+
+/* 黑曜磨砂：低眩光柔白 */
+:root:is([data-material="dark"], [data-material="black"]) {
+  --ink: rgba(242, 246, 252, 0.90);
+  --text-primary: rgba(242, 246, 252, 0.90);
+  --sub: rgba(214, 224, 240, 0.60);
+  --text-secondary: rgba(214, 224, 240, 0.60);
+  --muted: rgba(194, 208, 228, 0.40);
+  --text-tertiary: rgba(194, 208, 228, 0.40);
+}
+
+html, body {
+  font-family: var(--font) !important;
+  font-weight: 400;
+  letter-spacing: 0.014em;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* 标题降重提气：从粗黑 700 降至轻盈 500–560，留出磨砂呼吸感 */
+h1, h2, h3, .brand-name, .titlebar-brand, .greeting-title, .hero-title,
+#main h1, #main h2, #main h3, .admin-title-row h1, .adm-panel-title, .admin-entry-title {
+  font-family: var(--font-display) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.015em !important;
+  line-height: 1.32;
+}
+
+:root[data-material="white"] :is(#main h1, #main h2, .admin-title-row h1, .adm-kpi-val) {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+:root:is([data-material="gray"], [data-material="dark"], [data-material="black"]) :is(#main h1, #main h2, .admin-title-row h1, .adm-kpi-val) {
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.22);
+}
+
+/* 顶栏与侧栏导航：轻巧克制，不压迫玻璃底色 */
+.titlebar, .titlebar a, .titlebar button,
+.sidebar, .sidebar a, .sidebar button, .nav-item, .stage-btn {
+  font-weight: 400 !important;
+  letter-spacing: 0.018em;
+}
+.nav-item.active, .stage-btn.active, .adm-tab.active, strong, b {
+  font-weight: 500 !important;
+}
+
+/* 按钮与胶囊标签：柔和精细字重 */
+button, .btn, .adm-btn, .adm-tab, .adm-pill, .chip, .tag {
+  font-family: var(--font) !important;
+  font-weight: 450 !important;
+  letter-spacing: 0.016em;
+}
+
+/* 大数字与数据指标：轻盈几何体 + 等宽对齐 */
+.adm-kpi-val, .adm-price, .tabular, .adm-mono, code, pre {
+  font-variant-numeric: tabular-nums;
+}
+.adm-kpi-val, .adm-price {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.025em !important;
+}
+
+/* 表单输入与占位符：柔化对比 */
+input, textarea, select {
+  font-family: var(--font) !important;
+  font-weight: 400;
+  letter-spacing: 0.012em;
+}
+::placeholder {
+  font-weight: 350;
+  opacity: 0.65;
+}
+
+/* =========================================================
+   液态玻璃精磨光学倒角系统 v2（对标 Apple Liquid Glass 物理折射厚边）
+   核心物理特征：
+   1) 中心更通透 + 强饱和高斯模糊，让流动底色自然透出
+   2) 极细深色外切边 + 上下双弧焦散反光（非塑料暗底阴影）+ 6-8px 内壁厚光晕
+   3) 1.5px 对角菲涅尔折射亮环（左上主高光 + 右下折返高光）
+   4) 悬停/聚焦点亮双层晶透光环；内部小按钮去噪化处理
+   ========================================================= */
+:root[data-material="white"] {
+  --lg-surface: linear-gradient(155deg, rgba(255, 255, 255, clamp(0, calc(0.48 + var(--alpha, .56) - .56), 1)) 0%, rgba(244, 248, 254, clamp(0, calc(0.28 + var(--alpha, .56) - .56), 1)) 52%, rgba(255, 255, 255, clamp(0, calc(0.38 + var(--alpha, .56) - .56), 1)) 100%);
+  --lg-surface-soft: linear-gradient(155deg, rgba(255, 255, 255, clamp(0, calc(0.54 + var(--alpha, .56) - .56), 1)) 0%, rgba(242, 247, 253, clamp(0, calc(0.34 + var(--alpha, .56) - .56), 1)) 100%);
+  --bevel-rim-grad: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(255, 255, 255, 0.72) 14%,
+    rgba(198, 212, 228, 0.18) 42%,
+    rgba(198, 212, 228, 0.14) 58%,
+    rgba(255, 255, 255, 0.62) 84%,
+    rgba(255, 255, 255, 0.98) 100%
+  );
+  --bevel-shadow:
+    0 0 0 0.75px rgba(15, 26, 44, 0.16),
+    0 18px 42px -14px rgba(15, 26, 44, 0.16),
+    0 4px 12px -4px rgba(15, 26, 44, 0.08),
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.96),
+    inset 0 -1.5px 2px rgba(255, 255, 255, 0.74),
+    inset 2px 0 3px rgba(255, 255, 255, 0.56),
+    inset -2px 0 3px rgba(255, 255, 255, 0.44),
+    inset 0 0 18px rgba(255, 255, 255, 0.26);
+  --bevel-shadow-pill:
+    0 0 0 0.75px rgba(15, 26, 44, 0.14),
+    0 6px 16px -6px rgba(15, 26, 44, 0.11),
+    inset 0 1.25px 1px rgba(255, 255, 255, 0.95),
+    inset 0 -1.25px 1.5px rgba(255, 255, 255, 0.64),
+    inset 0 0 10px rgba(255, 255, 255, 0.22);
+  --bevel-inner-chip:
+    0 0 0 0.75px rgba(15, 26, 44, 0.10),
+    inset 0 1px 0.75px rgba(255, 255, 255, 0.82),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.36);
+  --bevel-hover:
+    0 0 0 1.25px rgba(255, 255, 255, 0.96),
+    0 0 0 2.25px rgba(15, 26, 44, 0.10),
+    0 22px 48px -14px rgba(15, 26, 44, 0.20),
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.85),
+    inset 0 2px 4px rgba(255, 255, 255, 0.96),
+    inset 0 -2px 4px rgba(255, 255, 255, 0.78),
+    inset 0 0 22px rgba(255, 255, 255, 0.36);
+}
+
+:root[data-material="gray"] {
+  --lg-surface: linear-gradient(155deg, rgba(132, 144, 160, clamp(0, calc(0.38 + var(--alpha, .56) - .56), 1)) 0%, rgba(92, 102, 116, clamp(0, calc(0.28 + var(--alpha, .56) - .56), 1)) 55%, rgba(124, 136, 152, clamp(0, calc(0.34 + var(--alpha, .56) - .56), 1)) 100%);
+  --lg-surface-soft: linear-gradient(155deg, rgba(140, 152, 168, clamp(0, calc(0.42 + var(--alpha, .56) - .56), 1)) 0%, rgba(98, 108, 122, clamp(0, calc(0.32 + var(--alpha, .56) - .56), 1)) 100%);
+  --bevel-rim-grad: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.76) 0%,
+    rgba(235, 244, 255, 0.34) 16%,
+    rgba(160, 176, 196, 0.08) 46%,
+    rgba(225, 236, 250, 0.26) 82%,
+    rgba(255, 255, 255, 0.72) 100%
+  );
+  --bevel-shadow:
+    0 0 0 0.75px rgba(6, 10, 16, 0.50),
+    0 20px 44px -14px rgba(6, 10, 16, 0.38),
+    0 4px 12px -4px rgba(6, 10, 16, 0.22),
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.56),
+    inset 0 -1.5px 2px rgba(255, 255, 255, 0.30),
+    inset 2px 0 3px rgba(255, 255, 255, 0.26),
+    inset -2px 0 3px rgba(255, 255, 255, 0.20),
+    inset 0 0 18px rgba(255, 255, 255, 0.10);
+  --bevel-shadow-pill:
+    0 0 0 0.75px rgba(6, 10, 16, 0.44),
+    0 6px 16px -6px rgba(6, 10, 16, 0.26),
+    inset 0 1.25px 1px rgba(255, 255, 255, 0.52),
+    inset 0 -1.25px 1.5px rgba(255, 255, 255, 0.24),
+    inset 0 0 10px rgba(255, 255, 255, 0.08);
+  --bevel-inner-chip:
+    0 0 0 0.75px rgba(255, 255, 255, 0.14),
+    inset 0 1px 0.75px rgba(255, 255, 255, 0.32);
+  --bevel-hover:
+    0 0 0 1.25px rgba(255, 255, 255, 0.72),
+    0 0 0 2.25px rgba(0, 0, 0, 0.34),
+    0 24px 48px -12px rgba(6, 10, 16, 0.44),
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.48),
+    inset 0 0 22px rgba(255, 255, 255, 0.16);
+}
+
+:root:is([data-material="dark"], [data-material="black"]) {
+  --lg-surface: linear-gradient(155deg, rgba(46, 54, 68, clamp(0, calc(0.46 + var(--alpha, .56) - .56), 1)) 0%, rgba(22, 27, 36, clamp(0, calc(0.34 + var(--alpha, .56) - .56), 1)) 55%, rgba(40, 48, 60, clamp(0, calc(0.42 + var(--alpha, .56) - .56), 1)) 100%);
+  --lg-surface-soft: linear-gradient(155deg, rgba(52, 62, 76, clamp(0, calc(0.50 + var(--alpha, .56) - .56), 1)) 0%, rgba(26, 32, 42, clamp(0, calc(0.38 + var(--alpha, .56) - .56), 1)) 100%);
+  --bevel-rim-grad: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.64) 0%,
+    rgba(218, 232, 248, 0.26) 16%,
+    rgba(116, 134, 156, 0.06) 46%,
+    rgba(205, 222, 244, 0.20) 82%,
+    rgba(255, 255, 255, 0.58) 100%
+  );
+  --bevel-shadow:
+    0 0 0 0.75px rgba(0, 0, 0, 0.76),
+    0 20px 46px -14px rgba(0, 0, 0, 0.60),
+    0 4px 12px -4px rgba(0, 0, 0, 0.38),
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.46),
+    inset 0 -1.5px 2px rgba(255, 255, 255, 0.24),
+    inset 2px 0 3px rgba(255, 255, 255, 0.20),
+    inset -2px 0 3px rgba(255, 255, 255, 0.15),
+    inset 0 0 18px rgba(255, 255, 255, 0.07);
+  --bevel-shadow-pill:
+    0 0 0 0.75px rgba(0, 0, 0, 0.68),
+    0 6px 18px -6px rgba(0, 0, 0, 0.44),
+    inset 0 1.25px 1px rgba(255, 255, 255, 0.40),
+    inset 0 -1.25px 1.5px rgba(255, 255, 255, 0.18),
+    inset 0 0 10px rgba(255, 255, 255, 0.06);
+  --bevel-inner-chip:
+    0 0 0 0.75px rgba(255, 255, 255, 0.12),
+    inset 0 1px 0.75px rgba(255, 255, 255, 0.24);
+  --bevel-hover:
+    0 0 0 1.25px rgba(255, 255, 255, 0.60),
+    0 0 0 2.25px rgba(0, 0, 0, 0.56),
+    0 24px 50px -12px rgba(0, 0, 0, 0.66),
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.38),
+    inset 0 0 22px rgba(255, 255, 255, 0.12);
+}
+
+/* 1. 主浮层玻璃容器（含中央主输入框、顶栏、侧栏、建议卡、管理台卡片） */
+.titlebar,
+.sidebar,
+.glass-card,
+#studio .live-main > .live-panel,
+#studio .live-grid > .live-panel,
+.composer-box,
+#studio .composer-box,
+#studio #main form.composer-box,
+#studio #main form.agent-composer,
+.suggest-card,
+.commerce-stage,
+.commerce-copy,
+.upload-card,
+.screen-card,
+.silver-panel,
+.admin-topbar,
+.adm-panel,
+.adm-kpi-card,
+.adm-tabs,
+.admin-entry-card {
+  background: var(--lg-surface) !important;
+  border: 0 !important;
+  box-shadow: var(--bevel-shadow) !important;
+  backdrop-filter: blur(var(--blur, 28px)) saturate(var(--sat, 185%)) !important;
+  -webkit-backdrop-filter: blur(var(--blur, 28px)) saturate(var(--sat, 185%)) !important;
+  transition: box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1), transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 连续大圆角，还原液态玻璃水滴感 */
+#studio #main form.composer-box,
+#studio #main form.agent-composer {
+  border-radius: 26px !important;
+  overflow: hidden;
+}
+.sidebar, .admin-topbar, .adm-panel, .adm-kpi-card, .admin-entry-card {
+  border-radius: 24px !important;
+}
+.suggest-card {
+  border-radius: 18px !important;
+}
+.ai-orb-logo {
+  border-radius: 22px !important;
+  background: var(--lg-surface-soft) !important;
+  border: 0 !important;
+  box-shadow: var(--bevel-shadow-pill) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+}
+
+/* 主输入框本体在 .glow-body 上：赋予与全站一致的精磨液态玻璃厚边 + 对角菲涅尔折射环，同时保留原鼠标跟随光学边缘 */
+#studio #main .agent-home .agent-composer.glass-glow-item {
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 26px !important;
+  overflow: visible !important;
+}
+#studio #main .agent-home .agent-composer.glass-glow-item > .glow-body {
+  background: var(--lg-surface) !important;
+  border: 0 !important;
+  border-radius: 26px !important;
+  box-shadow: var(--bevel-shadow) !important;
+  backdrop-filter: blur(var(--blur, 28px)) saturate(var(--sat, 185%)) !important;
+  -webkit-backdrop-filter: blur(var(--blur, 28px)) saturate(var(--sat, 185%)) !important;
+  position: relative;
+  transition: box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+#studio #main .agent-home .agent-composer.glass-glow-item > .glow-body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: var(--bevel-rim-grad);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0.98;
+}
+#studio #main .agent-home .agent-composer.glass-glow-item:hover > .glow-body,
+#studio #main .agent-home .agent-composer.glass-glow-item:focus-within > .glow-body {
+  box-shadow: var(--bevel-hover) !important;
+}
+
+/* 对角菲涅尔 1.5px 光学倒角环 */
+.titlebar::before,
+.sidebar::before,
+#studio .live-main > .live-panel::before,
+#studio .live-grid > .live-panel::before,
+#studio #main form.composer-box::before,
+#studio #main form.agent-composer::before,
+.suggest-card::before,
+.admin-topbar::before,
+.adm-panel::before,
+.adm-kpi-card::before,
+.adm-tabs::before,
+.admin-entry-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: var(--bevel-rim-grad);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0.98;
+}
+
+/* 悬停 / 聚焦双层晶透光环（还原参考视频交互） */
+.suggest-card:hover,
+.adm-kpi-card:hover,
+.admin-entry-card:hover,
+#studio #main form.composer-box:focus-within,
+#studio #main form.agent-composer:focus-within {
+  box-shadow: var(--bevel-hover) !important;
+}
+
+/* 2. 独立悬浮胶囊（顶栏切换器、积分胶囊、材质按钮、快捷任务胶囊） */
+.stage-switcher,
+.credit-pill,
+.material-trigger,
+.skill-pill,
+.chip-btn,
+.theme-strip {
+  background: var(--lg-surface-soft) !important;
+  border: 0 !important;
+  box-shadow: var(--bevel-shadow-pill) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  transition: box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1), transform 140ms ease;
+}
+.skill-pill:hover,
+.chip-btn:hover,
+.material-trigger:hover,
+.credit-pill:hover {
+  box-shadow: var(--bevel-hover) !important;
+  transform: translateY(-1px);
+}
+
+/* 3. 嵌套内部小控件去噪：轻柔内嵌微玻璃，不与大面板抢视觉层次 */
+#studio #main .composer-box .smallbtn,
+#studio #main .agent-composer .smallbtn,
+.sidebar .nav-item.active,
+.sidebar .workspace-new,
+.adm-btn:not(.primary):not(.danger) {
+  border: 0 !important;
+  box-shadow: var(--bevel-inner-chip) !important;
+  transition: box-shadow 160ms ease, background 160ms ease;
+}
+#studio #main .composer-box .smallbtn:hover,
+#studio #main .agent-composer .smallbtn:hover,
+.adm-btn:not(.primary):not(.danger):hover {
+  box-shadow: var(--bevel-shadow-pill) !important;
+}
+
+/* 4. 修复侧栏底部「本机实操工作台 + 账户卡片」横向溢出截断问题 */
+.sidebar-footer {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 8px !important;
+  padding-top: 10px !important;
+  overflow: visible !important;
+}
+.sidebar-footer > .nav-item,
+.sidebar-footer > .account-trigger {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+}
+.sidebar-footer > .account-trigger {
+  border: 0 !important;
+  border-radius: 14px !important;
+  background: var(--lg-surface-soft) !important;
+  box-shadow: var(--bevel-inner-chip) !important;
+}
+.sidebar-footer > .account-trigger:hover {
+  box-shadow: var(--bevel-shadow-pill) !important;
+}
+
+/* 5. 弹窗同步晶透厚边 */
+dialog.ui-dialog,
+dialog.admin-dialog,
+.studio-popover {
+  border: 0 !important;
+  box-shadow: var(--bevel-hover) !important;
+}
+
+:root[data-material] #studio {
+  --ink: var(--text-primary); --sub: var(--text-secondary); --muted: var(--text-tertiary);
+  --studio-ink: var(--text-primary); --studio-secondary: var(--text-secondary);
+}
+.adm-kpi-card, .adm-panel, .adm-tabs, .admin-entry-card, .suggest-card { position: relative; }
+.sidebar-footer .account-meta { flex: 1; min-width: 0; }
+.sidebar-footer :is(.account-name, .account-sub) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-footer > .account-trigger { flex: none; }
+:root[data-material] #main :is(.adm-kpi-val, .adm-price) { font-weight: 400 !important; }
+@media (prefers-reduced-motion: reduce) {
+  .sidebar, .titlebar, .adm-panel, .adm-kpi-card, .admin-entry-card, .suggest-card, .glow-body { transition: none !important; }
+}
+
+#studio .live-main > .live-panel, #studio .live-grid > .live-panel { position: relative; }

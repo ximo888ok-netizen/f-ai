@@ -2,8 +2,8 @@
 import { readFile } from 'node:fs/promises';
 import { notFound } from './http.js';
 
-const styles = ['library-directory.css', 'knowledge-center.css', 'studio.css', 'creation.css', 'glass.css', 'themes.css', 'theme-palettes.css', 'components.css', 'live.css', 'merchant.css', 'live-depth.css', 'live-spatial.css', 'live-light.css', 'live-agent.css', 'liquid-glass.css', 'liquid-layout.css', 'studio-wallpaper.css', 'workbench-layout.css', 'image-generation/style.css', 'live-video-prompt.css', 'live-video-quick.css', 'live-video-director.css', 'studio-foundation.css', 'studio-entry.css', 'studio-workflows.css', 'dot-matrix-switch.css'];
-const scripts = ['studio-login-scene.js', 'library-directory.js', 'library-collections.js', 'knowledge-center.js', 'knowledge-forms.js', 'live-agent-integrations.js', 'live-commerce-sdk.js', 'studio-icons.js', 'studio-entry.js', 'studio-auth.js', 'studio-auth-challenges.js', 'studio-workflows.js', 'live-spatial.js', 'live-navigation.js', 'live-home.js', 'live-agent-home.js', 'live-agent-dialogue.js', 'live-agent-tools.js', 'live-agent-model.js', 'live-asset-preview.js', 'live-task-fields.js', 'live-catalog.js', 'studio-session.js', 'studio-appearance.js', 'studio-errors.js', 'live-ui.js', 'merchant.js', 'merchant-ui.js', 'merchant-team.js', 'merchant-projects.js', 'merchant-settings.js', 'themes.js', 'glass.js', 'theme-motion.js', 'live.js', 'live-workspace.js', 'live-tasks.js', 'live-customer.js', 'live-products.js', 'live-drafts.js', 'live-operations.js', 'operations-file.js', 'live-psd.js', 'live-connectors.js',
+const styles = ['studio-optics.css', 'studio-admin.css', 'library-directory.css', 'knowledge-center.css', 'studio.css', 'creation.css', 'glass.css', 'themes.css', 'theme-palettes.css', 'components.css', 'live.css', 'merchant.css', 'live-depth.css', 'live-spatial.css', 'live-light.css', 'live-agent.css', 'liquid-glass.css', 'liquid-layout.css', 'studio-wallpaper.css', 'workbench-layout.css', 'image-generation/style.css', 'live-video-prompt.css', 'live-video-quick.css', 'live-video-director.css', 'studio-foundation.css', 'studio-entry.css', 'studio-workflows.css', 'dot-matrix-switch.css'];
+const scripts = ['studio-admin.js', 'admin-views.js', 'admin-forms.js', 'admin-demo.js', 'admin-data.js', 'studio-login-scene.js', 'library-directory.js', 'library-collections.js', 'knowledge-center.js', 'knowledge-forms.js', 'live-agent-integrations.js', 'live-commerce-sdk.js', 'studio-icons.js', 'studio-entry.js', 'studio-auth.js', 'studio-auth-challenges.js', 'studio-workflows.js', 'live-spatial.js', 'live-navigation.js', 'live-home.js', 'live-agent-home.js', 'live-agent-dialogue.js', 'live-agent-tools.js', 'live-agent-model.js', 'live-asset-preview.js', 'live-task-fields.js', 'live-catalog.js', 'studio-session.js', 'studio-appearance.js', 'studio-errors.js', 'live-ui.js', 'merchant.js', 'merchant-ui.js', 'merchant-team.js', 'merchant-projects.js', 'merchant-settings.js', 'themes.js', 'glass.js', 'theme-motion.js', 'live.js', 'live-workspace.js', 'live-tasks.js', 'live-customer.js', 'live-products.js', 'live-drafts.js', 'live-operations.js', 'operations-file.js', 'live-psd.js', 'live-connectors.js',
   'live-popover.js', 'live-account-menu.js', 'live-capability-center.js', 'live-data-center.js', 'live-agent-controls.js',
   'live-agent-sources.js', 'live-agent-picker.js',
   'image-generation/index.js', 'image-generation/files.js', 'image-generation/options.js',
@@ -15,6 +15,8 @@ const scripts = ['studio-login-scene.js', 'library-directory.js', 'library-colle
   'live-rights.js', 'live-skills.js', 'live-copy-review.js', 'live-copy-drafts.js', 'live-files.js', 'live-media.js', 'live-media-controls.js', 'live-image-presets.js',
   'live-image-studio.js', 'live-storyboards.js', 'live-task-stream.js', 'live-knowledge-tools.js', 'live-experts.js', 'merchant-credit-limit.js', 'merchant-readiness.js', 'live-copy-suggestions.js', 'live-record-tools.js', 'live-task-intake.js', 'live-task-edit.js', 'live-onboarding.js', 'live-text-delivery.js', 'live-nav-search.js', 'live-commerce-report.js', 'live-settings.js', 'live-task-trace.js', 'live-voice.js', 'liquid-glass.js', 'studio-wallpaper.js', 'dot-matrix-switch.js'];
 const types = new Map([
+  ...['inter','plus-jakarta-sans','jetbrains-mono','noto-sans-sc'].map(name => ['fonts/' + name + '.woff2', 'font/woff2']),
+  ['fonts/OFL.txt', 'text/plain; charset=utf-8'],
   ...[...styles, 'scene-desk.css','media-skills.css'].map(name => [name, 'text/css; charset=utf-8']),
   ...[...scripts, 'desk-shops.js', 'desk-inbox.js', 'desk-channel.js','media-skill-desk.js','media-skill-assets.js','media-skill-output.js'].map(name => [name, 'text/javascript; charset=utf-8']),
 ]);
@@ -22,13 +24,26 @@ const workbenchPage = 'ai.html';
 const merchantPage = '商家管理后台.html';
 const artwork = ['login-cup-raw-large.webp','login-cup-refined-large.webp','login-cup-raw-compact.webp','login-cup-refined-compact.webp', 'library-scenes.webp', 'optic-wave.webp', 'leather.webp', 'citrus.webp', 'audio.webp'];
 export const studioPublicFiles = [workbenchPage, merchantPage, ...types.keys(), ...artwork.map(name => 'assets/' + name)];
-const security = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+const baselinePolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+
+function adminConnectionPolicy(origins = '') {
+  const allowed = origins.split(',').map(x => x.trim()).filter(Boolean).map(value => {
+    const url = new URL(value);
+    if (value !== url.origin || (url.protocol !== 'https:' &&
+        !(url.protocol === 'http:' && ['localhost','127.0.0.1','[::1]'].includes(url.hostname)))) {
+      throw Error('STUDIO_ADMIN_CONNECT_ORIGINS requires HTTPS origins or HTTP loopback origins.');
+    }
+    return url.origin;
+  });
+  return allowed.length ? baselinePolicy.replace("connect-src 'self'", "connect-src 'self' " + [...new Set(allowed)].join(' ')) : baselinePolicy;
+}
 
 export function registerStudio(app,packaged=false) {
+  const workbenchPolicy = adminConnectionPolicy(process.env.STUDIO_ADMIN_CONNECT_ORIGINS);
   const directory = new URL(packaged?'../public/':'../../前端设计审查/',import.meta.url);
   const schema = { hide: true };
   const page = (file, portableName) => async (_request, reply) => reply
-    .header('content-security-policy', security).header('referrer-policy', 'no-referrer')
+    .header('content-security-policy', file === workbenchPage ? workbenchPolicy : baselinePolicy).header('referrer-policy', 'no-referrer')
     .type('text/html; charset=utf-8').send(await readFile(new URL(packaged && portableName ? portableName + '.html' : file, directory)));
   app.get('/', { schema }, page(workbenchPage));
   app.get('/ai.html', { schema }, page(workbenchPage));
@@ -45,5 +60,6 @@ export function registerStudio(app,packaged=false) {
     return reply.type(type).send(await readFile(new URL(name, directory)));
   };
   app.get('/studio/:name', { schema }, resource(''));
+  app.get('/studio/fonts/:name', { schema }, resource('fonts/'));
   app.get('/studio/image-generation/:name', { schema }, resource('image-generation/'));
 }

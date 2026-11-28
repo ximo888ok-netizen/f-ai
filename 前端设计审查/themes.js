@@ -99,9 +99,9 @@
     dialog.querySelector('#themeTitle').textContent = '玻璃材质与外观';
     const options = [
       ['flow-speed', '流动速度', 0, 2.5, .1, 1, '×'],
-      ['frost-radius', '模糊半径', 0, 40, 1, 24, 'px'],
+      ['frost-radius', '模糊半径', 0, 40, 1, 28, 'px'],
       ['frost-opacity', '玻璃浓度', .15, .88, .01, .56, ''],
-      ['frost-saturation', '背景饱和度', 100, 220, 1, 165, '%'],
+      ['frost-saturation', '背景饱和度', 100, 220, 1, 185, '%'],
     ];
     const material = document.createElement('fieldset');
     material.className = 'material-tuning';

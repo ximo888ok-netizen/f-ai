@@ -68,8 +68,8 @@
       --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 
       /* 实时可调材质参数 (滑块即时覆盖) */
-      --default-blur: 24px;
-      --default-sat: 165%;
+      --default-blur: 28px;
+      --default-sat: 185%;
       --default-alpha: 0.50;
       --blur: var(--default-blur);
       --sat: var(--default-sat);
@@ -157,7 +157,7 @@
       color-scheme: dark;
       --canvas-bg: linear-gradient(145deg, #30353C 0%, #484F59 50%, #2C3138 100%);
       --default-alpha: 0.44;
-      --default-sat: 160%;
+      --default-sat: 185%;
       --card-rgb: 108, 116, 128;
       --card-end-rgb: 66, 73, 83;
       --card-fade: 0.12;
@@ -223,7 +223,7 @@
       color-scheme: dark;
       --canvas-bg: linear-gradient(145deg, #07090C 0%, #151920 50%, #06080B 100%);
       --default-alpha: 0.42;
-      --default-sat: 160%;
+      --default-sat: 185%;
       --card-rgb: 36, 42, 52;
       --card-end-rgb: 18, 22, 29;
       --card-fade: 0.10;
@@ -2772,6 +2772,8 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: clamp(0px, 2
 </style>
 <script defer src="/studio/glass.js"></script><script defer src="/studio/theme-motion.js"></script><script defer src="/studio/dot-matrix-switch.js"></script>
 <script type="module" src="/studio/live.js"></script>
+<link rel="stylesheet" href="/studio/studio-admin.css">
+<link rel="stylesheet" href="/studio/studio-optics.css">
 </head><body><svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute;pointer-events:none">
     <defs>
       <linearGradient id="mobius-box" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -2936,6 +2938,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: clamp(0px, 2
 
 
         <div class="sidebar-footer">
+          <a class="nav-item" href="#home">本机实操工作台 ↗</a>
           <button class="account-trigger" data-overlay-trigger="account-overlay" id="profile" popovertarget="account-menu">
             <div class="account-avatar"></div>
             <div class="account-meta">
@@ -2953,6 +2956,7 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: clamp(0px, 2
           <a href="#team">去邀约</a>
           <a href="#account" class="account-balance" data-account-balance></a>
           <a href="#settings">设置与诊断</a>
+          <a href="#admin" data-account-admin hidden>管理员控制台</a>
           <button type="button" data-account-appearance>外观与壁纸</button>
           <a href="#resources/memory/personal">个人记忆</a>
           <a href="#settings/feedback">意见反馈</a>
@@ -3206,9 +3210,9 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: clamp(0px, 2
     <div class="mat-field">
       <div class="mat-field-label">
         <label for="mat-blur">模糊半径 <small lang="en">Blur</small></label>
-        <output for="mat-blur" id="mat-out-blur">24px</output>
+        <output for="mat-blur" id="mat-out-blur">28px</output>
       </div>
-      <input id="mat-blur" type="range" min="0" max="40" step="1" value="24">
+      <input id="mat-blur" type="range" min="0" max="40" step="1" value="28">
       <div class="mat-limits" aria-hidden="true"><span>0px</span><span>40px</span></div>
     </div>
 
@@ -3224,9 +3228,9 @@ body:has(.business-root .studio-entry) .main-stage { margin-inline: clamp(0px, 2
     <div class="mat-field">
       <div class="mat-field-label">
         <label for="mat-sat">背景饱和度 <small lang="en">Saturate</small></label>
-        <output for="mat-sat" id="mat-out-sat">165%</output>
+        <output for="mat-sat" id="mat-out-sat">185%</output>
       </div>
-      <input id="mat-sat" type="range" min="100" max="220" step="1" value="165">
+      <input id="mat-sat" type="range" min="100" max="220" step="1" value="185">
       <div class="mat-limits" aria-hidden="true"><span>100%</span><span>220%</span></div>
     </div>
 

@@ -152,7 +152,8 @@ test('directory feature switches, cancellation, shell search, theme, motion, abo
   await inspector.locator('#mat-blur').fill('15');
   assert.equal(await page.locator('html').evaluate(el=>el.style.getPropertyValue('--blur')),'15px');
   await inspector.locator('[data-native-reset]').click();
-  assert.equal(await inspector.locator('#mat-blur').inputValue(),'24');
+  assert.equal(await inspector.locator('#mat-blur').inputValue(),'28');
+  assert.equal(await inspector.locator('#mat-sat').inputValue(),'185');
   const motion = await act('暂停或恢复动效',inspector.locator('[data-motion-toggle]'),{method:'PATCH',path:'/v1/settings'});
   assert.equal((await read('/v1/settings')).preferences.studioMotion,(await motion.json()).preferences.studioMotion);
   await inspector.locator('[data-more-appearance]').click();

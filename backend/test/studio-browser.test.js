@@ -144,7 +144,8 @@ test('the served workbench completes tasks, merchant settings, drafts, ledger, s
       assert.equal(response.status(), 200, path);
       return response.json();
     };
-    await page.getByRole('heading', { name: '电商工作台', exact: true }).waitFor();
+    await page.waitForURL(url => url.hash === '#chat/new');
+    await page.locator('#chatStage .agent-composer').waitFor();
     await page.locator('#profile').click();
     await page.getByRole('link', { name: 'AI 加油站', exact: true }).click();
     await page.getByText('100 可用积分', { exact: true }).waitFor();
