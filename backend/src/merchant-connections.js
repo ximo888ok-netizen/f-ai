@@ -14,7 +14,11 @@ export function shopGrantExpired(shop) {
 function provisioned({ providers, shops, cloudAssets, feishu, integrations }, workspaceId) {
   const items = [];
   for (const provider of providers.values()) {
-    if (provider.info && (!provider.availableIn||provider.availableIn(workspaceId))) items.push({ kind: 'model', id: provider.info.id, name: provider.info.name ?? provider.info.id });
+    if (provider.info && (!provider.availableIn || provider.availableIn(workspaceId))) {
+      items.push({ kind: 'model', id: provider.info.id, name: provider.info.name ?? provider.info.id,
+        model: provider.info.model, modelKind: provider.info.kind,
+        check: typeof provider.check === 'function' ? provider.check.bind(provider) : undefined });
+    }
   }
   const includedShops = new Set();
   for (const bindings of [shops, integrations?.customer?.shops, integrations?.commerce?.shops]) {

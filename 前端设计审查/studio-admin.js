@@ -8,11 +8,13 @@ import {
   connection,
   saveConnection,
   usesMemory,
-  contracts
+  contracts,
+  workspaceContracts
 } from './admin-data.js';
 import { openAdminDialog } from './admin-forms.js';
 import {
   control,
+  connectionNames,
   tabLink,
   shell,
   overviewView,
@@ -37,10 +39,10 @@ const localDescription = '本地演示数据仅保存在当前浏览器，按账
 
 export function adminEntry(ctx) {
   if (!canOpenAdmin(ctx.workspace)) return '';
-  const local = connection(ctx).mode === 'demo';
+  const mode = connection(ctx).mode;
   return (
     '<section class="admin-entry-card"><div class="admin-entry-info"><span class="admin-entry-kicker">' +
-    (local ? '超级管理员权限 · 本地演示' : '自建后端 · 管理凭据鉴权') +
+    h(connectionNames[mode]) +
     '</span><h2 class="admin-entry-title">管理员控制台</h2>' +
     '<p class="admin-entry-desc" data-admin-summary aria-live="polite">正在读取管理摘要…</p><nav class="admin-entry-shortcuts" aria-label="管理快捷入口">' +
     Object.keys(tabs)
@@ -71,7 +73,8 @@ export async function updateAdminEntry(ctx) {
 }
 
 function exportConfig(ctx) {
-  const contents = JSON.stringify({ ...connection(ctx), endpoints: contracts }, null, 2);
+  const conf = connection(ctx);
+  const contents = JSON.stringify({ ...conf, endpoints: conf.mode === 'workspace' ? workspaceContracts : contracts }, null, 2);
   const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
   const link = document.createElement('a');
   link.href = url;
@@ -94,6 +97,7 @@ export async function adminPage(ctx) {
   }
   const filters = { search: '', role: '', status: '', kind: '' };
   let data,
+    invitation,
     revision = 0,
     refreshAfterDialog = false;
   const root = () => document.querySelector('.admin-shell');
@@ -105,9 +109,10 @@ export async function adminPage(ctx) {
     const ticket = ++revision;
     let body;
     try {
-      data = tab === 'server' ? {} : await adminData(ctx, tab);
+      const loaded = tab === 'server' ? {} : await adminData(ctx, tab);
       if (!ctx.active() || ticket !== revision) return;
-      body = tab === 'server' ? serverView(ctx) : pages[tab](data, filters);
+      data = loaded;
+      body = tab === 'server' ? serverView(ctx) : pages[tab](data, filters, invitation);
     } catch (e) {
       if (!ctx.active() || ticket !== revision) return;
       body =
@@ -144,9 +149,18 @@ export async function adminPage(ctx) {
           await saveConnection(ctx, values);
           message = '连接配置已保存';
         } else {
-          message = await adminAction(ctx, action, values, operationId(values));
+          const result = await adminAction(ctx, action, values, operationId(values));
+          if (result?.invitation) invitation = result.invitation;
+          message = result?.message ?? result;
         }
-        if (ctx.active()) await draw(message);
+        if (ctx.active()) {
+          if (data.native && action === 'adjust') {
+            const balance = await ctx.api('/v1/credits/wallet').catch(() => null);
+            const badge = document.querySelector('#topCreditText');
+            if (ctx.active() && badge && balance) badge.textContent = balance.available.toLocaleString('zh-CN');
+          }
+          await draw(message);
+        }
       };
       try {
         if (action === 'refresh') {
@@ -158,12 +172,24 @@ export async function adminPage(ctx) {
           status('已导出配置，已省略凭据。');
           return;
         }
+        if (action === 'copy-invite') {
+          const link = area.querySelector('[data-invite-link]');
+          try {
+            await navigator.clipboard.writeText(link.value);
+            status('已复制邀请链接。');
+          } catch {
+            link.select();
+            status('请选择并复制邀请链接。');
+          }
+          return;
+        }
         if (['user-status', 'tier-status', 'model-status', 'model-test', 'health'].includes(action)) {
           button.disabled = true;
           try {
             const values = id ? { id } : {};
             if (button.hasAttribute('aria-checked'))
               values.enabled = button.getAttribute('aria-checked') !== 'true';
+            if (action === 'model-status' && data.native) values.revision = data.models.find(model => model.id === id).revision;
             await perform(values);
           } finally {
             button.disabled = false;
@@ -200,10 +226,10 @@ export async function adminPage(ctx) {
     },
     { signal: ctx.signal }
   );
-  if (tab === 'overview' && connection(ctx).mode === 'remote') {
+  if (tab === 'overview' && connection(ctx).mode !== 'demo') {
     let updating = false;
     const refresh = async () => {
-      if (updating || document.hidden || !ctx.active() || connection(ctx).mode !== 'remote') return;
+      if (updating || document.hidden || !ctx.active() || connection(ctx).mode === 'demo') return;
       updating = true;
       try {
         await draw();

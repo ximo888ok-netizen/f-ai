@@ -4,6 +4,9 @@ import { connection, modelKey, safeAddress } from './admin-data.js';
 
 const fields = {
   user: '用户资料',
+  invite: '邀请成员',
+  'member-role': '调整成员角色',
+  'member-limit': '编辑任务额度',
   adjust: '手动调账',
   tier: '充值档位',
   rule: '功能扣费倍率',
@@ -35,6 +38,14 @@ const memberChoices = (data) => data.users.filter((u) => u.enabled).map((u) => [
 
 function formContent(action, id, data, ctx) {
   const row = (collection) => data[collection]?.find((x) => x.id === id) || {};
+  const memberRoles = [['member', '普通成员'], ...(data.owner ? [['admin', '企业管理员']] : [])];
+  if (action === 'invite')
+    return input('email', '邮箱', '', 'type="email" required maxlength="254"') +
+      pick('role', '角色', memberRoles, 'member');
+  if (action === 'member-role') return pick('role', '角色', memberRoles, row('users').role);
+  if (action === 'member-limit')
+    return input('limit', '累计任务积分上限（留空为不限）', row('users').taskLimit ?? '',
+      'type="number" min="0" max="1000000000" step="1"');
   if (action === 'user') {
     const u = row('users');
     return (
@@ -45,18 +56,20 @@ function formContent(action, id, data, ctx) {
   }
   if (action === 'adjust')
     return (
-      pick('userId', '用户', memberChoices(data), id) +
+      pick('userId', '用户', data.native ? data.users
+        .filter(user => user.enabled && user.id !== data.accountId)
+        .map(user => [user.id, user.name + ' · ' + user.available + ' 可用积分']) : memberChoices(data), id) +
       pick(
         'direction',
         '变动方向',
         [
-          ['add', '充值 / 增加'],
-          ['subtract', '扣减']
+          ['add', data.native ? '分配给成员' : '充值 / 增加'],
+          ['subtract', data.native ? '从成员收回' : '扣减']
         ],
         'add'
       ) +
       numeric('quantity', '积分数', 1, 1) +
-      numeric('amount', '实际入账金额（元）', 0, 0, '.01') +
+      (data.native ? '' : numeric('amount', '实际入账金额（元）', 0, 0, '.01')) +
       input('reason', '调账原因')
     );
   if (action === 'tier') {
@@ -107,6 +120,7 @@ function formContent(action, id, data, ctx) {
         'mode',
         '运行模式',
         [
+          ['workspace', '当前工作台服务'],
           ['demo', '本地演示'],
           ['remote', '对接自建后端']
         ],
@@ -146,7 +160,7 @@ function valuesFor(action, id, form) {
   const values = Object.fromEntries(new FormData(form));
   for (const key of ['enabled', 'isDefault']) if (form.elements[key]) values[key] = form.elements[key].checked;
   if (action === 'adjust') {
-    const amountCents = Math.round(Number(values.amount) * 100);
+    const amountCents = Math.round(Number(values.amount ?? 0) * 100);
     const delta = Number(values.quantity) * (values.direction === 'subtract' ? -1 : 1);
     if (
       !Number.isSafeInteger(delta) ||
@@ -158,6 +172,7 @@ function valuesFor(action, id, form) {
       throw Error('请核对积分和入账金额。');
     return { userId: values.userId, delta, amountCents, reason: values.reason.trim() };
   }
+  if (action === 'member-limit') values.limit = values.limit === '' ? null : Number(values.limit);
   for (const key of ['seats', 'monthlyCredits', 'timeout', 'base', 'bonus', 'multiplier'])
     if (key in values) values[key] = Number(values[key]);
   if ('price' in values) {

@@ -30,6 +30,7 @@ import { registerModels } from './models.js';
 import { registerRealtimeVoice } from './realtime-voice.js';
 import { registerTasks } from './tasks.js';
 import { registerWallet } from './wallet.js';
+import { registerWorkspaceAdmin } from './workspace-admin.js';
 import { registerWorkspace } from './workspace.js';
 import { registerWorkspaceLibrary } from './workspace-library.js';
 import { registerWorkspaceDiagnostics } from './workspace-diagnostics.js';
@@ -179,6 +180,7 @@ export async function buildApp({
   registerListingDrafts(app, workspaceDb);
   registerShopOperations(app, workspaceDb);
   registerWallet(app, workspaceDb);
+  registerWorkspaceAdmin(app, workspaceDb);
   registerAgency(app,workspaceDb);
   registerWorkspace(app, workspaceDb);
   registerWorkspaceLibrary(app, workspaceDb);

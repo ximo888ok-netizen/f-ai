@@ -43,6 +43,8 @@ const connectionState = shape({ kind: enumOf('model', 'shop', 'feishu', 'webdav'
   revision: count, checkState: enumOf('unverified', 'reachable', 'failed'), checkedAt: nullable(date) });
 const connectionInfo = shape({ ...connectionState.properties, name: string, canCheck: bool });
 connectionInfo.properties.platform = string;
+connectionInfo.properties.model = string;
+connectionInfo.properties.modelKind = string;
 const project = shape({ id: uuid, name: string, archivedAt: nullable(date), createdAt: date });
 const base = shape({ id: uuid, name: string, createdAt: date });
 export const customerScope = { anyOf: [

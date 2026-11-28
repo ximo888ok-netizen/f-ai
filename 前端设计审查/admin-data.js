@@ -1,4 +1,5 @@
 import { applyDemo, initialDemo, overview } from './admin-demo.js';
+import { workspaceAction, workspaceData } from './admin-workspace.js';
 
 export const tabs = {
   overview: '总览',
@@ -10,7 +11,7 @@ export const tabs = {
 };
 export const canOpenAdmin = (workspace) =>
   workspace?.kind === 'enterprise' && ['owner', 'admin'].includes(workspace.role);
-const defaults = { mode: 'demo', baseUrl: '', auth: 'bearer', webhook: '', timeout: 10000 };
+const defaults = { mode: 'workspace', baseUrl: '', auth: 'bearer', webhook: '', timeout: 10000 };
 const memory = new Map(),
   volatile = new Set(),
   credentials = new Map(),
@@ -102,7 +103,8 @@ export function safeAddress(value) {
 export async function saveConnection(ctx, values) {
   const mode = values.mode,
     auth = values.auth;
-  if (!['demo', 'remote'].includes(mode) || !['bearer', 'secret'].includes(auth)) throw Error('连接方式无效。');
+  if (!['workspace', 'demo', 'remote'].includes(mode) || !['bearer', 'secret'].includes(auth))
+    throw Error('连接方式无效。');
   const baseUrl = values.baseUrl ? safeAddress(values.baseUrl) : '';
   const webhook = values.webhook ? safeAddress(values.webhook) : '';
   const timeout = Number(values.timeout);
@@ -126,6 +128,15 @@ export const contracts = {
   subscriptions: 'GET, POST /v1/admin/subscriptions · PATCH /v1/admin/subscriptions/:id',
   models: 'GET, POST /v1/admin/models · PUT, DELETE /v1/admin/models/:id · POST /v1/admin/models/:id/test',
   health: 'GET /health'
+};
+
+export const workspaceContracts = {
+  overview: 'GET /v1/admin/workspace/overview · GET /v1/merchant/audit-events',
+  members: 'GET /v1/admin/workspace/members · POST /v1/invitations · PATCH /v1/members/:id',
+  credits: 'GET /v1/admin/workspace/ledger · POST /v1/admin/workspace/credits/adjust',
+  limits: 'PUT /v1/credits/members/:id/limit',
+  models: 'GET /v1/merchant/connections · PUT /v1/merchant/connections/model/:id',
+  health: 'GET /ready · GET /v1/workspace/database'
 };
 
 async function request(ctx, path, method = 'GET', body, operationId) {
@@ -178,6 +189,7 @@ function assertAccess(ctx) {
 
 export async function adminData(ctx, tab) {
   assertAccess(ctx);
+  if (connection(ctx).mode === 'workspace') return workspaceData(ctx, tab);
   if (connection(ctx).mode === 'demo') {
     const state = demo(ctx);
     return tab === 'overview' ? overview(state) : state;
@@ -222,6 +234,7 @@ const mutations = {
 };
 export async function adminAction(ctx, action, values = {}, operationId) {
   assertAccess(ctx);
+  if (connection(ctx).mode === 'workspace') return workspaceAction(ctx, action, values, operationId);
   if (connection(ctx).mode === 'demo') return mutate(ctx, action, values);
   if (action === 'health') {
     const data = await request(ctx, '/health');

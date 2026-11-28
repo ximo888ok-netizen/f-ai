@@ -129,6 +129,10 @@ export function installModels(providers, definitions, env = process.env) {
       maxBytes: binary ? 10 * 1024 * 1024 : ['image', 'embedding'].includes(kind) ? 15 * 1024 * 1024 : 512 * 1024,
       binary,timeout:timeout ?? (body===undefined?30000:90000),
     });
+    if (entry.checkModels !== undefined && typeof entry.checkModels !== 'boolean') throw new Error('checkModels must be a boolean');
+    if (entry.checkModels && !['chat-completions', 'responses', 'openai-images'].includes(entry.protocol)) {
+      throw new Error('checkModels requires a compatible GET /models endpoint');
+    }
     const longImageRequest = ['qwen-image', 'seedream-image', 'minimax-h3-image'].includes(config.protocol);
     const adapter = {
       info, signature, loopback, ...(longImageRequest ? { runTimeoutMs: 600000 } : {}),
@@ -147,6 +151,14 @@ export function installModels(providers, definitions, env = process.env) {
         return generateText(config,payload,request);
       },
     };
+    if (entry.checkModels) {
+      adapter.check = async () => {
+        const result = await call('models', undefined, undefined, false, 5000);
+        if (!Array.isArray(result?.data) || !result.data.some(item => item?.id === config.model)) {
+          throw new Error('Configured model was not listed by the provider');
+        }
+      };
+    }
     if (streaming) adapter.streamText=async (payload,writeChunk)=>{
       const [path,body]=textRequest(config,payload.parameters.messages);
       const content=await requestProviderStream(new URL(path,base),{headers,body:{...body,stream:true}});

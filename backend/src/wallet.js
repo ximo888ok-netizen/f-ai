@@ -16,6 +16,15 @@ export async function ledgerEntry(db, workspaceId, accountId, reference, operati
   await db.query('INSERT INTO ledger (workspace_id, account_id, reference, operation, amount) VALUES ($1, $2, $3, $4, $5)', [workspaceId, accountId, reference, operation, amount]);
 }
 
+export async function moveAvailableCredits(tx, workspaceId, from, to, amount, outgoingRef, incomingRef) {
+  if (from.balance - from.reserved < amount) throw insufficient();
+  if (to.balance + amount > 2147483647) throw new ApiError(409, 'CREDIT_LIMIT_EXCEEDED', 'Wallet balance limit exceeded');
+  await tx.query('UPDATE wallets SET balance=balance-$3 WHERE workspace_id=$1 AND account_id=$2', [workspaceId, from.account_id, amount]);
+  await tx.query('UPDATE wallets SET balance=balance+$3 WHERE workspace_id=$1 AND account_id=$2', [workspaceId, to.account_id, amount]);
+  await ledgerEntry(tx, workspaceId, from.account_id, outgoingRef, 'transfer_out', amount);
+  await ledgerEntry(tx, workspaceId, to.account_id, incomingRef, 'transfer_in', amount);
+}
+
 async function settledCredits(db, workspaceId, accountId) {
   const result = await row(db, "SELECT COALESCE(sum(amount),0)::text AS spent FROM ledger WHERE workspace_id=$1 AND account_id=$2 AND operation='settle'", [workspaceId,accountId]);
   return result.spent;
@@ -113,11 +122,8 @@ export function registerWallet(app, db) {
         if (!recipient || existing.amount !== amount) throw new ApiError(409, 'CREDIT_REFERENCE_CONFLICT', 'Reference has another allocation');
       } else {
         const source = wallets.find(wallet => wallet.account_id === accountId);
-        if (source.balance - source.reserved < amount) throw insufficient();
-        await connection.query('UPDATE wallets SET balance = balance - $3 WHERE workspace_id = $1 AND account_id = $2', [workspaceId, accountId, amount]);
-        await connection.query('UPDATE wallets SET balance = balance + $3 WHERE workspace_id = $1 AND account_id = $2', [workspaceId, memberId, amount]);
-        await ledgerEntry(connection, workspaceId, accountId, reference, 'transfer_out', amount);
-        await ledgerEntry(connection, workspaceId, memberId, receivingReference, 'transfer_in', amount);
+        const target = wallets.find(wallet => wallet.account_id === memberId);
+        await moveAvailableCredits(connection, workspaceId, source, target, amount, reference, receivingReference);
       }
       return row(connection, 'SELECT ' + walletFields + ' FROM wallets WHERE workspace_id = $1 AND account_id = $2', [workspaceId, accountId]);
     });

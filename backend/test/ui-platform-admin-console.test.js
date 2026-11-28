@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { createStudioFixture } from '../test-support/ui-actions.js';
+import { registrationPayload } from '../test-support/identity-fixture.js';
+import { installModels } from '../src/models.js';
 
 const browserTest = { skip: !process.env.FAI_TEST_PLAYWRIGHT_PATH, timeout: 180000 };
 const confirm = (dialog) => dialog.getByRole('button', { name: '确认', exact: true }).click();
@@ -11,6 +14,112 @@ const openTab = async (page, id) => {
   await page.locator('.adm-tabs a[href="#admin/' + id + '"]').click();
   await page.locator('.adm-tabs [aria-current=page][href="#admin/' + id + '"]').waitFor();
 };
+
+async function selectDemo(page, open) {
+  await open('admin/server', '.admin-shell');
+  const dialog = dialogOf(page);
+  await panelOf(page).getByRole('button', { name: '编辑连接配置' }).click();
+  await dialog.getByLabel('运行模式').selectOption('demo');
+  await confirm(dialog);
+  await dialog.waitFor({ state: 'detached' });
+}
+
+test('workspace administration updates the actual wallet, permissions, models and audit trail', browserTest, async t => {
+  const checks = [];
+  const upstream = createServer((request, reply) => {
+    checks.push(request.method + ' ' + request.url);
+    reply.setHeader('content-type', 'application/json');
+    reply.end(JSON.stringify({ data: [{ id: 'fixture-chat' }] }));
+  });
+  await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => upstream.close(resolve)));
+  const { app, page, open, api, read, act, workspace, session, headers } = await createStudioFixture(t, {
+    configureProviders: providers => installModels(providers, [{
+      id: 'native-admin-fixture', model: 'fixture-chat', protocol: 'chat-completions',
+      baseUrl: 'http://127.0.0.1:' + upstream.address().port + '/v1/', checkModels: true
+    }])
+  });
+  const shell = panelOf(page), dialog = dialogOf(page);
+  const memberEmail = 'admin-fixture@example.test';
+  await open('admin', '.adm-kpi-grid');
+  await shell.getByText('当前工作台服务', { exact: true }).waitFor();
+  assert.equal(await shell.locator('.adm-kpi-val').nth(2).innerText(), '500');
+  await openTab(page, 'users');
+  await shell.getByRole('button', { name: '邀请成员', exact: true }).click();
+  await dialog.getByLabel('邮箱').fill(memberEmail);
+  await act('创建工作区一次性邀请', dialog.getByRole('button', { name: '确认', exact: true }),
+    { method: 'POST', path: '/v1/invitations', status: 201 });
+  await shell.locator('[data-invite-link]').waitFor();
+  const invite = new URL(await shell.locator('[data-invite-link]').inputValue()).hash.split('/')[1];
+  const registration = await app.inject({ method: 'POST', url: '/v1/auth/register', payload: await registrationPayload(app, {
+    type: 'personal', email: memberEmail, password: 'synthetic-member-password', displayName: '实际受邀成员'
+  }) });
+  assert.equal(registration.statusCode, 201);
+  const member = registration.json();
+  const memberHeaders = { authorization: 'Bearer ' + member.token, 'x-workspace-id': workspace };
+  const accepted = await app.inject({
+    method: 'POST', url: '/v1/invitations/accept', headers: memberHeaders, payload: { token: invite }
+  });
+  assert.equal(accepted.statusCode, 200);
+  assert.equal((await app.inject({ url: '/v1/admin/workspace/overview', headers: memberHeaders })).statusCode, 403);
+  const otherWorkspace = member.workspaces[0].id;
+  assert.equal((await app.inject({
+    url: '/v1/admin/workspace/members', headers: { ...headers, 'x-workspace-id': otherWorkspace }
+  })).statusCode, 404);
+  await open('admin/users', '.admin-shell');
+  const memberRow = shell.getByRole('row').filter({ hasText: memberEmail });
+  await memberRow.getByRole('button', { name: '调积分' }).click();
+  await dialog.getByLabel('积分数').fill('60');
+  await dialog.getByLabel('调账原因').fill('分配任务预算');
+  const transferPath = '/v1/admin/workspace/credits/adjust';
+  await act('从实际工作区钱包分配积分', dialog.getByRole('button', { name: '确认', exact: true }),
+    { method: 'POST', path: transferPath });
+  await memberRow.getByText('60', { exact: true }).waitFor();
+  assert.equal((await read('/v1/credits/wallet')).available, 440);
+  assert.equal(await page.locator('#topCreditText').innerText(), '440');
+
+  const reclaim = { userId: member.account.id, delta: -10, reason: '回收闲置积分', operationId: crypto.randomUUID() };
+  const replies = await Promise.all([api('POST', transferPath, reclaim), api('POST', transferPath, reclaim)]);
+  assert.deepEqual(replies.map(reply => reply.replayed).sort(), [false, true]);
+  const conflict = await app.inject({ method: 'POST', url: transferPath, headers, payload: { ...reclaim, delta: 10 } });
+  assert.equal(conflict.statusCode, 409);
+  const excess = await app.inject({ method: 'POST', url: transferPath, headers,
+    payload: { ...reclaim, operationId: crypto.randomUUID(), delta: -51 } });
+  assert.equal(excess.statusCode, 409);
+  assert.equal((await read('/v1/credits/wallet')).available, 450);
+  const nativeWallet = await app.inject({ url: '/v1/credits/wallet', headers: memberHeaders });
+  assert.equal(nativeWallet.json().available, 50);
+
+  await openTab(page, 'subscriptions');
+  await shell.getByRole('row').filter({ hasText: '实际受邀成员' }).getByRole('button', { name: '编辑额度' }).click();
+  await dialog.getByLabel('累计任务积分上限（留空为不限）').fill('20');
+  await confirm(dialog);
+  await dialog.waitFor({ state: 'detached' });
+  const limit = await app.inject({ url: '/v1/credits/limit', headers: memberHeaders });
+  assert.equal(limit.json().limit, 20);
+  await openTab(page, 'models');
+  const model = shell.getByRole('row').filter({ hasText: 'fixture-chat' });
+  await model.getByRole('button', { name: '测试连通性' }).click();
+  await model.getByText('连通', { exact: true }).waitFor();
+  assert.deepEqual(checks, ['GET /v1/models']);
+  await model.getByRole('switch').click();
+  await model.locator('[aria-checked=false]').waitFor();
+  assert.equal((await read('/v1/models')).items.some(item => item.id === 'native-admin-fixture'), false);
+  await model.getByRole('switch').click();
+  await model.locator('[aria-checked=true]').waitFor();
+  assert.equal((await read('/v1/models')).items.some(item => item.id === 'native-admin-fixture'), true);
+
+  await openTab(page, 'server');
+  await shell.getByRole('button', { name: '检查服务和数据库' }).click();
+  await shell.getByRole('status').filter({ hasText: '服务和共享数据库均已就绪' }).waitFor();
+  await openTab(page, 'credits');
+  assert.equal(await shell.getByRole('cell', { name: '调入', exact: true }).count(), 2);
+  await openTab(page, 'overview');
+  assert.equal(await shell.locator('.adm-kpi-val').nth(2).innerText(), '500');
+  const history = (await read('/v1/merchant/audit-events')).items.filter(event => event.action === 'credits.reallocated');
+  assert.deepEqual(history.map(event => event.detail.delta), [-10, 60]);
+  assert.ok(history.every(event => event.actorId === session.account.id));
+});
 
 test('workbench glass follows all three materials and the sidebar fits narrow screens', browserTest, async (t) => {
   const { page, open } = await createStudioFixture(t);
@@ -79,6 +188,7 @@ test(
   browserTest,
   async (t) => {
     const { page, open, read } = await createStudioFixture(t);
+    await selectDemo(page, open);
     await open('settings', '.admin-entry-card');
     await page.locator('.admin-entry-card [href="#admin"]').click();
     const shell = panelOf(page),
@@ -284,8 +394,8 @@ test(
         }
       })
     );
-    await open('admin/users', '.admin-shell');
-    await page.reload();
+    await selectDemo(page, open);
+    await openTab(page, 'users');
     const shell = panelOf(page),
       dlg = dialogOf(page);
     await shell.getByRole('status').filter({ hasText: '浏览器存储不可用' }).waitFor();
@@ -298,7 +408,6 @@ test(
     await openTab(page, 'users');
     await shell.getByText('memory@example.test', { exact: true }).waitFor();
     // A real personal workspace owner is not a platform administrator.
-    const { registrationPayload } = await import('../test-support/identity-fixture.js');
     const identity = await app.inject({
       method: 'POST',
       url: '/v1/auth/register',
@@ -332,6 +441,7 @@ test(
   browserTest,
   async (t) => {
     const { page, open, origin, session, workspace } = await createStudioFixture(t);
+    await selectDemo(page, open);
     await open('admin/overview', '.adm-kpi-grid');
     const second = await page.context().newPage();
     await second.goto(origin + '/#admin/overview');
@@ -350,13 +460,12 @@ test(
       }, args);
     await Promise.all([adjust(page), adjust(second)]);
     const result = await page.evaluate(async (args) => {
-      const { adminData } = await import('/studio/admin-data.js');
+      const { adminData, connection, saveConnection } = await import('/studio/admin-data.js');
       const ctx = { ...args, signal: new AbortController().signal, active: () => true };
       const state = await adminData(ctx, 'credits');
-      const other = await adminData(
-        { ...ctx, workspace: { ...ctx.workspace, id: crypto.randomUUID() } },
-        'overview'
-      );
+      const otherCtx = { ...ctx, workspace: { ...ctx.workspace, id: crypto.randomUUID() } };
+      await saveConnection(otherCtx, connection(ctx));
+      const other = await adminData(otherCtx, 'overview');
       return [state.users[0].balance, state.ledger.length, other.totals.credits];
     }, args);
     assert.deepEqual(result, [10, 2, 0]);
