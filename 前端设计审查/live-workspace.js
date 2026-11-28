@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { assetDetails, searchable } from './live-record-tools.js';
 import { settings } from './live-settings.js';
 import { categoryDocs, categoryPage, knowledgeDocument, webSearch } from './live-knowledge-tools.js';
@@ -19,7 +20,7 @@ async function members(ctx) {
 
 function deleteButton(ctx, attr, endpoint, warning) {
   ctx.click(attr, async id => {
-    if (!window.confirm(warning)) return;
+    if (!await confirmDialog('确认操作', warning)) return;
     await ctx.api(endpoint(id), { method: 'DELETE' });
     ctx.reload();
   });
@@ -117,10 +118,10 @@ async function resources(ctx) {
     await ctx.api(endpoint + '/grants/' + path(data.get('memberId')), { method:'PUT' });
     ctx.reload();
   });
-  ctx.click('remove-grant',async member=>{if(confirm('撤销该成员对知识库的访问？')){await ctx.api(endpoint+'/grants/'+path(member),{method:'DELETE'});ctx.reload();}});
+  ctx.click('remove-grant',async member=>{if(await confirmDialog('确认操作', '撤销该成员对知识库的访问？')){await ctx.api(endpoint+'/grants/'+path(member),{method:'DELETE'});ctx.reload();}});
   deleteButton(ctx, 'delete-document', doc => documents + '/' + path(doc), '删除该文档及检索索引？');
   ctx.click('delete-base', async () => {
-    if (!window.confirm('删除该知识库及其中的文档？')) return;
+    if (!await confirmDialog('确认操作', '删除该知识库及其中的文档？')) return;
     await ctx.api(endpoint, { method: 'DELETE' });
     ctx.go('resources');
   });
@@ -157,36 +158,51 @@ export async function uploadMedia(ctx, data) {
 }
 
 async function assets(ctx) {
-  if (ctx.args[0]) return assetDetails(ctx,ctx.args[0]);
-  const [files,cloud,video] = await Promise.all([
-    ctx.all('/v1/assets'),ctx.api('/v1/cloud-assets/status'),ctx.api('/v1/video-export/status'),
+  const [id, pageNumber, encodedQuery] = ctx.args;
+  if (id && id !== 'page') return assetDetails(ctx, id);
+  const page = /^\d{1,5}$/.test(pageNumber ?? '') ? Math.min(Number(pageNumber), 25000) : 0;
+  const pageSize = 40;
+  let query = '';
+  try { query = decodeURIComponent(encodedQuery ?? '').slice(0, 160); } catch { /* Invalid hash. */ }
+  const queryParams = new URLSearchParams({limit: String(pageSize + 1), offset: String(page * pageSize)});
+  if (query) queryParams.set('query', query);
+  const pageRoute = (number, search = query) => 'assets/page/' + number + (search ? '/' + path(search) : '');
+  const [result, cloud, video] = await Promise.all([
+    ctx.api('/v1/assets?' + queryParams),
+    ctx.api('/v1/cloud-assets/status'), ctx.api('/v1/video-export/status'),
   ]);
+  const files = result.items.slice(0, pageSize);
+  const pagination = '<div class="live-row">' +
+    (page ? link('上一页', pageRoute(page - 1)) : '') +
+    (page < 25000 && result.items.length > pageSize ? link('下一页', pageRoute(page + 1)) : '') + '</div>';
   ctx.html(heading('素材库') + '<div class="live-row">'+link('图片与视频处理','media')+
     link('网盘备份','cloud-assets')+'</div>' + grid(panel('上传素材', form('upload',
     field('文件', input('file', 'type="file" required accept=".png,.jpg,.jpeg,.mp3,.mp4,.m4a,.webm,.psd"')) +
     field('素材来源', input('source', 'required maxlength="200"')) + field('使用用途', input('purpose', 'required maxlength="200"')) +
     field('授权凭证编号（选填）', input('consentReference', 'maxlength="200"')) +
     field('授权截止时间（与凭证同时填写）', input('consentExpiresAt', 'type="datetime-local"')), '上传至工作区')),
-    panel('我的素材', searchable('搜索素材名称或类型',list(files, file => item(file.name,
+    panel('我的素材', form('asset-search', field('素材名称或类型',
+      input('query', 'type="search" maxlength="160" value="' + h(query) + '"')), '搜索') + list(files, file => item(file.name,
       file.mediaType + ' · ' + Math.ceil(file.sizeBytes / 1024) + ' KiB' + (file.consentExpiresAt ? ' · 授权至 ' + date(file.consentExpiresAt) : ''),
       '<div class="live-row">'+link('文件详情','assets/'+path(file.id))+action('下载', 'download', file.id) +
       (cloud.available ? action('备份到网盘','cloud-backup',file.id) : '') +
       (['image/png','image/jpeg'].includes(file.mediaType)?link('处理图片','media/images/new/'+file.id):'') +
       (video.available && file.mediaType==='video/mp4' ? link('视频导出','media/video/'+file.id) +
         action('导出带 AI 标识视频','mark-video',file.id) : '') +
-      link('提交权利通知','rights/new/'+file.id)+action('删除', 'delete-asset', file.id)+'</div>'))))));
+      link('提交权利通知','rights/new/'+file.id)+action('删除', 'delete-asset', file.id)+'</div>')) + pagination)));
+  ctx.submit('asset-search', data => ctx.go(pageRoute(0, data.get('query').trim())));
   ctx.submit('upload', async data => { await uploadMedia(ctx, data); ctx.reload(); });
   ctx.click('download', id => downloadAsset(ctx, id, files.find(file => file.id === id).name));
   ctx.click('mark-video',async id=>{
     const file=files.find(asset=>asset.id===id);
-    if (!confirm('确认「'+file.name+'」是 AI 生成的视频，并导出一份带标识的 MP4？')) return;
+    if (!await confirmDialog('确认操作', '确认「'+file.name+'」是 AI 生成的视频，并导出一份带标识的 MP4？')) return;
     toast('正在导出视频，短片可能需要数秒。');
     await downloadAsset(ctx,id,file.name.replace(/\.mp4$/i,'')+'-AI.mp4','video-export',
       {method:'POST',body:{aiGenerated:true}});
   });
   ctx.click('cloud-backup',async id=>{
     const file=files.find(asset=>asset.id===id);
-    if (!confirm('将「'+file.name+'」复制到此工作区的自有网盘？')) return;
+    if (!await confirmDialog('确认操作', '将「'+file.name+'」复制到此工作区的自有网盘？')) return;
     await ctx.api('/v1/cloud-assets/'+path(id),{method:'PUT',body:{confirmed:true}});
     toast('已备份并核对文件');
     ctx.go('cloud-assets');

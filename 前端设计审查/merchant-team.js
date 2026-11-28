@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { memberCreditLimit } from './merchant-credit-limit.js';
 import { action, date, field, form, grid, h, input, item, link, list, panel, path, select } from './live-ui.js';
 import { badge, paging, roleNames, rowActions, sectionTitle, table } from './merchant-ui.js';
@@ -79,7 +80,7 @@ export async function membersPage(ctx) {
     if (ctx.active()) { ctx.state.invitation = result; ctx.state.inviteOffset = 0; ctx.reload(); }
   });
   ctx.click('renew', async id => {
-    if (!confirm('重发后，原邀请链接将立即失效。继续重发？')) return;
+    if (!await confirmDialog('确认操作', '重发后，原邀请链接将立即失效。继续重发？')) return;
     const invitation = invitations.items.find(item => item.id === id);
     const result = await ctx.api('/v1/invitations/' + path(id) + '/token', {
       method: 'PUT', body: { token: inviteToken(), revision: invitation.revision },
@@ -87,7 +88,7 @@ export async function membersPage(ctx) {
     if (ctx.active()) { ctx.state.invitation = result; ctx.reload(); }
   });
   ctx.click('revoke', async id => {
-    if (!confirm('撤回这条邀请链接？')) return;
+    if (!await confirmDialog('确认操作', '撤回这条邀请链接？')) return;
     await ctx.api('/v1/invitations/' + path(id), { method: 'DELETE' });
     if (ctx.active() && ctx.state.invitation?.id === id) ctx.state.invitation = null;
     ctx.complete('邀请已撤回');
@@ -95,14 +96,14 @@ export async function membersPage(ctx) {
   ctx.click('member-state', async id => {
     const member = members.items.find(item => item.id === id);
     const state = member.state === 'active' ? 'suspended' : 'active';
-    if (!confirm((state === 'suspended' ? '停用' : '恢复') + '「' + member.displayName + '」的企业访问？')) return;
+    if (!await confirmDialog('确认操作', (state === 'suspended' ? '停用' : '恢复') + '「' + member.displayName + '」的企业访问？')) return;
     await ctx.api('/v1/members/' + path(id) + '/state', { method: 'PATCH', body: { state } });
     ctx.complete('成员状态已更新');
   });
   ctx.click('member-role', async id => {
     const member = members.items.find(item => item.id === id);
     const role = member.role === 'admin' ? 'member' : 'admin';
-    if (!confirm('将「' + member.displayName + '」设为' + roleNames[role] + '？')) return;
+    if (!await confirmDialog('确认操作', '将「' + member.displayName + '」设为' + roleNames[role] + '？')) return;
     await ctx.api('/v1/members/' + path(id), { method: 'PATCH', body: { role } });
     ctx.complete('成员角色已更新');
   });

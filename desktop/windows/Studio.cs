@@ -192,12 +192,17 @@ internal sealed class StudioWindow : Form
         {
             if (!backend.HasExited)
             {
-                backend.StandardInput.Close();
-                backend.WaitForExit(15000);
+                try { backend.StandardInput.Close(); }
+                catch (IOException) { }
+                if (!backend.WaitForExit(15000) && !backend.HasExited)
+                {
+                    backend.Kill();
+                    backend.WaitForExit(5000);
+                }
             }
         }
         catch (InvalidOperationException) { }
-        catch (IOException) { }
+        catch (System.ComponentModel.Win32Exception) { }
         finally { backend.Dispose(); backend = null; }
     }
 

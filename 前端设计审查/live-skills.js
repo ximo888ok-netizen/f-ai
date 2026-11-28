@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { action, field, form, grid, h, heading, input, item, link, list, notice, panel, path, result, retryKey, select, textarea, toast } from './live.js';
 
 const root='/v1/library';
@@ -95,7 +96,7 @@ async function details(ctx,id) {
     ctx.reload();
   });
   ctx.click('skill-delete',async ()=>{
-    if (!confirm('删除这个自定义技能？')) return;
+    if (!await confirmDialog('确认操作', '删除这个自定义技能？')) return;
     await ctx.api(target,{method:'DELETE'});
     ctx.go('skills');
   });

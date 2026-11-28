@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { action, date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, result, select, textarea, toast, uid } from './live.js';
 import { downloadFile } from './live-files.js';
 import { assetField, editRows, imageFiles, mediaRatios, rowControls } from './live-media-controls.js';
@@ -81,7 +82,7 @@ export async function storyboards(ctx,id,navigation,deskRoute) {
     await downloadFile(ctx,target+'/export','storyboard-'+entry.id+'.mp4',{method:'POST',body:{revision:entry.revision}});
   });
   ctx.click('storyboard-delete',async ()=>{
-    if (!confirm('删掉这份分镜？')) return;
+    if (!await confirmDialog('确认操作', '删掉这份分镜？')) return;
     await ctx.api(target+'?revision='+entry.revision,{method:'DELETE'});
     ctx.go(listRoute);
   });

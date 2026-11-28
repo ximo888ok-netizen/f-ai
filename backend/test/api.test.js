@@ -88,6 +88,24 @@ test('health, OpenAPI, CORS, authorization and request validation', async () => 
   assert.equal(preflight.headers['access-control-allow-origin'], 'http://localhost:5173');
 });
 
+test('Studio login uses an HttpOnly cookie and rejects cross-origin cookie requests', async () => {
+  const headers = { host: '127.0.0.1', 'x-fai-studio-session': 'cookie', 'sec-fetch-site': 'same-origin' };
+  const login = await app.inject({ method: 'POST', url: '/v1/auth/login', headers,
+    remoteAddress: '127.0.0.1', payload: { email: 'owner@example.test', password: 'test-password-1' } });
+  assert.equal(response(login, 200).token, null);
+  assert.match(login.headers['set-cookie'], /HttpOnly; SameSite=Lax/);
+  const cookie = login.headers['set-cookie'].split(';')[0];
+  const me = input => app.inject({ method: 'GET', url: '/v1/auth/me', remoteAddress: '127.0.0.1', headers: input });
+  assert.equal(response(await me({ ...headers, cookie }), 200).account.id, enterprise.account.id);
+  response(await me({ cookie }), 401);
+  response(await me({ ...headers, cookie, origin: 'https://other.example' }), 401);
+  const logout = await app.inject({ method: 'POST', url: '/v1/auth/logout', remoteAddress: '127.0.0.1',
+    headers: { ...headers, cookie } });
+  response(logout, 204);
+  assert.match(logout.headers['set-cookie'], /Max-Age=0/);
+  response(await me({ ...headers, cookie }), 401);
+});
+
 test('login normalizes email and logout revokes session', async () => {
   const session = response(await api('POST', '/v1/auth/login', null, {
     email: 'OWNER@example.test', password: 'test-password-1',

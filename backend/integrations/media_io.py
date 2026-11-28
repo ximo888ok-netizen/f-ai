@@ -1,10 +1,14 @@
 """Bound command and artifact IO. Commands are selected by the adapters, never by the planner."""
+import ipaddress
 import json
+import socket
 import os
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 import requests
+from urllib3 import HTTPSConnectionPool
 
 
 def run(args,cwd,timeout=1050):
@@ -46,12 +50,41 @@ def values(data,keys):
             yield from values(value,keys)
 
 
-def download(url,dest):
+def approved_url(url):
     u=urlsplit(url)
     hosts=[h.strip().lower() for h in os.environ.get("MEDIA_DOWNLOAD_HOSTS","").split(",") if h.strip()]
     if u.scheme!="https" or not u.hostname or u.username or u.password or u.port not in {None,443} or not any(
             u.hostname==h or u.hostname.endswith("."+h) for h in hosts):
         raise ValueError("output host not approved")
+    return u
+
+
+@contextmanager
+def public_download(url, *, timeout):
+    u=approved_url(url)
+    addresses=socket.getaddrinfo(u.hostname,443,type=socket.SOCK_STREAM)
+    ips=list(dict.fromkeys(ipaddress.ip_address(a[4][0]) for a in addresses))
+    if not ips or any(not ip.is_global or ip.is_multicast for ip in ips):
+        raise ValueError("output host must resolve to public addresses")
+    # Connect to the validated address while retaining the original TLS host identity.
+    pool=HTTPSConnectionPool(str(ips[0]),server_hostname=u.hostname,assert_hostname=u.hostname,
+                             cert_reqs="CERT_REQUIRED",ca_certs=requests.certs.where())
+    target=u.path or "/"
+    if u.query:
+        target+="?"+u.query
+    try:
+        response=pool.urlopen("GET",target,headers={"Host":u.hostname},timeout=timeout,
+                              retries=False,redirect=False,preload_content=False)
+        try:
+            yield response
+        finally:
+            response.close()
+    finally:
+        pool.close()
+
+
+def download(url,dest):
+    approved_url(url)
     with requests.get(url,timeout=90,allow_redirects=False,stream=True) as response:
         if response.status_code!=200:
             raise ValueError("media download failed")

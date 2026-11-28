@@ -192,6 +192,7 @@ export function registerTasks(app, db, providers, shops) {
   });
 
   route(app, 'POST', '/v1/tasks', {
+    accountRateLimit: 60,
     tags, summary: 'Submit a priced and idempotent plugin task',
     body: {
       ...object({

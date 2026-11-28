@@ -8,7 +8,6 @@ import time
 from uuid import uuid4
 import oss2
 from PIL import Image
-import requests
 from alibabacloud_aidge20260428.client import Client
 from alibabacloud_aidge20260428 import models
 from alibabacloud_tea_openapi.utils_models import Config
@@ -22,6 +21,8 @@ def checked(response):
 
 
 def main():
+    sys.path.insert(0,sys.argv[3])
+    from media_io import public_download
     inputs=sorted(Path(sys.argv[1]).iterdir())
     if len(inputs)!=2:
         raise ValueError("two images required")
@@ -43,23 +44,27 @@ def main():
             urls.append(bucket.sign_url("GET",name,1800))
         data=checked(client.virtual_try_on(models.VirtualTryOnRequest(model_image_url=urls[0],cloth_image_url=urls[1],resolution="1K")))
         task_id=data.get("TaskId")
-        while task_id:
+        for _ in range(180 if task_id else 0):
             data=checked(client.query_async_task_result(models.QueryAsyncTaskResultRequest(task_id=task_id)))
             if data.get("Status")=="COMPLETED":
                 break
             if data.get("Status") not in {"PENDING","PROCESSING","RUNNING","QUEUED","SUBMITTED"}:
                 raise ValueError("Aidge task failed")
             time.sleep(4)
+        else:
+            if task_id:
+                raise TimeoutError("Aidge polling exceeded the task limit")
         result=data.get("Result",data)
         if isinstance(result,str):
             result=json.loads(result)
         url=result.get("ImageUrl") or result.get("url") or data.get("ImageUrl")
-        if not isinstance(url,str) or not url.startswith("https://"):
+        if not isinstance(url,str):
             raise ValueError("missing result")
-        with requests.get(url,timeout=60,stream=True,allow_redirects=False) as response:
-            response.raise_for_status()
+        with public_download(url,timeout=60) as response:
+            if response.status!=200:
+                raise ValueError("Aidge download failed")
             raw=bytearray()
-            for chunk in response.iter_content(65536):
+            for chunk in response.stream(65536,decode_content=False):
                 raw.extend(chunk)
                 if len(raw)>10*1024**2:
                     raise ValueError("image exceeds task limit")

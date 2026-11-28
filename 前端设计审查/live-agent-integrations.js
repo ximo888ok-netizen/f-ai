@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { action, field, form, h, input, link, notice, panel, path, retryKey, select, textarea } from './live-ui.js';
 import { describeError } from './studio-errors.js';
 import { studioIcon } from './studio-icons.js';
@@ -147,10 +148,10 @@ export async function bindContentAgent(ctx, platform) {
     const library=box.querySelector('[data-product-library]');
     library.innerHTML=products.length?field('引用商品档案',select('product',[['','选择商品以填入简报'],...products.map(p=>[p.id,p.name+' · '+p.sku])])):link('管理商品档案','products');
     const control=library.querySelector('select');
-    if(control)control.onchange=()=>{
+    if(control)control.onchange=async()=>{
       const p=products.find(row=>row.id===control.value);if(!p)return;
       const f=box.querySelector('[data-form="content-package"]').elements;
-      if((f.title.value||f.category.value||f.facts.value) && !window.confirm('用商品档案替换当前标题、类目和资料？')){control.value='';return;}
+      if((f.title.value||f.category.value||f.facts.value) && !await confirmDialog('确认操作', '用商品档案替换当前标题、类目和资料？')){control.value='';return;}
       f.title.value=p.name;f.facts.value=(p.description||'').slice(0,4000);f.category.value=categories.find(c=>c.id===p.categoryId)?.name||'';
     };
   } catch { if(ctx.active())box.querySelector('[data-product-library]').textContent='商品档案暂不可用，可手动填写。'; }

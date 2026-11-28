@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { action, field, form, h, heading, input, item, link, list, notice, panel, path, result, select, textarea } from './live-ui.js';
 
 export async function categoryPage(ctx, id) {
@@ -13,7 +14,7 @@ export async function categoryPage(ctx, id) {
   ctx.submit('add-category', async data => { await ctx.api(endpoint, { method:'POST', body:{ name:data.get('name') } }); ctx.reload(); });
   ctx.submit('rename-category', async data => { await ctx.api(endpoint + '/' + path(data.get('id')), { method:'PATCH', body:{ name:data.get('name') } }); ctx.reload(); });
   ctx.click('remove-category', async value => {
-    if (confirm('删除这个空分类？')) { await ctx.api(endpoint + '/' + path(value), { method:'DELETE' }); ctx.reload(); }
+    if (await confirmDialog('确认操作', '删除这个空分类？')) { await ctx.api(endpoint + '/' + path(value), { method:'DELETE' }); ctx.reload(); }
   });
 }
 

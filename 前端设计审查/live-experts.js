@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { action, field, form, grid, h, heading, input, item, link, list, notice, panel, path, select, textarea } from './live-ui.js';
 
 const root='/v1/library';
@@ -45,5 +46,5 @@ export async function experts(ctx) {
     ctx.go(base+'/'+saved.id);
   });
   if(!fresh && ctx.manager)ctx.click('expert-state',async()=>{await ctx.api(root+'/'+path(id)+'/state',{method:'PUT',body:{enabled:!entry.enabled}});ctx.reload();});
-  if(!fresh && updatable)ctx.click('expert-delete',async()=>{if(confirm('删除这个自定义定义？')){await ctx.api(root+'/'+path(id),{method:'DELETE'});ctx.go(base);}});
+  if(!fresh && updatable)ctx.click('expert-delete',async()=>{if(await confirmDialog('确认操作', '删除这个自定义定义？')){await ctx.api(root+'/'+path(id),{method:'DELETE'});ctx.go(base);}});
 }

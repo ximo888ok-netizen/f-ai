@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 
 import { action, field, form, h, heading, input, item, link, list, notice, panel, result, textarea } from './live.js';
 import { bindCustomerAgent, integrationSlot } from './live-agent-integrations.js';
@@ -60,7 +61,7 @@ async function quickReplies(ctx) {
     ctx.reload();
   });
   ctx.click('delete-reply', async id => {
-    if (!window.confirm('删除这条快捷话术？')) return;
+    if (!await confirmDialog('确认操作', '删除这条快捷话术？')) return;
     await ctx.api(route + '/' + path(id), { method:'DELETE' });
     ctx.reload();
   });

@@ -10,6 +10,35 @@ const passwordSchema = text(128, 10);
 const previewAdminEmail = 'admin@preview.invalid';
 const tags = ['Identity'];
 const authLimit = { rateLimit: { max: 15, timeWindow: '1 minute' } };
+const studioSessionHeader = 'x-fai-studio-session';
+const studioCookie = 'fai_studio_session';
+
+function studioRequest(request) {
+  if (request.headers[studioSessionHeader] !== 'cookie') return false;
+  const site = request.headers['sec-fetch-site'];
+  const origin = request.headers.origin;
+  return (!site || site === 'same-origin') &&
+    (!origin || origin === request.protocol + '://' + request.host);
+}
+
+function requireStudioTransport(request) {
+  const loopback = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(request.host) &&
+    /^(?:127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(request.raw.socket.remoteAddress ?? '');
+  if (!studioRequest(request) || (request.protocol !== 'https' && !loopback)) {
+    throw new ApiError(403, 'STUDIO_SESSION_ORIGIN', 'Studio cookie sessions require a same-origin HTTPS connection');
+  }
+}
+function cookieHeader(request, token, maxAge) {
+  return studioCookie + '=' + token + '; Path=/v1; HttpOnly; SameSite=Lax; Max-Age=' + maxAge +
+    (request.protocol === 'https' ? '; Secure' : '');
+}
+function sessionResponse(request, reply, session) {
+  if (!studioRequest(request)) return session;
+  const { token, ...identity } = session;
+  reply.header('set-cookie', cookieHeader(request, token, 24 * 3600));
+  return { ...identity, token: null };
+}
+
 
 export const digest = value => createHash('sha256').update(value).digest('hex');
 const secret = () => randomBytes(32).toString('base64url');
@@ -34,6 +63,10 @@ export async function getWorkspaces(db, accountId) {
 }
 
 async function createSession(db, account) {
+  await db.query(`DELETE FROM sessions WHERE token_hash IN (
+    SELECT token_hash FROM sessions WHERE expires_at <= now()
+    ORDER BY expires_at LIMIT 1000 FOR UPDATE SKIP LOCKED
+  )`);
   const token = secret();
   const expiresAt = new Date(Date.now() + 24 * 3600 * 1000);
   await db.query('INSERT INTO sessions (token_hash, account_id, expires_at) VALUES ($1, $2, $3)', [digest(token), account.id, expiresAt]);
@@ -67,9 +100,13 @@ export function registerAuth(app, db, previewAdmin = false) {
   app.decorateRequest('context', null);
   app.decorate('authenticate', async request => {
     const authorization = request.headers.authorization ?? '';
-    const match = /^Bearer ([A-Za-z0-9_-]{43})$/i.exec(authorization);
-    if (!match) throw new ApiError(401, 'UNAUTHENTICATED', 'A valid session is required');
-    const hash = digest(match[1]);
+    const bearer = /^Bearer ([A-Za-z0-9_-]{43})$/i.exec(authorization)?.[1];
+    const cookie = !authorization && studioRequest(request)
+      ? /(?:^|;\s*)fai_studio_session=([A-Za-z0-9_-]{43})(?=;|$)/.exec(request.headers.cookie ?? '')?.[1]
+      : null;
+    if (!bearer && !cookie) throw new ApiError(401, 'UNAUTHENTICATED', 'A valid session is required');
+    if (cookie) requireStudioTransport(request);
+    const hash = digest(bearer ?? cookie);
     const account = await row(db, 'SELECT a.id, a.email, a.display_name, a.account_type FROM sessions s JOIN accounts a ON a.id = s.account_id WHERE s.token_hash = $1 AND s.expires_at > now()', [hash]);
     if (!account) throw new ApiError(401, 'UNAUTHENTICATED', 'A valid session is required');
     request.account = { id: account.id, email: account.email, displayName: account.display_name, type: account.account_type };
@@ -91,6 +128,7 @@ export function registerAuth(app, db, previewAdmin = false) {
       type: choice('personal', 'enterprise'), workspaceName: text(100),
     }, ['email', 'password', 'displayName', 'type']),
   }, async (request, reply) => {
+    if (request.headers[studioSessionHeader]) requireStudioTransport(request);
     const { displayName, type, password, workspaceName } = request.body;
     if (type === 'enterprise' && !workspaceName?.trim()) throw invalid('workspaceName is required for enterprise registration');
     const display = displayName.trim();
@@ -105,7 +143,7 @@ export function registerAuth(app, db, previewAdmin = false) {
         return createSession(connection, account);
       });
       reply.code(201);
-      return result;
+      return sessionResponse(request, reply, result);
     } catch (error) {
       if (error.code === '23505') throw new ApiError(409, 'EMAIL_IN_USE', 'Email is already registered');
       throw error;
@@ -116,11 +154,12 @@ export function registerAuth(app, db, previewAdmin = false) {
   route(app, 'POST', '/v1/auth/login', {
     auth: false, tags, config: authLimit, summary: 'Create a session',
     body: previewAdmin ? { anyOf: [standardLogin, object({ email: { const: 'admin' }, password: text(128) })] } : standardLogin,
-  }, async request => {
+  }, async (request, reply) => {
+    if (request.headers[studioSessionHeader]) requireStudioTransport(request);
     const email = previewAdmin && request.body.email === 'admin' ? previewAdminEmail : normalizeEmail(request.body.email);
     const account = await row(db, 'SELECT * FROM accounts WHERE email = $1', [email]);
     if (!(await checkPassword(request.body.password, account?.password_hash)) || !account) throw invalidCredentials();
-    return createSession(db, account);
+    return sessionResponse(request, reply, await createSession(db, account));
   });
 
   route(app, 'GET', '/v1/auth/me', { tenant: false, tags, summary: 'Get account and available workspaces' },
@@ -129,6 +168,7 @@ export function registerAuth(app, db, previewAdmin = false) {
   route(app, 'POST', '/v1/auth/logout', { tenant: false, tags, summary: 'Revoke the current session' },
     async (request, reply) => {
       await db.query('DELETE FROM sessions WHERE token_hash = $1', [request.sessionHash]);
+      if (studioRequest(request)) reply.header('set-cookie', cookieHeader(request, '', 0));
       reply.code(204).send();
     });
 

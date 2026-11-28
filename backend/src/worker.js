@@ -18,14 +18,15 @@ import { appendTaskText } from './task-stream.js';
 
 const maxAttempts = 3;
 
-async function claim(db, providers) {
+async function claim(db, providers, shortTasksOnly) {
   return db.transaction(async connection => {
     const task = await row(connection, [
       'SELECT * FROM tasks',
       "WHERE ((state = 'queued' AND available_at <= now()) OR (state = 'running' AND lease_until <= now()))",
       'AND NOT EXISTS (SELECT 1 FROM workspace_database_routes r WHERE r.workspace_id = tasks.workspace_id)',
+      "AND (NOT $1::boolean OR plugin_id NOT IN ('image', 'video'))",
       'ORDER BY available_at, created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED',
-    ].join(' '));
+    ].join(' '), [shortTasksOnly]);
     if (!task) return null;
     if (task.provider_sent_at && !task.provider_job_id && task.state === 'running') {
       await finishTask(connection, task, 'failed', null, 'PROVIDER_OUTCOME_UNKNOWN');
@@ -102,8 +103,8 @@ async function providerPayload(db, identityDb, task, capability, shops) {
   };
 }
 
-export async function workOnce({ db, providers, shops, videoArchive, identityDb = db }) {
-  const task = await claim(db, providers);
+export async function workOnce({ db, providers, shops, videoArchive, identityDb = db, shortTasksOnly = false, logger }) {
+  const task = await claim(db, providers, shortTasksOnly);
   if (!task) return false;
   if (task.expired) return true;
   const capability = catalog.get(task.capability_id);
@@ -136,6 +137,7 @@ export async function workOnce({ db, providers, shops, videoArchive, identityDb 
     else if (error instanceof ProviderError) failure = error;
     else failure = new ProviderError('TASK_EXECUTION_ERROR', (!provider?.signature && !provider?.nonRepeatable) || Boolean(task.provider_job_id));
   }
+  if (failure) logger?.warn({taskId: task.id, errorCode: failure.code}, 'Task execution failed');
   const archive = videoArchive && capability?.pluginId === 'video' && result?.type === 'video' && typeof result.url === 'string'
     ? await videoArchive(result.url) : null;
   if (archive) result = { ...result, archiveStatus: archive.status };
@@ -186,14 +188,16 @@ export function startWorker(dependencies, logger) {
       .then(() => dependencies.resolveDatabase ? dependencies.resolveDatabase() : dependencies.db)
       .then(async db => {
         if (!db) return;
-        const scoped = { ...dependencies, db };
-        const tasks = dispatchSchedule(scoped).then(() => workOnce(scoped));
+        const scoped = { ...dependencies, db, logger };
+        if (scoped.tasksOnly) return workOnce(scoped);
+        const schedule = dispatchSchedule(scoped);
+        const tasks = scoped.maintenanceOnly ? schedule : schedule.then(() => workOnce(scoped));
         const results = await Promise.allSettled(scoped.feishu ? [tasks,dispatchFeishuReply(scoped)] : [tasks]);
         for (const result of results) {
-          if (result.status==='rejected') logger.error('Background work could not be processed');
+          if (result.status==='rejected') logger.error({errorCode: result.reason?.code}, 'Background work could not be processed');
         }
       })
-      .catch(() => logger.error('Background work could not be processed'))
+      .catch(error => logger.error({errorCode: error?.code}, 'Background work could not be processed'))
       .finally(() => {
         if (!stopping) timer = setTimeout(run, 500);
       });

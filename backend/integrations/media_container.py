@@ -40,7 +40,7 @@ def preflight(source,files,alias):
     if source=="firered" and not os.environ.get("OPENSTORYLINE_URL"):return "service_required"
     if source in {"runway","aidge"} and not all(os.environ.get(k) for k in ["MEDIA_OSS_BUCKET","MEDIA_OSS_ENDPOINT","ALIBABA_CLOUD_ACCESS_KEY_ID","ALIBABA_CLOUD_ACCESS_KEY_SECRET"]):return "credentials_required"
     if source=="aidge" and not os.environ.get("MEDIA_AIDGE_ENDPOINT"):return "service_required"
-    if source in {"linkpix","wan","ark","byte","kling","pixverse","runway"} and not os.environ.get("MEDIA_DOWNLOAD_HOSTS"):return "service_required"
+    if source in {"linkpix","wan","ark","byte","kling","pixverse","runway","aidge"} and not os.environ.get("MEDIA_DOWNLOAD_HOSTS"):return "service_required"
     return "configured"
 
 
@@ -95,7 +95,7 @@ def execute(req):
         if source=="aidge":
             inputdir=work/"inputs";inputdir.mkdir()
             for p in inputs:p.rename(inputdir/p.name)
-            subprocess.run([sys.executable,"-I",str(SOURCE/"aidge/run.py"),str(inputdir),str(out)],timeout=1100,check=True)
+            subprocess.run([sys.executable,"-I",str(SOURCE/"aidge/run.py"),str(inputdir),str(out),str(Path(__file__).resolve().parent)],timeout=1100,check=True)
         else:
             if source=="commerce":
                 os.environ["GPTIMAGE_API_KEY"]=os.environ["OPENAI_API_KEY"];os.environ["GPTIMAGE_BASE_URL"]="https://api.openai.com"

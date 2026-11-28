@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { field, form, h, input, notice, select } from './live-ui.js';
 import { paneTitle,blankResult } from './live-agent-integrations.js';
 import { platformNames,portalLink } from './desk-shops.js';
@@ -54,7 +55,7 @@ export function bindNativeChannels(ctx,shops) {
     const btn=e.target.closest('[data-native-handoff]');
     if(!btn||!view||busy)return;
     const selected=view;
-    if(!window.confirm('为当前买家写入 Customer-Agent 转人工标记？新标记有效一小时，人工回复在官方客服窗口发送。'))return;
+    if(!await confirmDialog('确认操作', '为当前买家写入 Customer-Agent 转人工标记？新标记有效一小时，人工回复在官方客服窗口发送。'))return;
     busy=true;btn.disabled=true;
     try{
       const r=await call('handoff',{shopId:selected.shopId,buyerId:selected.query});

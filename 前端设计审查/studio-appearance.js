@@ -27,15 +27,15 @@ export function bindStudioAppearance(onError) {
   document.addEventListener('studio-theme', event => save('palette', event.detail));
   document.addEventListener('studio-motion', event => save('motion', { studioMotion: event.detail }));
 
-  return (token, workspaceId, accountId) => {
-    if (!token || !workspaceId) {
+  return (workspaceId, accountId) => {
+    if (!accountId || !workspaceId) {
       delete document.documentElement.dataset.workspaceAppearance;
       active = null;
       return;
     }
-    if (active?.auth.token === token && active.auth.workspaceId === workspaceId) return;
+    if (active?.accountId === accountId && active.auth.workspaceId === workspaceId) return;
     document.documentElement.dataset.workspaceAppearance = workspaceId + '/' + accountId;
-    const scope = { auth: { token, workspaceId }, revision: { palette: 0, motion: 0 }, saved: {} };
+    const scope = { accountId, auth: { workspaceId }, revision: { palette: 0, motion: 0 }, saved: {} };
     active = scope;
     scope.queue = requestStudio('/v1/settings', scope.auth).then(({ preferences }) => {
       scope.saved = preferences;

@@ -40,17 +40,17 @@ def seedance(req,inputs,out,prompt):
 
 def fire_red(req,inputs,out,prompt,source_root):
     base=os.environ["OPENSTORYLINE_URL"].rstrip("/")
-    s=requests.post(base+"/api/sessions",timeout=20);s.raise_for_status()
+    s=requests.post(base+"/api/sessions",timeout=20,allow_redirects=False);s.raise_for_status()
     sid=s.json()["session_id"]
     root=base+"/api/sessions/"+quote(sid,safe="")
     with ExitStack() as stack:
         files=[("files",(p.name,stack.enter_context(p.open("rb")),"video/mp4")) for p in inputs]
-        r=requests.post(root+"/media",files=files,timeout=100);r.raise_for_status()
+        r=requests.post(root+"/media",files=files,timeout=100,allow_redirects=False);r.raise_for_status()
     script=source_root/Path(req["skill"]).parent/"scripts/bridge_openstoryline.py"
     result=as_json(run([sys.executable,script,"--base-url",base,"--session-id",sid,"--lang","zh","--prompt",
                         "使用本会话上传的实拍素材完成剪辑并渲染最终 MP4。\n"+prompt],out.parent))
     if not result.get("ok") or result.get("interrupted"):raise ValueError("editing incomplete")
-    r=requests.get(root,timeout=25);r.raise_for_status()
+    r=requests.get(root,timeout=25,allow_redirects=False);r.raise_for_status()
     paths=[]
     def visit(value):
         if isinstance(value,dict):

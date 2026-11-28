@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
+import compress from '@fastify/compress';
 import swagger from '@fastify/swagger';
 import { registerAssets } from './assets.js';
 import { registerAuth } from './auth.js';
@@ -48,10 +49,12 @@ import { taobaoSettings, registerShopAuth } from './shop-authorization.js';
 export async function buildApp({
   db, providers = createProviders(), shops = new Map(), origins = [], logger = false, webSearch = null, dedicatedDatabases = new Map(), previewAdmin = false,
   integrations = {}, integrationRunner, mediaRuntime, shopAuth = taobaoSettings(), shopTokenExchange,
+  trustProxy = [], publicOpenApi = true,
   cloudAssets = new Map(), feishu = new Map(), videoDelivery = null, customerAnswer = null, loopbackOnly = false, releases = featureReleases(process.env.FAI_FEATURE_RELEASES_JSON),
 }) {
   const app = Fastify({
     logger,
+    trustProxy: !loopbackOnly && trustProxy.length ? trustProxy : false,
     genReqId: () => randomUUID(),
     logController: new Fastify.LogController({ disableRequestLogging: true }),
     bodyLimit: 15000000,
@@ -59,9 +62,12 @@ export async function buildApp({
   });
   await app.register(cors, { origin: origins, allowedHeaders: ['authorization', 'content-type', 'x-workspace-id'], exposedHeaders:['x-content-sha256'], methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
   await app.register(rateLimit, {
-    global: false,
-    errorResponseBuilder: () => new ApiError(429, 'RATE_LIMITED', 'Too many authentication requests'),
+    global: true,
+    max: 600,
+    timeWindow: '1 minute',
+    errorResponseBuilder: () => new ApiError(429, 'RATE_LIMITED', 'Too many requests'),
   });
+  await app.register(compress, { global: false, encodings: ['br', 'gzip'] });
   await app.register(swagger, {
     openapi: {
       openapi: '3.1.0',
@@ -120,7 +126,7 @@ export async function buildApp({
     }
     return { status: 'ready' };
   });
-  app.get('/openapi.json', { schema: { hide: true } }, async () => app.swagger());
+  if (publicOpenApi) app.get('/openapi.json', { schema: { hide: true } }, async () => app.swagger());
 
   registerStudio(app);
   registerAuth(app, db, previewAdmin);

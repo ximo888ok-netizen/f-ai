@@ -30,10 +30,17 @@ const dedicatedDatabases = new Map([...settings.dedicatedDatabases].map(([key,ur
 const providers = installModels(createProviders(settings.gateway), settings.models);
 const dependencies = { db, providers, shops: settings.shops, feishu, videoArchive: createVideoArchive(settings.videoArchiveOrigins) };
 const app = await buildApp({ ...dependencies, integrations: loadIntegrations(), dedicatedDatabases, cloudAssets, videoDelivery:createVideoDelivery(),
-  customerAnswer:createCustomerAnswer(providers,process.env.CUSTOMER_ASSISTANT_LOCAL_MODEL_ID), origins: settings.origins, webSearch:createExaSearch(process.env.EXA_API_KEY), logger: true });
+  customerAnswer:createCustomerAnswer(providers,process.env.CUSTOMER_ASSISTANT_LOCAL_MODEL_ID), origins: settings.origins, trustProxy: settings.trustProxy, publicOpenApi: settings.publicOpenApi, webSearch:createExaSearch(process.env.EXA_API_KEY), logger: true });
 await app.listen({ port: settings.port, host: settings.host });
-const workers = [startWorker(dependencies,app.log), ...[...dedicatedDatabases.keys()].map(key =>
-  startWorker({...dependencies,identityDb:db,resolveDatabase:()=>app.workspaceDatabaseRouter.workerDatabase(key)},app.log))];
+const workerGroups = [dependencies, ...[...dedicatedDatabases.keys()].map(key => ({
+  ...dependencies, identityDb: db, resolveDatabase: () => app.workspaceDatabaseRouter.workerDatabase(key),
+}))];
+const workers = workerGroups.flatMap(group => [
+  startWorker({...group, maintenanceOnly: true}, app.log),
+  ...Array.from({length: settings.workerConcurrency}, (_, slot) => startWorker({
+    ...group, tasksOnly: true, shortTasksOnly: settings.workerConcurrency > 1 && slot === 0,
+  }, app.log)),
+]);
 async function shutdown() {
   process.removeListener('SIGINT', shutdown);
   process.removeListener('SIGTERM', shutdown);

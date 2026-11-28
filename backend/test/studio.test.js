@@ -42,6 +42,12 @@ test('Studio entry only serves real app code and current theme components', asyn
   assert.equal(namedEntry.statusCode, 200);
   assert.equal(entry.body, namedEntry.body);
   assert.match(entry.body, /id="native-glass-design"/);
+  assert.equal(entry.headers['cache-control'], 'no-store');
+  const css = await app.inject({ method: 'GET', url: '/studio/native-glass-design.css', headers: { 'accept-encoding': 'gzip' } });
+  assert.equal(css.statusCode, 200);
+  assert.equal(css.headers['cache-control'], 'public, max-age=300');
+  assert.equal(css.headers['content-encoding'], 'gzip');
+  assert.match(css.headers.vary, /accept-encoding/i);
   assert.match(entry.body, /id="native-directory-template"/);
   assert.equal(entry.statusCode, 200);
   assert.match(entry.body, /\/studio\/live\.js/);

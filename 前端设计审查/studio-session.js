@@ -1,14 +1,13 @@
-export const sessionKey = 'fai.live.session';
+globalThis.sessionStorage?.removeItem('fai.live.session');
 export const workspaceKey = 'fai.live.workspace';
 
-export async function requestStudio(url, { token, workspaceId, method = 'GET', body, raw = false, signal } = {}) {
-  const headers = {};
-  if (token) headers.authorization = 'Bearer ' + token;
+export async function requestStudio(url, { workspaceId, method = 'GET', body, raw = false, signal } = {}) {
+  const headers = { 'x-fai-studio-session': 'cookie' };
   if (workspaceId) headers['x-workspace-id'] = workspaceId;
   if (body !== undefined) headers['content-type'] = 'application/json';
   let response;
   try {
-    response = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal });
+    response = await fetch(url, { method, headers, credentials: 'same-origin', body: body === undefined ? undefined : JSON.stringify(body), signal });
   } catch (error) {
     if (error.name === 'AbortError') throw error;
     throw new Error('无法连接后端，请检查服务后重试。');

@@ -12,6 +12,11 @@ export function config(env = process.env) {
   if (!env.DATABASE_URL) throw new Error('DATABASE_URL is required');
   const port = Number(env.PORT || 8080);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
+  const trustProxy = list(env.TRUSTED_PROXY_CIDRS);
+  const workerConcurrency = Number(env.WORKER_CONCURRENCY || 2);
+  if (!Number.isInteger(workerConcurrency) || workerConcurrency < 1 || workerConcurrency > 8) {
+    throw new Error('WORKER_CONCURRENCY must be an integer between 1 and 8');
+  }
   const origins = list(env.WEB_ORIGINS);
   for (const origin of origins) {
     const parsed = new URL(origin);
@@ -34,7 +39,7 @@ export function config(env = process.env) {
   }
   return {
     port, host: env.HOST || '127.0.0.1', databaseUrl: env.DATABASE_URL, origins,
-    models, videoArchiveOrigins, dedicatedDatabases: loadDedicatedDatabases(env),
+    models, videoArchiveOrigins, trustProxy, workerConcurrency, publicOpenApi: env.PUBLIC_OPENAPI === 'true', dedicatedDatabases: loadDedicatedDatabases(env),
     gateway: { url: env.GATEWAY_URL, token: env.GATEWAY_TOKEN, capabilities },
     shops: loadShops(env.SHOP_BINDINGS_JSON),
   };

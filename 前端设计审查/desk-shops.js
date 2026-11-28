@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { action, field, form, h, input, select } from './live-ui.js';
 import { toast } from './live.js';
 import { studioIcon } from './studio-icons.js';
@@ -57,7 +58,7 @@ export function bindShopPane(ctx,directory) {
     if(s.source!=='managed') continue;
     ctx.submit('shop-edit-'+s.id,async data=>{
       const enabled=data.get('enabled')==='yes';
-      if(s.granted && !enabled && !window.confirm('停用后将清除工作台保存的经营授权。继续停用？'))return;
+      if(s.granted && !enabled && !await confirmDialog('确认操作', '停用后将清除工作台保存的经营授权。继续停用？'))return;
       await ctx.api('/v1/desk-shops/'+s.id,{method:'PATCH',body:{name:data.get('name'),enabled,revision:s.revision}});
       toast('店铺信息已保存');ctx.reload();
     });

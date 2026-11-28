@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { downloadContent } from './live-text-delivery.js';
 import { searchable } from './live-record-tools.js';
 
@@ -50,7 +51,7 @@ async function products(ctx) {
       ctx.go('products/edit/' + entry.id);
     });
     ctx.click('delete-product', async item => {
-      if (!confirm('删除这条商品档案？')) return;
+      if (!await confirmDialog('确认操作', '删除这条商品档案？')) return;
       await ctx.api(productPath + '/' + path(item), { method:'DELETE' });
       ctx.go('products');
     });
@@ -81,7 +82,7 @@ function drawCategories(ctx, categories, tabs) {
     ctx.reload();
   });
   ctx.click('delete-category', async id => {
-    if (!confirm('删除没有分配商品的分类？')) return;
+    if (!await confirmDialog('确认操作', '删除没有分配商品的分类？')) return;
     await ctx.api(categoryPath + '/' + path(id), { method:'DELETE' });
     ctx.reload();
   });

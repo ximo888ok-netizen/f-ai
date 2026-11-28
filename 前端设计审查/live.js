@@ -8,7 +8,7 @@ import { workspaceNavigation } from './live-navigation.js';
 import { bindAccountMenu } from './live-account-menu.js';
 import { capabilityCenter } from './live-capability-center.js';
 import { dataCenter } from './live-data-center.js';
-import { requestStudio, sessionKey as tokenKey, workspaceKey } from './studio-session.js';
+import { requestStudio, workspaceKey } from './studio-session.js';
 import { describeError } from './studio-errors.js';
 export { describeError } from './studio-errors.js';
 import { action, field, form, h, heading, input, notice, select } from './live-ui.js';
@@ -76,7 +76,6 @@ const workspaceAliases = { workbench: 'home', 'home/new': 'chat/new', welcome: '
   'desk-roi': 'roi', 'desk-cloud': 'shops', 'desk-publish': 'create/operations/operations.publish',
   'desk-products': 'products', 'desk-categories': 'products/categories', 'desk-imports': 'products/transfers',
   'desk-exports': 'products/transfers', 'desk-saved': 'library', 'desk-history': 'tasks' };
-let token = sessionStorage.getItem(tokenKey);
 let identity = null;
 let workspace = null;
 let currentRender;
@@ -93,11 +92,11 @@ export function toast(message) {
 
 async function request(url, options = {}) {
   const { auth = true, tenant = true, workspaceId = workspace?.id, ...rest } = options;
-  const sentToken = auth ? token : null;
+  const sentIdentity = auth ? identity : null;
   try {
-    return await requestStudio(url, { ...rest, token: sentToken, workspaceId: auth && tenant ? workspaceId : undefined });
+    return await requestStudio(url, { ...rest, workspaceId: auth && tenant ? workspaceId : undefined });
   } catch (error) {
-    if (error.status === 401 && sentToken && sentToken === token) {
+    if (error.status === 401 && sentIdentity && sentIdentity === identity) {
       setIdentity(null);
       void render();
     }
@@ -116,12 +115,9 @@ async function getAll(ctx, endpoint) {
 }
 
 function setIdentity(data, selected = workspace?.id ?? sessionStorage.getItem(workspaceKey)) {
-  token = data ? data.token ?? token : null;
   identity = data;
   workspace = data?.workspaces.find(entry => entry.id === selected) ?? data?.workspaces[0] ?? null;
-  connectAppearance(token, workspace?.id, identity?.account.id);
-  if (token) sessionStorage.setItem(tokenKey, token);
-  else sessionStorage.removeItem(tokenKey);
+  connectAppearance(workspace?.id, identity?.account.id);
   if (workspace) sessionStorage.setItem(workspaceKey, workspace.id);
   else sessionStorage.removeItem(workspaceKey);
 }
@@ -279,9 +275,8 @@ async function start() {
     await request('/ready', { auth: false });
     connection.textContent = '服务已连接';
     connection.dataset.connected = 'yes';
-    if (token) {
-      setIdentity(await request('/v1/auth/me', { tenant: false }));
-    }
+    try { setIdentity(await request('/v1/auth/me', { tenant: false })); }
+    catch (error) { if (error.status !== 401) throw error; }
     if (oauthState && (oauthCode || oauthError)) {
       if (oauthError) toast('平台授权已取消。');
       else if (!workspace) toast('请登录工作区后，从店铺管理重新发起授权。');

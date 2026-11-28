@@ -37,13 +37,32 @@ function hasSignature(headers,raw,key) {
   return timingSafeEqual(digest,Buffer.from(signature,'hex'));
 }
 
-function verify(binding,headers,raw) {
+function verify(binding,headers,raw,nonces) {
+  const signed=hasSignature(headers,raw,binding.encryptKey);
+  if (!signed && headers['x-lark-signature'] !== undefined) throw unauthorized();
+  if (signed) {
+    const nonce=headers['x-lark-request-nonce'];
+    const payloadHash=sha(raw).toString('hex');
+    const now=Date.now();
+    for (const [key, entry] of nonces) {
+      if (entry.expires > now) break;
+      nonces.delete(key);
+    }
+    const prior=nonces.get(nonce);
+    if (prior && prior.payloadHash!==payloadHash) throw unauthorized();
+    if (!prior) {
+      if (nonces.size>=4096) nonces.delete(nonces.keys().next().value);
+      // A signed timestamp can be up to five minutes ahead. Keep its nonce
+      // through the entire acceptance window and allow identical vendor retries.
+      nonces.set(nonce,{payloadHash,expires:now+600000});
+    }
+  }
   const body=decrypt(raw,binding.encryptKey);
   // The URL-verification envelope proves the Encrypt Key and Verification Token.
   if (body?.type==='url_verification' && same(body.token,binding.verificationToken) &&
       typeof body.challenge==='string' && body.challenge.length<=256) return {challenge:body.challenge};
   const meta=body?.header;
-  if (!hasSignature(headers,raw,binding.encryptKey) || body?.schema!=='2.0' || !same(meta?.token,binding.verificationToken) ||
+  if (!signed || body?.schema!=='2.0' || !same(meta?.token,binding.verificationToken) ||
       meta.app_id!==binding.appId || meta.tenant_key!==binding.tenantKey) throw unauthorized();
   const msg=body.event?.message;
   if (meta.event_type!=='im.message.receive_v1' || body.event?.sender?.sender_type!=='user' ||
@@ -107,8 +126,9 @@ export function createFeishuBindings(env=process.env,request=requestUpstream) {
     const binding={id:data.id,workspaceId,appId:data.appId,tenantKey:data.tenantKey,
       encryptKey:readSecret(env,data.encryptKeyEnv),verificationToken:readSecret(env,data.verificationTokenEnv),
       appSecret:readSecret(env,data.appSecretEnv)};
+    const nonces=new Map();
     bindings.set(data.id,{id:data.id,workspaceId,fingerprint:sha(JSON.stringify([data.id,workspaceId,data.appId,data.tenantKey])).toString('hex'),
-      verify:(headers,raw)=>verify(binding,headers,raw),...sender(binding,request)});
+      verify:(headers,raw)=>verify(binding,headers,raw,nonces),...sender(binding,request)});
   }
   return bindings;
 }

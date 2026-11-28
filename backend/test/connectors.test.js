@@ -104,9 +104,8 @@ function encrypt(event) {
   return JSON.stringify({encrypt:payload.toString('base64')});
 }
 
-function signature(payload,seconds=Math.floor(Date.now()/1000)) {
+function signature(payload,seconds=Math.floor(Date.now()/1000),nonce=randomUUID()) {
   const time=String(seconds);
-  const nonce='qa-nonce';
   return {'content-type':'application/json','x-lark-request-timestamp':time,'x-lark-request-nonce':nonce,
     'x-lark-signature':createHash('sha256').update(time+nonce+publicKey+payload).digest('hex')};
 }
@@ -154,9 +153,11 @@ test('Feishu signed events are deduplicated, isolated and delivered only after c
     json(await callback(valid,signature(valid,Math.floor(Date.now()/1000)-360)),401);
     const wrong=encrypt({...event,header:{...event.header,tenant_key:'otherTenant'}});
     json(await callback(wrong,signature(wrong)),401);
-    json(await callback(valid,signature(valid)),200);
-    json(await callback(valid,signature(valid)),200);
+    const validHeaders=signature(valid);
+    json(await callback(valid,validHeaders),200);
+    json(await callback(valid,validHeaders),200);
     const repeated=encrypt({...event,header:{...event.header,event_id:'event-different'}});
+    json(await callback(repeated,signature(repeated,undefined,validHeaders['x-lark-request-nonce'])),401);
     json(await callback(repeated,signature(repeated)),200);
     assert.equal(json(await call(app,owner,'GET',root),200).items.length,1);
     assert.deepEqual(json(await call(app,other,'GET',root),200),{available:false,items:[]});

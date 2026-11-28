@@ -1,6 +1,7 @@
 """Fixed provider commands. Creative text is an argument, never executable code."""
 import json
 import os
+import re
 from pathlib import Path
 import sys
 import time
@@ -103,7 +104,6 @@ def run_vendor(req,inputs,out,prompts,root=Path("/opt/source")):
         if image:
             for p in images[1:]:args+=["--image",p]
         elif len(images)>1:args+=["--last-frame",images[1]]
-        if os.environ.get("MINIMAX_API_KEY"):args+=["--api-key",os.environ["MINIMAX_API_KEY"]]
         run(args,cwd);return
     if source=="ark":
         args=["arkcli","+gen","--modality",kind,"--format","json"]
@@ -148,6 +148,8 @@ def run_vendor(req,inputs,out,prompts,root=Path("/opt/source")):
         for _ in range(14):
             if list(works(result)):break
             if not job:raise ValueError("no Kling job ID")
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}",job):
+                raise ValueError("invalid Kling task ID")
             result=as_json(run(["kling","query_tasks","--poll","60",job],cwd))
         collect_urls({"outputs":list(works(result))},out,kind);return
     raise ValueError("unknown vendor")

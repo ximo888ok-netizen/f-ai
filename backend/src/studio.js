@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { notFound } from './http.js';
 
 const directory = new URL('../../前端设计审查/', import.meta.url);
-const styles = ['studio.css', 'creation.css', 'glass.css', 'themes.css', 'theme-palettes.css', 'components.css', 'live.css', 'merchant.css', 'live-depth.css', 'live-spatial.css', 'live-light.css', 'live-agent.css', 'liquid-glass.css', 'liquid-layout.css', 'studio-wallpaper.css', 'workbench-layout.css', 'image-generation/style.css', 'live-video-prompt.css', 'live-video-quick.css', 'live-video-director.css', 'studio-foundation.css', 'studio-entry.css', 'studio-workflows.css', 'dot-matrix-switch.css'];
+const styles = ['native-glass-design.css', 'studio.css', 'creation.css', 'glass.css', 'themes.css', 'theme-palettes.css', 'components.css', 'live.css', 'merchant.css', 'live-depth.css', 'live-spatial.css', 'live-light.css', 'live-agent.css', 'liquid-glass.css', 'liquid-layout.css', 'studio-wallpaper.css', 'workbench-layout.css', 'image-generation/style.css', 'live-video-prompt.css', 'live-video-quick.css', 'live-video-director.css', 'studio-foundation.css', 'studio-entry.css', 'studio-workflows.css', 'dot-matrix-switch.css'];
 const scripts = ['live-agent-integrations.js', 'live-commerce-sdk.js', 'studio-icons.js', 'studio-entry.js', 'studio-workflows.js', 'live-spatial.js', 'live-navigation.js', 'live-home.js', 'live-agent-home.js', 'live-agent-dialogue.js', 'live-agent-tools.js', 'live-agent-model.js', 'live-asset-preview.js', 'live-task-fields.js', 'live-catalog.js', 'studio-session.js', 'studio-appearance.js', 'studio-errors.js', 'live-ui.js', 'merchant.js', 'merchant-ui.js', 'merchant-team.js', 'merchant-projects.js', 'merchant-settings.js', 'themes.js', 'glass.js', 'theme-motion.js', 'live.js', 'live-workspace.js', 'live-tasks.js', 'live-customer.js', 'live-products.js', 'live-drafts.js', 'live-operations.js', 'operations-file.js', 'live-psd.js', 'live-connectors.js',
   'live-popover.js', 'live-account-menu.js', 'live-capability-center.js', 'live-data-center.js', 'live-agent-controls.js',
   'image-generation/index.js', 'image-generation/files.js', 'image-generation/options.js',
@@ -21,23 +21,27 @@ const security = "default-src 'self'; script-src 'self'; style-src 'self' 'unsaf
 
 export function registerStudio(app) {
   const schema = { hide: true };
+  const textResource = { schema, compress: { threshold: 1024 } };
   const page = file => async (_request, reply) => reply
     .header('content-security-policy', security).header('referrer-policy', 'no-referrer')
     .type('text/html; charset=utf-8').send(await readFile(new URL(file, directory)));
-  app.get('/', { schema }, page('ai.html'));
-  app.get('/ai.html', { schema }, page('ai.html'));
-  app.get('/merchant', { schema }, page('商家管理后台.html'));
+  app.get('/', textResource, page('ai.html'));
+  app.get('/ai.html', textResource, page('ai.html'));
+  app.get('/merchant', textResource, page('商家管理后台.html'));
   app.get('/studio/assets/:name', { schema }, async (request, reply) => {
     const { name } = request.params;
     if (!['optic-wave.webp', 'leather.webp', 'citrus.webp', 'audio.webp'].includes(name)) throw notFound('Studio artwork');
-    return reply.type('image/webp').send(await readFile(new URL('assets/' + name, directory)));
+    const bytes = await readFile(new URL('assets/' + name, directory));
+    return reply.header('cache-control', 'public, max-age=86400').type('image/webp').send(bytes);
   });
-  const resource = prefix => async (request, reply) => {
-    const name = prefix + request.params.name;
+  const resource = (prefix, fixedName) => async (request, reply) => {
+    const name = fixedName ?? prefix + request.params.name;
     const type = types.get(name);
     if (!type) throw notFound('Studio resource');
-    return reply.type(type).send(await readFile(new URL(name, directory)));
+    const bytes = await readFile(new URL(name, directory));
+    return reply.header('cache-control', 'public, max-age=300').type(type).send(bytes);
   };
-  app.get('/studio/:name', { schema }, resource(''));
-  app.get('/studio/image-generation/:name', { schema }, resource('image-generation/'));
+  app.get('/native-glass-design.css', textResource, resource('', 'native-glass-design.css'));
+  app.get('/studio/:name', textResource, resource(''));
+  app.get('/studio/image-generation/:name', textResource, resource('image-generation/'));
 }

@@ -186,7 +186,8 @@ export function registerWorkspace(app, db) {
   });
 
   route(app, 'POST', '/v1/knowledge/search', {
-    tags: knowledgeTags, summary: 'Retrieve authorized chunks by keyword',
+    tags: knowledgeTags, accountRateLimit: 60,
+    summary: 'Retrieve authorized chunks by keyword',
     body: object({ query:text(160), baseIds:array(uuid,40,1), category:text(100,0), ...page.properties }, ['query']),
   }, async request => {
     const context = request.context;

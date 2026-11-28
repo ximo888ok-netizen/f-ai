@@ -49,9 +49,9 @@ export async function recordMemberEvent(db, workspaceId, accountId, type, key, d
     [workspaceId,accountId,type,key,data]);
 }
 
-async function deliverIdentityEvents(control, target, workspaceId, after) {
+async function deliverIdentityEvents(control, target, workspaceId, after, through) {
   const pending = await rows(control,`SELECT id::text,account_id,type,event_key,data FROM workspace_identity_events
-    WHERE workspace_id=$1 AND id>$2 ORDER BY workspace_identity_events.id LIMIT 200`,[workspaceId,after]);
+    WHERE workspace_id=$1 AND id>$2 AND id<=$3 ORDER BY workspace_identity_events.id LIMIT 200`,[workspaceId,after,through]);
   for (const event of pending) {
     await notify(target,workspaceId,event.account_id,'member',event.type,event.event_key,event.data);
   }
@@ -62,6 +62,7 @@ async function deliverIdentityEvents(control, target, workspaceId, after) {
 
 export function workspaceDatabaseRouter(control, databases, migrations) {
   const scope = new AsyncLocalStorage();
+  const opening = new Map();
   const current = () => scope.getStore() ?? control;
   const db = {
     query: (...args) => current().query(...args),
@@ -70,17 +71,45 @@ export function workspaceDatabaseRouter(control, databases, migrations) {
 
   async function open(binding) {
     if (binding.state !== 'active') throw unavailable();
+    const key = JSON.stringify([binding.databaseKey, binding.workspaceId, binding.bindingId]);
+    const pending = opening.get(key);
+    if (pending) return pending;
+    const transaction = validateAndSync(binding);
+    opening.set(key, transaction);
+    try {
+      return await transaction;
+    } finally {
+      opening.delete(key);
+    }
+  }
+
+  async function validateAndSync(binding) {
     const target = databases.get(binding.databaseKey);
     if (!target || target === control) throw unavailable();
+    const args = [binding.workspaceId, binding.bindingId];
+    const identityQuery = `SELECT delivered_event::text, identity_synced FROM dedicated_database_identity
+      WHERE singleton=true AND workspace_id=$1 AND binding_id=$2
+      AND NOT EXISTS (SELECT 1 FROM workspaces WHERE id<>$1)`;
     try {
+      if (!(await checkMigrations(target, migrations))) throw unavailable();
+      const identity = await row(target, identityQuery, args);
+      if (!identity) throw unavailable();
+      // Membership changes append identity events in the same control transaction.
+      const newest = await row(control, `SELECT id::text FROM workspace_identity_events
+        WHERE workspace_id=$1 ORDER BY workspace_identity_events.id DESC LIMIT 1`, [binding.workspaceId]);
+      const through = newest?.id ?? '0';
+      if (identity.identity_synced && identity.delivered_event === through) return target;
+
       await target.transaction(async tx => {
-        if (!(await checkMigrations(tx,migrations))) throw unavailable();
-        const identity = await row(tx,`SELECT delivered_event::text FROM dedicated_database_identity
-          WHERE singleton=true AND workspace_id=$1 AND binding_id=$2
-          AND NOT EXISTS (SELECT 1 FROM workspaces WHERE id<>$1) FOR UPDATE`,[binding.workspaceId,binding.bindingId]);
-        if (!identity) throw unavailable();
-        await syncWorkspaceIdentity(control,tx,binding.workspaceId);
-        await deliverIdentityEvents(control,tx,binding.workspaceId,identity.delivered_event);
+        const locked = await row(tx, identityQuery + ' FOR UPDATE', args);
+        if (!locked) throw unavailable();
+        if (locked.identity_synced && locked.delivered_event === through) return;
+        await syncWorkspaceIdentity(control, tx, binding.workspaceId);
+        // Do not advance past events committed after the member snapshot began.
+        await deliverIdentityEvents(control, tx, binding.workspaceId, locked.delivered_event, through);
+        if (!locked.identity_synced) {
+          await tx.query('UPDATE dedicated_database_identity SET identity_synced=true WHERE singleton=true');
+        }
       });
     } catch {
       throw unavailable();

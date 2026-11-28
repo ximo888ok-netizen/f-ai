@@ -74,7 +74,7 @@ network 为部署方配置的独立网络名称，请在该网络上配置所用
 | minimax | mmx CLI，使用 MINIMAX_API_KEY 或工作区 profile。按需配置 MEDIA_IMAGE_MODEL / MEDIA_VIDEO_MODEL。 |
 | runway | 官方 Runway MCP，使用该工作区的 RUNWAY_MCP_TOKEN。参考素材经部署方 OSS 临时签名后供 MCP 读取。调用前按 MCP 实际工具 schema 校验入参。 |
 | firered | 配置独立的 OPENSTORYLINE_URL，部署对应版本的 FireRed 服务及其模型。任务为每次剪辑新建 session，仅向该 session 上传素材，用原桥接脚本发起剪辑，从该 session 读取真实渲染视频。 |
-| aidge | 调用阿里云 Aidge VirtualTryOn 和 QueryAsyncTaskResult。模特图在前、服装图在后，均须授权。配置 MEDIA_AIDGE_ENDPOINT 和 OSS。 |
+| aidge | 调用阿里云 Aidge VirtualTryOn 和 QueryAsyncTaskResult。模特图在前、服装图在后，均须授权。配置 MEDIA_AIDGE_ENDPOINT、OSS 和 MEDIA_DOWNLOAD_HOSTS（供应商公开 HTTPS 域名列表，以逗号分隔）。 |
 
 OSS 凭据为 ALIBABA_CLOUD_ACCESS_KEY_ID、ALIBABA_CLOUD_ACCESS_KEY_SECRET、可选 ALIBABA_CLOUD_SECURITY_TOKEN、MEDIA_OSS_BUCKET、MEDIA_OSS_ENDPOINT。使用专用临时对象前缀与过期清理规则。涉及头像、服装试穿和广告参考素材的入口会检查素材授权。每个输入及入库成品上限 10 MiB，每项任务输入合计 20 MiB。多文件结果在一个数据库事务中入库。供应商账号状态、额度及成片质量需由该工作区真实授权验收；“已配置”表示通过本机依赖检查。
 

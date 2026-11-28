@@ -7,6 +7,8 @@ const tags = ['Assets'];
 const mediaTypes = ['image/png', 'image/jpeg', 'video/mp4', 'audio/mpeg', 'audio/mp4', 'audio/webm', 'application/vnd.adobe.photoshop'];
 const assetFields = 'id, name, media_type AS "mediaType", source, purpose, consent_reference AS "consentReference", consent_expires_at AS "consentExpiresAt", octet_length(data) AS "sizeBytes", created_at AS "createdAt"';
 const maxBytes = 10 * 1024 * 1024;
+const memberUploadQuota = 1024 ** 3;
+const workspaceUploadQuota = 10 * memberUploadQuota;
 const idParams = object({ id: uuid });
 
 export function validMedia(bytes, mime) {
@@ -40,7 +42,7 @@ export async function taskAssets(db, context, identifiers, capability) {
 
 export function registerAssets(app, db) {
   route(app, 'POST', '/v1/assets', {
-    tags, summary: 'Explicitly upload media for a server-side task',
+    tags, accountRateLimit: 30, summary: 'Explicitly upload media for a server-side task',
     body: object({
       name: text(200), mediaType: choice(...mediaTypes), source: text(200), purpose: text(200),
       consentReference: text(200), consentExpiresAt: { type: 'string', format: 'date-time' },
@@ -55,15 +57,26 @@ export function registerAssets(app, db) {
       throw invalid('Invalid name, provenance, or media content');
     }
     const { workspaceId, accountId } = request.context;
-    const asset = await row(db, 'INSERT INTO assets (id, workspace_id, account_id, name, media_type, source, purpose, consent_reference, consent_expires_at, data) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING ' + assetFields, [randomUUID(), workspaceId, accountId, name.trim(), mediaType, source.trim(), purpose.trim(), consentReference?.trim() ?? null, consentExpiresAt ?? null, bytes]);
+    const asset = await db.transaction(async tx => {
+      await tx.query('SELECT id FROM workspaces WHERE id = $1 FOR NO KEY UPDATE', [workspaceId]);
+      const usage = await row(tx, `SELECT coalesce(sum(octet_length(data)),0) AS total,
+        coalesce(sum(octet_length(data)) FILTER (WHERE account_id = $2),0) AS member
+        FROM assets WHERE workspace_id = $1`, [workspaceId, accountId]);
+      if (Number(usage.total) + bytes.length > workspaceUploadQuota ||
+          Number(usage.member) + bytes.length > memberUploadQuota) {
+        throw new ApiError(413, 'ASSET_QUOTA_EXCEEDED', 'Asset storage quota exceeded');
+      }
+      return row(tx, 'INSERT INTO assets (id, workspace_id, account_id, name, media_type, source, purpose, consent_reference, consent_expires_at, data) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING ' + assetFields, [randomUUID(), workspaceId, accountId, name.trim(), mediaType, source.trim(), purpose.trim(), consentReference?.trim() ?? null, consentExpiresAt ?? null, bytes]);
+    });
     reply.code(201);
     return asset;
   });
 
   route(app, 'GET', '/v1/assets', {
-    tags, summary: 'List the current member’s uploaded assets', querystring: page,
+    tags, summary: 'List the current member’s uploaded assets',
+    querystring: object({ ...page.properties, query: text(160, 0) }, []),
   }, async request => ({
-    items: await rows(db, 'SELECT ' + assetFields + ' FROM assets WHERE workspace_id = $1 AND account_id = $2 AND NOT rights_restricted ORDER BY created_at DESC, id LIMIT $3 OFFSET $4', [request.context.workspaceId, request.context.accountId, ...paginate(request.query)]),
+    items: await rows(db, 'SELECT ' + assetFields + ` FROM assets WHERE workspace_id = $1 AND account_id = $2 AND NOT rights_restricted AND ($5::text IS NULL OR strpos(lower(name || ' ' || media_type), lower($5)) > 0) ORDER BY created_at DESC, id LIMIT $3 OFFSET $4`, [request.context.workspaceId, request.context.accountId, ...paginate(request.query), request.query.query?.trim() || null]),
   }));
 
   route(app, 'GET', '/v1/assets/:id', {

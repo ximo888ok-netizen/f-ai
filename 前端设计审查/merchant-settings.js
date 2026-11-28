@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { bindReadiness } from './merchant-readiness.js';
 import { action, date, field, form, h, input, item, list, notice, panel, path, select } from './live-ui.js';
 import { badge, logs, rowActions, sectionTitle } from './merchant-ui.js';
@@ -35,7 +36,7 @@ export async function featuresPage(ctx) {
   for (const feature of directory.items) ctx.form('feature-' + feature.id, async data => {
     const enabled = data.get('enabled') === 'true';
     const mode = data.get('mode');
-    if (feature.enabled && !enabled && !confirm('停用「' + feature.name + '」后将阻止本企业的新操作。继续？')) return;
+    if (feature.enabled && !enabled && !await confirmDialog('确认操作', '停用「' + feature.name + '」后将阻止本企业的新操作。继续？')) return;
     const ids = mode === 'trial' ? data.getAll('memberId') : [];
     if (mode === 'trial' && (ids.length < 1 || ids.length > 100)) throw new Error('请选择 1 至 100 位试用成员。');
     await ctx.api('/v1/merchant/features/' + path(feature.id), { method: 'PUT', body: {
@@ -67,7 +68,7 @@ export async function connectionsPage(ctx) {
   ctx.click('toggle-connection', async index => {
     const connection = items[Number(index)];
     const enabled = !connection.enabled;
-    if (!confirm((enabled ? '启用' : '断开') + '「' + connection.name + '」？')) return;
+    if (!await confirmDialog('确认操作', (enabled ? '启用' : '断开') + '「' + connection.name + '」？')) return;
     await ctx.api(endpoint(connection), { method: 'PUT', body: { enabled, revision: connection.revision } });
     ctx.complete('连接状态已更新');
   });

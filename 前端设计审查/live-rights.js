@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, result, retryKey, select, textarea, toast } from './live.js';
 
 const root='/v1/rights/notices';
@@ -60,7 +61,7 @@ async function noticeDetail(ctx,id) {
     const action=data.get('action');
     const explanation=data.get('explanation').trim();
     if (['restrict','restore','uphold','dismiss'].includes(action) &&
-        !confirm('确认'+rightsActions[action]+'？')) return;
+        !await confirmDialog('确认操作', '确认'+rightsActions[action]+'？')) return;
     const body={action,explanation,revision:record.revision};
     const saved=await ctx.api(target+'/actions',{method:'POST',body:{...body,eventId:key(body)}});
     toast(states[saved.state] ?? '案件已更新');

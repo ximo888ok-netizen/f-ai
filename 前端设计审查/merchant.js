@@ -2,7 +2,7 @@ import { studioEntry } from './studio-entry.js';
 import { studioIcon } from './studio-icons.js';
 import { bindNavigationSearch, findNavigation } from './live-nav-search.js';
 import { bindStudioAppearance } from './studio-appearance.js';
-import { requestStudio, sessionKey, workspaceKey } from './studio-session.js';
+import { requestStudio, workspaceKey } from './studio-session.js';
 import { field, form, h, input, select } from './live-ui.js';
 import { membersPage } from './merchant-team.js';
 import { projectsPage } from './merchant-projects.js';
@@ -35,7 +35,6 @@ const freshState = () => ({
   projectOffset: 0, projectFilter: 'all', auditFilters: {}, auditCursor: null,
 });
 let state = freshState();
-let session = sessionStorage.getItem(sessionKey);
 let workspaceId = sessionStorage.getItem(workspaceKey);
 let activeRender;
 let messageTimer;
@@ -51,7 +50,7 @@ function flash(text) {
 async function request(url, { workspace, ...rest } = {}) {
   const login = url === '/v1/auth/login';
   try {
-    return await requestStudio(url, { ...rest, token: login ? null : session, workspaceId: workspace });
+    return await requestStudio(url, { ...rest, workspaceId: workspace });
   } catch (error) {
     if (login && error.status === 401) error.message = '账号或密码错误。';
     else error.message = errors[error.code] ?? error.message;
@@ -63,14 +62,9 @@ function report(error) {
   return error.message + (error.requestId ? '（请求 ' + error.requestId + '）' : '');
 }
 
-function remember(next) {
+function resetSessionView() {
   connectAppearance(null);
-  session = next;
-  if (session) sessionStorage.setItem(sessionKey, session);
-  else {
-    sessionStorage.removeItem(sessionKey);
-    state = freshState();
-  }
+  state = freshState();
 }
 
 function makeContext(controller, workspace, args) {
@@ -95,7 +89,7 @@ function makeContext(controller, workspace, args) {
         await handler(element);
       } catch (error) {
         if (active() && error.name !== 'AbortError') {
-          if (error.status === 401 && workspace) { remember(null); reload(); }
+          if (error.status === 401 && workspace) { resetSessionView(); reload(); }
           flash(report(error));
         }
       } finally {
@@ -134,8 +128,8 @@ function login(ctx) {
       field('登录账号', input('email', 'type="text" required autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="输入登录账号或邮箱"')) +
       field('密码', input('password', 'type="password" required maxlength="128" autocomplete="current-password"')), '登录') }));
   ctx.form('login', async data => {
-    const result = await ctx.api('/v1/auth/login', { method: 'POST', body: Object.fromEntries(data) });
-    if (ctx.active()) { remember(result.token); ctx.reload(); }
+    await ctx.api('/v1/auth/login', { method: 'POST', body: Object.fromEntries(data) });
+    if (ctx.active()) { resetSessionView(); ctx.reload(); }
   });
 }
 
@@ -157,7 +151,6 @@ async function render() {
   const [route, ...args] = location.hash.slice(1).split('/');
   const page = Object.hasOwn(pages, route) ? route : 'members';
   const anonymous = makeContext(controller, null, args);
-  if (!session) return login(anonymous);
   main.innerHTML = '<p role="status">正在读取后台数据…</p>';
   try {
     const { workspaces, account } = await anonymous.api('/v1/auth/me');
@@ -175,12 +168,12 @@ async function render() {
     const ctx = makeContext(controller, workspace, args);
     await ctx.api('/v1/merchant/context');
     if (!ctx.active()) return;
-    connectAppearance(session, workspace.id, account.id);
+    connectAppearance(workspace.id, account.id);
     updateMenu(eligible, workspace, page);
     await pages[page][1](ctx);
   } catch (error) {
     if (controller.signal.aborted) return;
-    if (error.status === 401) { remember(null); login(anonymous); return; }
+    if (error.status === 401) { resetSessionView(); login(anonymous); return; }
     if (error.status === 403 || error.status === 404) menu.hidden = true;
     anonymous.html(sectionTitle('后台读取失败', report(error)) + '<button class="smallbtn" data-retry>重新读取</button>');
     anonymous.click('retry', () => anonymous.reload());
@@ -189,11 +182,11 @@ async function render() {
 
 async function logout() {
   try {
-    if (session) await request('/v1/auth/logout', { method: 'POST' });
-    remember(null);
+    await request('/v1/auth/logout', { method: 'POST' });
+    resetSessionView();
     void render();
   } catch (error) {
-    if (error.status === 401) { remember(null); void render(); }
+    if (error.status === 401) { resetSessionView(); void render(); }
     else flash(report(error));
   }
 }

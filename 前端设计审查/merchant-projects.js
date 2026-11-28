@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { action, date, field, form, grid, h, input, item, link, list, panel, path, select } from './live-ui.js';
 import { badge, paging, rowActions, sectionTitle, table } from './merchant-ui.js';
 
@@ -49,7 +50,7 @@ async function projectPage(ctx, id) {
     ctx.complete('项目名称已更新');
   });
   ctx.click('archive', async () => {
-    if (!confirm((archived ? '恢复' : '归档') + '「' + project.name + '」？')) return;
+    if (!await confirmDialog('确认操作', (archived ? '恢复' : '归档') + '「' + project.name + '」？')) return;
     await ctx.api(endpoint, { method: 'PATCH', body: { state: archived ? 'active' : 'archived' } });
     ctx.complete('项目状态已更新');
   });
@@ -58,7 +59,7 @@ async function projectPage(ctx, id) {
     ctx.complete('项目访问已授予');
   });
   ctx.click('revoke-access', async member => {
-    if (!confirm('撤销该成员对此项目的访问权限？')) return;
+    if (!await confirmDialog('确认操作', '撤销该成员对此项目的访问权限？')) return;
     await ctx.api(endpoint + '/members/' + path(member), { method: 'DELETE' });
     ctx.complete('项目访问已撤销');
   });

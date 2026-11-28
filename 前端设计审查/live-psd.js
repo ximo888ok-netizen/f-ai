@@ -1,3 +1,4 @@
+import { confirmDialog } from './live-ui.js';
 import { action, date, field, form, grid, h, heading, input, item, link, list, notice, panel, path, select, toast, uid } from './live.js';
 
 const endpoint = '/v1/studio/psd-documents';
@@ -83,7 +84,7 @@ export async function psdPage(ctx) {
     setTimeout(()=>URL.revokeObjectURL(url),3000);
   });
   ctx.click('psd-delete',async ()=>{
-    if (!confirm('删除这份分层设计？')) return;
+    if (!await confirmDialog('确认操作', '删除这份分层设计？')) return;
     await ctx.api(target,{method:'DELETE'});
     ctx.go('psd');
   });

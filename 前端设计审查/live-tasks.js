@@ -166,17 +166,27 @@ export function downloadAsset(ctx,id,name,variant='content',options={}) {
 }
 
 async function tasks(ctx) {
-  const [id,filter] = ctx.args;
+  const [id, filter, pageNumber] = ctx.args;
   if (!id || id==='state') {
     const allowed=['queued','running','succeeded','failed','cancelled'];
-    const endpoint='/v1/tasks'+(allowed.includes(filter)?'?state='+filter:'');
+    const state = allowed.includes(filter) ? filter : 'all';
+    const page = /^\d{1,6}$/.test(pageNumber ?? '') ? Math.min(Number(pageNumber), 25000) : 0;
+    const pageSize = 40;
+    const query = new URLSearchParams({limit: String(pageSize + 1), offset: String(page * pageSize)});
+    if (state !== 'all') query.set('state', state);
+    const endpoint = '/v1/tasks?' + query;
     const choices='<div class="live-row">'+link('全部任务','tasks')+allowed.map(k=>link(states[k],'tasks/state/'+k)).join('')+'</div>';
-    const [items, plugins] = await Promise.all([ctx.all(endpoint), getCatalog(ctx)]);
+    const [result, plugins] = await Promise.all([ctx.api(endpoint), getCatalog(ctx)]);
+    const items = result.items.slice(0, pageSize);
+    const pageRoute = 'tasks/state/' + state + '/';
+    const pagination = '<div class="live-row">' +
+      (page ? link('上一页', pageRoute + (page - 1)) : '') +
+      (page < 25000 && result.items.length > pageSize ? link('下一页', pageRoute + (page + 1)) : '') + '</div>';
     const names = new Map(plugins.flatMap(plugin => plugin.capabilities.map(capability => [capability.id, cardTitle(capability)])));
     ctx.html(heading('任务记录') + choices + panel('当前工作区任务', list(items, task => item(names.get(task.capabilityId) ?? task.capabilityId,
-      states[task.state] + ' · ' + date(task.createdAt), link('查看任务', taskRoute(task.id))))));
-    if (items.some(pending)) watch(ctx, endpoint+(endpoint.includes('?')?'&':'?')+'limit=100', status => status.items.map(task => task.id + task.state).join(','),
-      items.slice(0, 100).map(task => task.id + task.state).join(','));
+      states[task.state] + ' · ' + date(task.createdAt), link('查看任务', taskRoute(task.id)))) + pagination));
+    const snapshot = data => data.items.map(task => task.id + task.state).join(',');
+    if (items.some(pending)) watch(ctx, endpoint, snapshot, snapshot(result));
     return;
   }
   const [task, plugins] = await Promise.all([ctx.api(taskPath(id)), getCatalog(ctx)]);

@@ -44,7 +44,7 @@ export function paginate(query = {}) {
 }
 
 export function route(app, method, url, options, handler) {
-  const { auth = true, tenant = true, manager = false, enterprise = false, feature = null, database = 'workspace', tags, summary, config, ...inputs } = options;
+  const { auth = true, tenant = true, manager = false, enterprise = false, feature = null, database = 'workspace', tags, summary, config, accountRateLimit, ...inputs } = options;
   const schema = { tags, summary, config, ...inputs };
   if (auth) schema.security = [{ bearerAuth: [] }];
   if (auth && tenant) schema.headers = {
@@ -52,6 +52,11 @@ export function route(app, method, url, options, handler) {
     required: ['x-workspace-id'],
     properties: { 'x-workspace-id': uuid },
   };
+  const checkAccountLimit = accountRateLimit ? app.createRateLimit({
+    max: accountRateLimit,
+    timeWindow: '1 minute',
+    keyGenerator: request => [method, url, request.context.workspaceId, request.context.accountId].join(':'),
+  }) : null;
   app.route({
     method,
     url,
@@ -59,6 +64,11 @@ export function route(app, method, url, options, handler) {
     config,
     preHandler: !auth ? [] : [
       tenant ? app.authenticateWorkspace : app.authenticate,
+      ...(checkAccountLimit ? [async request => {
+        if ((await checkAccountLimit(request)).isExceeded) {
+          throw new ApiError(429, 'RATE_LIMITED', 'Too many requests for this workspace account');
+        }
+      }] : []),
       ...(enterprise ? [async request => requireEnterprise(request)] : []),
       ...(manager ? [async request => requireManager(request)] : []),
     ],
